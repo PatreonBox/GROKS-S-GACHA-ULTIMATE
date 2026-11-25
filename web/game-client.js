@@ -23,7 +23,11 @@ export function gameSession() {
  if (!opening) {
   const begin = () => exchange('/api/game');
   opening = (navigator.locks ? navigator.locks.request('gdlb-session', begin) : begin())
-   .then(data => {renderAccount(data); return data;})
+   .then(data => {
+    renderAccount(data);
+    if(data.playerProfile?.autoRefresh)refreshDiscordProfile(true);
+    return data;
+   })
    .catch(error => { opening = null; throw error; });
  }
  return opening;
@@ -72,6 +76,15 @@ function saveLinks(provider) {
  link.href=target+'?return_to='+encodeURIComponent('/'+(location.hash||'#gacha'));
 }
 
+function refreshDiscordProfile(automatic=false) {
+ const form=document.getElementById('playerProfileRefresh');
+ if(!form)return;
+ const params=new URLSearchParams({return_to:'/'+(location.hash||'#gacha')});
+ if(automatic)params.set('automatic','1');
+ form.action='/api/auth/discord/profile?'+params;
+ form.submit();
+}
+
 function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile}) {
  const account=document.getElementById('gameAccount');
  const label=document.getElementById('gameSaveMode');
@@ -111,14 +124,26 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
 
 if (typeof document !== 'undefined') {
  setupPlayerMenu({loadStats:()=>gameRead('profile'),sendReport:body=>submit('/api/game/report',body)});
+ document.getElementById('playerProfileRefresh')?.addEventListener('submit',event=>{
+  event.preventDefault();
+  refreshDiscordProfile();
+ });
  const url=new URL(location.href);
  const error=url.searchParams.get('discord');
+ const profileError=url.searchParams.get('discord_profile');
  const status=document.getElementById('gameSaveNotice');
  if(url.searchParams.get('save')==='local')url.searchParams.delete('save');
  if(error){
   url.searchParams.delete('discord');
   const message=document.getElementById('gameAuthError');
   if(message)message.textContent=error==='cancelled'?'Discord sign-in was cancelled.':'Discord sign-in could not finish. Try again.';
+ }
+ if(profileError){
+  url.searchParams.delete('discord_profile');
+  const note=document.getElementById('playerProfileRefreshNote');
+  if(note)note.textContent=profileError==='mismatch'
+   ?'Discord is open to a different account. Use the account linked to this save.'
+   :'Continue with Discord to load your name and avatar for this save.';
  }
  if(url.href!==location.href)history.replaceState(history.state,'',url);
  window.addEventListener('hashchange',()=>saveLinks(document.getElementById('gameAccount')?.dataset.provider));

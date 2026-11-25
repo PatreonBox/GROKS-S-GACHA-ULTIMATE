@@ -10,6 +10,7 @@ const secret=()=>randomBytes(32).toString('hex');
 const hash=(value,encoding='hex')=>createHash('sha256').update(value).digest(encoding);
 const snowflake=value=>typeof value==='string'&&/^\d{17,20}$/.test(value);
 const displayText=value=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,80):'';
+const defaultAvatar=(id,discriminator)=>/^[0-9]{4}$/.test(discriminator)?Number(discriminator)%5:Number((BigInt(id)>>22n)%6n);
 const cookie=(name,value,maxAge)=>name+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+maxAge;
 const destination=value=>typeof value==='string'&&/^\/(?:#[-/\w=&]{1,160})?$/.test(value)?value:'/#gacha';
 
@@ -34,29 +35,46 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
   if(token)sqlite.prepare('DELETE FROM game_discord_sessions WHERE token_hash=?').run(hash(token));
  };
 
- function begin(request,url){
+ function begin(request,url,profileSessionHash=null,automatic=false){
   const token=secret(),state=secret(),verifier=secret(),now=Date.now();
   const prior=cookieValue(request,flowCookie);
   sqlite.prepare('DELETE FROM game_discord_flows WHERE expires_at<=? OR token_hash=?').run(now,prior?hash(prior):'');
-  sqlite.prepare('INSERT INTO game_discord_flows VALUES(?,?,?,?,?)').run(
-   hash(token),hash(state),verifier,destination(url.searchParams.get('return_to')),now+flowSeconds*1000);
+  sqlite.prepare(`INSERT INTO game_discord_flows(token_hash,state_hash,verifier,return_to,expires_at,profile_session_hash)
+   VALUES(?,?,?,?,?,?)`).run(hash(token),hash(state),verifier,destination(url.searchParams.get('return_to')),
+   now+flowSeconds*1000,profileSessionHash);
   const target=new URL(issuer+'/oauth2/authorize');
   target.search=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',
    scope:'identify',state,code_challenge:hash(verifier,'base64url'),code_challenge_method:'S256'});
+  if(automatic)target.searchParams.set('prompt','none');
   return redirect(target.toString(),[cookie(flowCookie,token,flowSeconds)]);
+ }
+
+ function beginProfileRefresh(request,url){
+  if(request.headers.get('origin')!==origin)return new Response('Open the game to update your Discord profile.',{status:403});
+  const active=account(request),automatic=url.searchParams.get('automatic')==='1';
+  const next=origin+destination(url.searchParams.get('return_to'));
+  if(!active||(automatic&&!active.profile.autoRefresh))return redirect(next);
+  const sessionHash=hash(accountToken(request));
+  const claimed=sqlite.prepare(`UPDATE game_discord_sessions SET profile_refresh_attempted=1
+   WHERE token_hash=? AND profile_refresh_attempted=0`).run(sessionHash);
+  if(automatic&&!claimed.changes)return redirect(next);
+  return begin(request,url,sessionHash,automatic);
  }
 
  async function finish(request,url){
   const token=cookieValue(request,flowCookie),state=url.searchParams.get('state')||'';
   const flow=token&&/^[a-f0-9]{64}$/.test(state)&&sqlite.prepare(
-   'DELETE FROM game_discord_flows WHERE token_hash=? AND state_hash=? AND expires_at>? RETURNING verifier,return_to'
+   'DELETE FROM game_discord_flows WHERE token_hash=? AND state_hash=? AND expires_at>? RETURNING verifier,return_to,profile_session_hash'
   ).get(hash(token),hash(state),Date.now());
   const next=new URL(flow?.return_to||'/#gacha',origin);
+  const profileSession=flow?.profile_session_hash;
   function failed(reason){
-   next.searchParams.set('discord',reason);
+   next.searchParams.set(profileSession?'discord_profile':'discord',reason);
    return redirect(next.href,[clearFlow()]);
   }
   if(!flow||url.searchParams.get('iss')!==issuer)return failed('failed');
+  const boundAccount=profileSession&&hash(accountToken(request)||'')===profileSession?account(request):null;
+  if(profileSession&&!boundAccount)return failed('failed');
   if(url.searchParams.get('error')==='access_denied')return failed('cancelled');
   const code=url.searchParams.get('code');
   if(!code||code.length>512)return failed('failed');
@@ -72,16 +90,20 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
    const profile=await send(issuer+'/api/v10/users/@me',{headers:{Authorization:'Bearer '+access_token},
     redirect:'error',signal:AbortSignal.timeout(8000)});
    if(!profile.ok)return failed('failed');
-   const {id,username,global_name,avatar}=await profile.json();
-   if(!snowflake(id))return failed('failed');
+   const {id,username,global_name,avatar,discriminator}=await profile.json();
    const handle=displayText(username);
-   sqlite.prepare(`INSERT INTO game_discord_profiles(discord_id,username,display_name,avatar_hash)
-    VALUES(?,?,?,?) ON CONFLICT(discord_id) DO UPDATE SET
-    username=excluded.username,display_name=excluded.display_name,avatar_hash=excluded.avatar_hash`)
-    .run(id,handle,displayText(global_name)||handle,typeof avatar==='string'&&/^(?:a_)?[a-f0-9]{32}$/.test(avatar)?avatar:null);
+   if(!snowflake(id)||!handle)return failed('failed');
+   if(boundAccount&&boundAccount.id!==id)return failed('mismatch');
+   if(profileSession&&!account(request))return failed('failed');
+   const avatarHash=typeof avatar==='string'&&/^(?:a_)?[a-f0-9]{32}$/.test(avatar)?avatar:null;
+   sqlite.prepare(`INSERT INTO game_discord_profiles(discord_id,username,display_name,avatar_hash,default_avatar_index)
+    VALUES(?,?,?,?,?) ON CONFLICT(discord_id) DO UPDATE SET username=excluded.username,
+    display_name=excluded.display_name,avatar_hash=excluded.avatar_hash,default_avatar_index=excluded.default_avatar_index`)
+    .run(id,handle,displayText(global_name)||handle,avatarHash,defaultAvatar(id,discriminator));
+   if(profileSession)return redirect(next.href,[clearFlow()]);
    const session=secret(),now=Date.now();
    sqlite.prepare('DELETE FROM game_discord_sessions WHERE expires_at<=?').run(now);
-   sqlite.prepare('INSERT INTO game_discord_sessions VALUES(?,?,?)').run(hash(session),id,now+sessionSeconds*1000);
+   sqlite.prepare('INSERT INTO game_discord_sessions(token_hash,discord_id,expires_at) VALUES(?,?,?)').run(hash(session),id,now+sessionSeconds*1000);
    removeSession(accountToken(request));
    return redirect(next.href,[clearFlow(),cookie(sessionCookie,session,sessionSeconds)]);
   }catch{
@@ -92,12 +114,15 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
  function account(request){
   const token=accountToken(request);
   if(!token)return null;
-  const row=sqlite.prepare(`SELECT s.discord_id,p.username,p.display_name,p.avatar_hash FROM game_discord_sessions s
+  const row=sqlite.prepare(`SELECT s.discord_id,s.profile_refresh_attempted,p.username,p.display_name,p.avatar_hash,p.default_avatar_index
+   FROM game_discord_sessions s
    LEFT JOIN game_discord_profiles p ON p.discord_id=s.discord_id WHERE s.token_hash=? AND s.expires_at>?`)
    .get(hash(token),Date.now());
   if(!row)return null;
-  const avatarUrl=row.avatar_hash?`https://cdn.discordapp.com/avatars/${row.discord_id}/${row.avatar_hash}.webp?size=128`:null;
-  return {id:row.discord_id,profile:{name:row.display_name||'Discord player',username:row.username||null,avatarUrl}};
+  const avatarUrl=row.avatar_hash?`https://cdn.discordapp.com/avatars/${row.discord_id}/${row.avatar_hash}.webp?size=128`:
+   `https://cdn.discordapp.com/embed/avatars/${row.default_avatar_index??defaultAvatar(row.discord_id)}.png`;
+  return {id:row.discord_id,profile:{name:row.display_name||null,username:row.username||null,avatarUrl,
+   ...(!row.username&&!row.profile_refresh_attempted?{autoRefresh:true}:{})}};
  }
 
  return {
@@ -106,6 +131,7 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
   handle(request,url){
    if(url.pathname==='/signin-with-discord'&&request.method==='GET')return begin(request,url);
    if(url.pathname===callback&&request.method==='GET')return finish(request,url);
+   if(url.pathname==='/api/auth/discord/profile'&&request.method==='POST')return beginProfileRefresh(request,url);
    if(url.pathname==='/api/auth/discord/logout'&&request.method==='POST'){
     if(request.headers.get('origin')!==origin)return new Response('Open the game to sign out.',{status:403});
     removeSession(accountToken(request));

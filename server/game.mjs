@@ -1,5 +1,7 @@
-import {createCardPool,normalizeWallet} from '../web/pack-engine.js';
+import {cardCategories,createCardPool,normalizeWallet} from '../web/pack-engine.js';
 import {newWallet,prepareGameAction} from '../web/game-rules.js';
+import {campaignStages,stageCleared} from '../web/campaign.js';
+import {mineEarnings} from '../web/mine-economy.js';
 import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
 
 const guestCookie='__Host-gdlb-save';
@@ -93,6 +95,20 @@ async function inventory(db,id){
  return results.map(entry=>JSON.parse(entry.card));
 }
 
+async function profileStats(db,record,collectibleIds){
+ const wallet=normalizeWallet(JSON.parse(record.wallet));
+ const {results}=await db.prepare(`SELECT level_id,json_extract(card,'$.copies') AS copies
+  FROM game_cards WHERE player_id=?`).bind(record.player_id).all();
+ let unique=0,copies=0;
+ for(const entry of results){
+  if(collectibleIds.has(entry.level_id))unique++;
+  copies+=Math.max(0,entry.copies||0);
+ }
+ return {coins:wallet.coins+mineEarnings(wallet).coins,gems:wallet.gems,unique,copies,
+  collectible:collectibleIds.size,campaignTotal:campaignStages.length,
+  campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(wallet,i+1)),0)};
+}
+
 async function commit(db,{owner,record,wallet,changes,requestId,result,now,transferId}){
  const id=record.player_id,version=record.revision+1;
  // Concurrent retries share a request ID. Only the winning write may update cards.
@@ -176,6 +192,15 @@ async function transferSave(db,session,body,getPool){
 
 export function gameRoutes(readJson,hasArt){
  const getPool=createCardPool(readJson);
+ let collectibleIds;
+ function getCollectibleIds(){
+  collectibleIds??=Promise.all(cardCategories.map(getPool)).then(pools=>{
+   const ids=new Set();
+   for(const rows of pools)for(const row of rows)ids.add(row[0]);
+   return ids;
+  }).catch(error=>{collectibleIds=undefined;throw error;});
+  return collectibleIds;
+ }
  return async function handleGame(request,env){
   const db=env?.DB;
   if(!db)return json({error:'The online save is temporarily unavailable.'},503);
@@ -213,13 +238,7 @@ export function gameRoutes(readJson,hasArt){
    if(!record)reject('Open the game to start your save.',401);
    if(view==='wallet')return json({wallet:visibleWallet(normalizeWallet(JSON.parse(record.wallet))),...account},200,session.cookie);
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
-   if(view==='profile'){
-    const wallet=normalizeWallet(JSON.parse(record.wallet));
-    const {unique,copies}=await one(db,`SELECT COUNT(*) AS "unique",COALESCE(SUM(json_extract(card,'$.copies')),0) AS copies
-     FROM game_cards WHERE player_id=? AND json_extract(card,'$.copies')>0`,record.player_id);
-    return json({profile:{coins:wallet.coins,gems:wallet.gems,unique,copies,
-     campaignClears:Object.values(wallet.campaign||{}).filter(Boolean).length}});
-   }
+   if(view==='profile')return json({profile:await profileStats(db,record,await getCollectibleIds())});
    reject('Unknown save view.');
   }catch(error){
    if(error instanceof GameRequestError)return json({error:error.message},error.status);

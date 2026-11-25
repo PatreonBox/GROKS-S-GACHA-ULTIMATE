@@ -71,8 +71,12 @@
 .player-stats>div{padding:10px;border:1px solid #394d67;border-radius:9px;background:#111927}
 .player-stats dt{color:#b6c9df;font-size:13px}
 .player-stats dd{margin:3px 0 0;color:#f5f8ff;font:800 24px/1 Cond,sans-serif;overflow-wrap:anywhere}
+.player-stats small{display:block;margin-top:5px;color:#9eb2ca;font-size:12px}
+.player-stats .player-collection-stat{grid-column:1/-1;border-color:#396579;background:#111f2d}
+.player-collection-stat progress{display:block;width:100%;height:7px;margin-top:10px;accent-color:#64e7dc}
 .player-form-note,.player-form-status{margin:0 0 12px;color:#bacbe0;font-size:14px}
-#playerProfileRefresh{margin:12px 0 0}
+.player-profile-refresh{margin-top:14px}
+.player-profile-refresh .outline{min-height:42px}
 .player-form-status{margin:10px 0}
 .player-form-status:empty{display:none}
 .player-form-status[data-error="true"]{color:#ffb1b1}
@@ -94,6 +98,40 @@
 .bug-dialog textarea{resize:vertical}
 .player-dialog-actions{display:flex;gap:8px;margin-top:14px}
 .player-dialog-actions button{min-height:42px}
+.bug-receipt[hidden],#bugReportForm[hidden]{display:none}
+.bug-receipt-banner{
+ display:flex;
+ align-items:center;
+ gap:13px;
+ padding:12px;
+ background:#142c35;
+ border:1px solid #3d817c;
+ border-radius:11px;
+ color:#d4f9f2;
+}
+.bug-receipt-check{
+ display:grid;
+ place-items:center;
+ flex:none;
+ width:42px;
+ height:42px;
+ border-radius:50%;
+ background:#276759;
+ color:#b8ffdb;
+ font:800 25px/1 system-ui,sans-serif;
+}
+.bug-receipt-banner p{margin:0;font-weight:650}
+.bug-receipt-banner small{color:#b0cfd0}
+.bug-receipt-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0 0}
+.bug-receipt-fields>div{padding:9px 11px;border:1px solid #344761;border-radius:8px;background:#111927}
+.bug-receipt-fields .receipt-wide{grid-column:1/-1}
+.bug-receipt-fields dt{color:#adbed5;font-size:13px;font-weight:700}
+.bug-receipt-fields dd{margin:3px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.bug-receipt .player-dialog-actions{justify-content:flex-end}
+@media(prefers-reduced-motion:no-preference){
+ .bug-receipt:not([hidden]){animation:report-received .22s ease-out}
+}
+@keyframes report-received{from{opacity:0;transform:translateY(5px)}}
 @media(max-width:520px){
  .bug-report-row{grid-template-columns:1fr}
  .player-dialog-head,.player-dialog-body{padding-inline:12px}

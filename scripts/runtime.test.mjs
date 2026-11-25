@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {mkdtemp,rm} from 'node:fs/promises';
+import {readFileSync} from 'node:fs';
 import net from 'node:net';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -10,6 +11,7 @@ import {createHash} from 'node:crypto';
 import {createDiscordAuth} from '../server/discord.mjs';
 import {createBugReports} from '../server/bug-reports.mjs';
 import {openGameDatabase} from '../server/sqlite.mjs';
+import {cardCategories,createCardPool} from '../web/pack-engine.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
@@ -72,9 +74,14 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   assert.equal(signedIn.signedIn,true);
   assert.deepEqual(signedIn.playerProfile,{name:'Fixture player',username:'fixture',avatarUrl:`https://cdn.discordapp.com/avatars/${userId}/${'a'.repeat(32)}.webp?size=128`});
   assert.equal(sqlite.prepare('SELECT owner FROM game_profiles WHERE player_id=?').get(player_id).owner,'discord:'+userId);
+  const pool=createCardPool(path=>JSON.parse(readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
+  const catalog=new Set((await Promise.all(cardCategories.map(pool))).flatMap(rows=>rows.map(row=>row[0])));
+  const insert=sqlite.prepare('INSERT INTO game_cards(player_id,level_id,card) VALUES(?,?,?)');
+  insert.run(player_id,4454123,JSON.stringify({copies:3}));
+  insert.run(player_id,6508283,JSON.stringify({copies:0}));
   const stats=request('/api/game?view=profile',sessionCookie);
   assert.deepEqual((await (await worker.fetch(stats,configure(stats))).json()).profile,
-   {coins:1500,gems:10,unique:0,copies:0,campaignClears:0});
+   {coins:1500,gems:10,unique:2,copies:3,collectible:catalog.size,campaignClears:0,campaignTotal:10});
   assert.equal((await (await game(sessionCookie)).json()).wallet.coins,1500);
   for(let i=0;i<2;i++){
    const guide=new Request(to('/api/game'),{method:'POST',headers:{Cookie:sessionCookie,
@@ -94,6 +101,50 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
  }finally{sqlite.close();}
 });
 
+test('legacy Discord profiles refresh without signing the game session out or switching accounts',async()=>{
+ const {sqlite}=openGameDatabase(':memory:');
+ const clientId='1570000000000000000',userId='1580000000000000000';
+ const token='f'.repeat(64);
+ const session='__Host-gdlb-discord-session='+token;
+ sqlite.prepare('INSERT INTO game_discord_sessions(token_hash,discord_id,expires_at) VALUES(?,?,?)')
+  .run(createHash('sha256').update(token).digest('hex'),userId,Date.now()+600_000);
+ let discordId=userId;
+ const auth=createDiscordAuth(sqlite,{origin:publicOrigin,clientId},async url=>
+  Response.json(url.endsWith('/oauth2/token')?{access_token:'fixture-token'}:
+   {id:discordId,username:'legacy-fixture',global_name:'Legacy Fixture',avatar:null,discriminator:'1234'}));
+ const account=()=>auth.account(new Request(publicOrigin,{headers:{Cookie:session}}));
+ const params='return_to=%2F%23gacha%2Fcollection';
+ const begin=(automatic=false,origin=publicOrigin)=>{
+  const url=new URL('/api/auth/discord/profile?'+params+(automatic?'&automatic=1':''),publicOrigin);
+  return auth.handle(new Request(url,{method:'POST',headers:{Origin:origin,Cookie:session}}),url);
+ };
+ const finish=async opened=>{
+  const authorize=new URL(opened.headers.get('location'));
+  const url=new URL('/api/auth/discord/callback',publicOrigin);
+  url.search=new URLSearchParams({state:authorize.searchParams.get('state'),code:'fixture-code',iss:'https://discord.com'});
+  return auth.handle(new Request(url,{headers:{Cookie:session+'; '+opened.headers.get('set-cookie').split(';')[0]}}),url);
+ };
+ try{
+  assert.equal(account().profile.autoRefresh,true);
+  assert.equal(begin(true,'https://elsewhere.example').status,403);
+  const automatic=begin(true);
+  assert.equal(new URL(automatic.headers.get('location')).searchParams.get('prompt'),'none');
+  assert.equal(account().profile.autoRefresh,undefined);
+  assert.equal(begin(true).headers.get('location'),publicOrigin+'/#gacha/collection');
+  const updated=await finish(automatic);
+  assert.equal(updated.headers.get('location'),publicOrigin+'/#gacha/collection');
+  assert.equal(updated.headers.getSetCookie().length,1);
+  assert.deepEqual(account().profile,{name:'Legacy Fixture',username:'legacy-fixture',
+   avatarUrl:'https://cdn.discordapp.com/embed/avatars/4.png'});
+  discordId='1580000000000000001';
+  const wrongAccount=await finish(begin());
+  assert.equal(new URL(wrongAccount.headers.get('location')).searchParams.get('discord_profile'),'mismatch');
+  assert.equal(account().id,userId);
+  assert.equal(account().profile.username,'legacy-fixture');
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM game_discord_sessions').get().count,1);
+ }finally{sqlite.close();}
+});
+
 test('bug reports require sign-in and valid details and deliver once to the configured inbox',async()=>{
  const {DB,sqlite}=openGameDatabase(':memory:');
  const userId='1580000000000000001';
@@ -110,9 +161,22 @@ test('bug reports require sign-in and valid details and deliver once to the conf
   assert.equal((await send(entry,env,'https://elsewhere.example')).status,403);
   assert.equal((await send({...entry,category:'unknown'})).status,400);
   assert.equal((await send({...entry,steps:'  '})).status,400);
-  assert.equal((await send(entry)).status,202);
-  assert.equal((await send(entry)).status,202);
-  assert.equal((await send({...entry,reportId:crypto.randomUUID()})).status,429);
+  const accepted=await send(entry);
+  assert.equal(accepted.status,202);
+  const result=await accepted.json();
+  assert.equal(result.reportId,entry.reportId);
+  assert.deepEqual(result.receipt,{category:'Combat',title:entry.title,steps:entry.steps,actual:entry.actual,
+   expected:entry.expected,page:entry.page,createdAt:result.receipt.createdAt});
+  const spam={...entry,reportId:crypto.randomUUID()};
+  const blocked=await send(spam);
+  assert.equal(blocked.status,429);
+  assert.deepEqual(await blocked.json(),{error:'An error occured'});
+  const blockedUntil=sqlite.prepare('SELECT blocked_until FROM game_bug_report_cooldowns WHERE discord_id=?').get(userId).blocked_until;
+  assert.ok(blockedUntil-result.receipt.createdAt>=86_400_000);
+  assert.deepEqual(await (await send({...entry,title:'Changed after sending'})).json(),result);
+  sqlite.prepare('UPDATE game_bug_reports SET created_at=?').run(Date.now()-3_600_000);
+  assert.equal((await send(spam)).status,429);
+  assert.equal(sqlite.prepare('SELECT blocked_until FROM game_bug_report_cooldowns WHERE discord_id=?').get(userId).blocked_until,blockedUntil);
   await deliver();
   await deliver();
   assert.equal(outbox.length,1);
@@ -124,6 +188,8 @@ test('bug reports require sign-in and valid details and deliver once to the conf
   assert.match(message.text,/#battle\/campaign/);
   assert.match(message.text,/Guard never expires/);
   assert.ok(sqlite.prepare('SELECT sent_at FROM game_bug_reports WHERE report_id=?').get(entry.reportId).sent_at);
+  sqlite.prepare('UPDATE game_bug_report_cooldowns SET blocked_until=?').run(Date.now()-1);
+  assert.equal((await send(spam)).status,202);
  }finally{sqlite.close();}
 });
 async function unusedPort(){
@@ -166,7 +232,8 @@ test('Railway serves the welcome guide and requires Discord for gameplay',async(
   child=await launch(new URL(base).port,volume,clientId);
   const page=await (await fetch(base)).text();
   assert.match(page,/id="brandName">Geometry Dash Kingdom<\/strong>/);
-  assert.match(page,/id="brandCredit">Made by Groksnfp<\/small>/);
+  assert.doesNotMatch(page.match(/<header>[\s\S]*?<\/header>/)[0],/Made by Groksnfp/);
+  assert.match(page,/<section class="account-gate"[\s\S]*?<small class="account-credit">Made by Groksnfp<\/small>\s*<\/section>/);
   assert.match(page,/id="accountGate"/);
   assert.match(page,/class="discord-signin"/);
   assert.match(page,/class="discord-symbol"/);

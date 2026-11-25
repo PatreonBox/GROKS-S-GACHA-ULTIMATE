@@ -4,8 +4,15 @@ const categories=new Map([
 ]);
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const minute=60_000;
+const hour=60*minute;
+const reportCooldown=24*hour;
 const fail=(error,status=400)=>({body:{error},status});
 const valid=(value,min,max)=>typeof value==='string'&&value.trim().length>=min&&value.length<=max&&!value.includes('\0');
+
+function received(reportId,payload,createdAt){
+ const {category,title,steps,actual,expected,page}=JSON.parse(payload);
+ return {body:{reportId,receipt:{category,title,steps,actual,expected,page,createdAt}},status:202};
+}
 
 export function createBugReports(sqlite,{apiKey,from,to},send=fetch){
  const canSend=Boolean(apiKey&&from&&to);
@@ -44,6 +51,28 @@ export function createBugReports(sqlite,{apiKey,from,to},send=fetch){
   finally{busy=false;}
  }
 
+ function saveReport(discordId,reportId,payload,now){
+  const previous=sqlite.prepare('SELECT discord_id,payload,created_at FROM game_bug_reports WHERE report_id=?').get(reportId);
+  if(previous)return previous.discord_id===discordId?received(reportId,previous.payload,previous.created_at):
+   fail('Reopen the report form and try again.',409);
+
+  const cooldown=sqlite.prepare('SELECT blocked_until FROM game_bug_report_cooldowns WHERE discord_id=?').get(discordId);
+  if(cooldown?.blocked_until>now)return fail('An error occured',429);
+  const recent=sqlite.prepare(`SELECT MAX(created_at) AS last,COUNT(*) AS count
+   FROM game_bug_reports WHERE discord_id=? AND created_at>?`).get(discordId,now-hour);
+  if(recent.last>now-minute||recent.count>=3){
+   sqlite.prepare(`INSERT INTO game_bug_report_cooldowns(discord_id,blocked_until) VALUES(?,?)
+    ON CONFLICT(discord_id) DO UPDATE SET blocked_until=excluded.blocked_until`).run(discordId,now+reportCooldown);
+   return fail('An error occured',429);
+  }
+
+  const pending=sqlite.prepare('SELECT COUNT(*) AS count FROM game_bug_reports WHERE sent_at IS NULL').get().count;
+  if(pending>=500)return fail('Bug reports are temporarily unavailable.',503);
+  sqlite.prepare(`INSERT INTO game_bug_reports(report_id,discord_id,payload,created_at,retry_at) VALUES(?,?,?,?,?)`)
+   .run(reportId,discordId,payload,now,now);
+  return received(reportId,payload,now);
+ }
+
  return {
   submit(discordId,profile,{reportId,category,title,steps,actual,expected,page}){
    if(typeof reportId!=='string'||!uuid.test(reportId))return fail('Reload the report form and try again.');
@@ -52,20 +81,18 @@ export function createBugReports(sqlite,{apiKey,from,to},send=fetch){
    if(!valid(steps,15,1200))return fail('Enter at least 15 characters about how to reproduce the bug.');
    if(!valid(actual,10,1200))return fail('Enter at least 10 characters about what happened.');
    if(!valid(expected,8,800))return fail('Enter at least 8 characters about what you expected.');
-   const now=Date.now();
-   const previous=sqlite.prepare('SELECT discord_id FROM game_bug_reports WHERE report_id=?').get(reportId);
-   const receipt={body:{reportId},status:202};
-   if(previous)return previous.discord_id===discordId?receipt:fail('Reopen the report form and try again.',409);
-   const payload=JSON.stringify({name:profile?.name||'Discord player',category:categories.get(category),
+   const payload=JSON.stringify({name:profile?.name||'Discord account',category:categories.get(category),
     title:title.trim(),steps:steps.trim(),actual:actual.trim(),expected:expected.trim(),
     page:typeof page==='string'&&/^#[-a-z0-9/]{1,70}$/i.test(page)?page:'Game'});
-   const saved=sqlite.prepare(`INSERT INTO game_bug_reports(report_id,discord_id,payload,created_at,retry_at)
-    SELECT ?,?,?,?,? WHERE NOT EXISTS(SELECT 1 FROM game_bug_reports WHERE discord_id=? AND created_at>?)
-    AND (SELECT COUNT(*) FROM game_bug_reports WHERE discord_id=? AND created_at>?)<3
-    AND (SELECT COUNT(*) FROM game_bug_reports WHERE sent_at IS NULL)<500`)
-    .run(reportId,discordId,payload,now,now,discordId,now-minute,discordId,now-60*minute);
-   if(!saved.changes)return fail('The report limit has been reached. Wait a few minutes and try again.',429);
-   return receipt;
+   sqlite.exec('BEGIN IMMEDIATE');
+   try{
+    const result=saveReport(discordId,reportId,payload,Date.now());
+    sqlite.exec('COMMIT');
+    return result;
+   }catch(error){
+    sqlite.exec('ROLLBACK');
+    throw error;
+   }
   },
   deliver,
   start(){

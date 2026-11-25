@@ -1,11 +1,12 @@
 const numberFormat = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
+const receiptDate = new Intl.DateTimeFormat(undefined, {dateStyle:'medium',timeStyle:'short'});
 
 export function renderPlayerMenu(signedIn, profile) {
  const menu = document.getElementById('playerMenu');
  if(!menu)return;
  menu.hidden = !signedIn;
  if(!signedIn){menu.open=false;return;}
- const name = profile?.name || 'Discord player';
+ const name = profile?.name || 'Discord profile';
  const handle = profile?.username;
  for(const node of document.querySelectorAll('[data-player-name]'))node.textContent=name;
  for(const node of document.querySelectorAll('[data-player-handle]'))node.textContent=handle?'@'+handle:'Discord';
@@ -23,9 +24,13 @@ export function setupPlayerMenu({loadStats, sendReport}) {
  const summary=menu.querySelector('summary');
  const profile=document.getElementById('playerProfile');
  const stats=document.getElementById('playerStats');
+ const collectionProgress=document.getElementById('playerCollectionProgress');
  const statsStatus=document.getElementById('playerStatsStatus');
  const report=document.getElementById('bugReport');
  const form=document.getElementById('bugReportForm');
+ const receiptBox=document.getElementById('bugReportReceipt');
+ const reportTitle=document.getElementById('bugReportTitle');
+ const dismissReceipt=document.getElementById('dismissBugReceipt');
  const status=document.getElementById('bugReportStatus');
  const send=document.getElementById('sendBugReport');
  const fields=form.querySelector('fieldset');
@@ -59,8 +64,12 @@ export function setupPlayerMenu({loadStats, sendReport}) {
    const values=await loadStats();
    if(request!==statsRequest||!profile.open)return;
    for(const entry of stats.querySelectorAll('[data-player-stat]')){
-    entry.textContent=numberFormat.format(values[entry.dataset.playerStat]||0);
+    const current=numberFormat.format(values[entry.dataset.playerStat]||0);
+    const total=values[entry.dataset.playerTotal];
+    entry.textContent=Number.isFinite(total)?current+' / '+numberFormat.format(total):current;
    }
+   collectionProgress.max=values.collectible||1;
+   collectionProgress.value=values.unique;
    stats.hidden=false;
    statsStatus.textContent='';
   }catch(error){if(request===statsRequest)statsStatus.textContent=error.message;}
@@ -68,7 +77,14 @@ export function setupPlayerMenu({loadStats, sendReport}) {
 
  document.getElementById('openBugReport').addEventListener('click',()=>{
   menu.open=false;
-  if(submitted){form.reset();reference=undefined;status.textContent='';submitted=false;}
+  if(submitted){
+   form.hidden=false;
+   receiptBox.hidden=true;
+   reportTitle.textContent='Report a bug';
+   reference=undefined;
+   status.textContent='';
+   submitted=false;
+  }
   send.disabled=sending;
   fields.disabled=sending;
   report.showModal();
@@ -85,9 +101,18 @@ export function setupPlayerMenu({loadStats, sendReport}) {
   status.textContent='Sending report…';
   status.dataset.error='false';
   try{
-   const {reportId}=await sendReport({...input,page,reportId:reference});
+   const {reportId,receipt}=await sendReport({...input,page,reportId:reference});
+   const details={...receipt,reference:'#'+reportId.slice(0,8),date:receiptDate.format(receipt.createdAt)};
+   for(const entry of receiptBox.querySelectorAll('[data-report-receipt]')){
+    entry.textContent=details[entry.dataset.reportReceipt];
+   }
    submitted=true;
-   status.textContent='Report received. Reference '+reportId.slice(0,8)+'.';
+   form.reset();
+   form.hidden=true;
+   reportTitle.textContent='Report received';
+   receiptBox.hidden=false;
+   report.scrollTop=0;
+   if(report.open)dismissReceipt.focus({preventScroll:true});
   }catch(error){
    status.textContent=error.message;
    status.dataset.error='true';
