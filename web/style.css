@@ -46,3 +46,7 @@ img.gd-rating-icon{width:1.06em;height:1.06em;display:inline-block;object-fit:co
 .save-status{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;width:min(1400px,100%);margin:auto;padding:8px clamp(18px,4.6vw,74px) 0;font-size:.78rem;color:var(--muted,#aaa5b6)}
 .save-status span{font-weight:750;color:#c3adf7}
 .save-status a{color:inherit;text-underline-offset:3px}
+
+.save-status .outline,.save-status .save-action{padding:5px 9px;min-height:28px;font-size:inherit}
+.save-status .save-action{text-decoration:underline;text-underline-offset:3px}
+.save-status #gameSaveNotice:empty{display:none}

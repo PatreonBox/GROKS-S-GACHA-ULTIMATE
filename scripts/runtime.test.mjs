@@ -6,8 +6,67 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import net from 'node:net';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
+import {createDiscordAuth} from '../server/discord.mjs';
+import {openGameDatabase} from '../server/sqlite.mjs';
+import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
+
+test('Discord PKCE sign-in claims the online guest save once',async()=>{
+ const {DB,sqlite}=openGameDatabase(':memory:');
+ const clientId='1570000000000000000',userId='1580000000000000000';
+ const to=path=>new URL(path,publicOrigin);
+ let authorization,exchanges=0;
+ const auth=createDiscordAuth(sqlite,{origin:publicOrigin,clientId},async(url,options)=>{
+  if(url.endsWith('/oauth2/token')){
+   exchanges++;
+   assert.equal(options.body.get('client_id'),clientId);
+   assert.equal(options.body.get('redirect_uri'),authorization.searchParams.get('redirect_uri'));
+   const verifier=options.body.get('code_verifier');
+   assert.equal(createHash('sha256').update(verifier).digest('base64url'),authorization.searchParams.get('code_challenge'));
+   return Response.json({access_token:'test-account-token'});
+  }
+  assert.equal(url,'https://discord.com/api/v10/users/@me');
+  assert.equal(options.headers.Authorization,'Bearer test-account-token');
+  return Response.json({id:userId});
+ });
+ const configure=request=>({DB,guestOnly:true,discordEnabled:true,discordUser:auth.user(request)});
+ const request=(path,cookie,method='GET',origin=publicOrigin)=>new Request(to(path),{
+  method,headers:{...(cookie?{Cookie:cookie}:{}),...(method==='POST'?{Origin:origin}:{})}
+ });
+ const call=async(path,cookie,method)=>{const req=request(path,cookie,method);return auth.handle(req,new URL(req.url));};
+ const game=async(cookie)=>{const req=request('/api/game',cookie);return worker.fetch(req,configure(req));};
+ try{
+  const guest=await game();
+  const guestCookie=guest.headers.get('set-cookie').split(';')[0];
+  const {player_id}=sqlite.prepare('SELECT player_id FROM game_profiles').get();
+  const started=await call('/signin-with-discord?return_to=%2F%23gacha%2Fcollection',guestCookie);
+  authorization=new URL(started.headers.get('location'));
+  assert.equal(authorization.origin,'https://discord.com');
+  assert.equal(authorization.searchParams.get('scope'),'identify');
+  assert.equal(authorization.searchParams.get('code_challenge_method'),'S256');
+  assert.equal(authorization.searchParams.get('redirect_uri'),publicOrigin+'/api/auth/discord/callback');
+  const flow=started.headers.get('set-cookie').split(';')[0];
+  const callback=to('/api/auth/discord/callback');
+  callback.search=new URLSearchParams({state:authorization.searchParams.get('state'),code:'test-code',iss:'https://discord.com'});
+  const complete=await call(callback,guestCookie+'; '+flow);
+  assert.equal(complete.headers.get('location'),publicOrigin+'/#gacha/collection');
+  const cookies=complete.headers.getSetCookie();
+  assert.equal(cookies.length,2);
+  const sessionCookie=cookies[1].split(';')[0];
+  const linked=await game(guestCookie+'; '+sessionCookie);
+  assert.equal((await linked.json()).signedIn,true);
+  assert.equal(sqlite.prepare('SELECT owner FROM game_profiles WHERE player_id=?').get(player_id).owner,'discord:'+userId);
+  assert.equal((await (await game(sessionCookie)).json()).wallet.coins,1500);
+  assert.ok((await call(callback,flow)).headers.get('location').includes('discord=failed'));
+  assert.equal(exchanges,1);
+  const badLogout=request('/api/auth/discord/logout',sessionCookie,'POST','https://elsewhere.example');
+  assert.equal(auth.handle(badLogout,new URL(badLogout.url)).status,403);
+  assert.equal((await call('/api/auth/discord/logout',sessionCookie,'POST')).status,303);
+  assert.equal(auth.user(request('/api/game',sessionCookie)),null);
+ }finally{sqlite.close();}
+});
 async function unusedPort(){
  const probe=net.createServer().listen(0,'127.0.0.1');
  await once(probe,'listening');

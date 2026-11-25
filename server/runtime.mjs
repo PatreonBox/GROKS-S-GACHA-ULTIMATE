@@ -5,6 +5,7 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import worker from '../dist/server/index.js';
 import {openGameDatabase} from './sqlite.mjs';
+import {createDiscordAuth} from './discord.mjs';
 
 const port=Number(process.env.PORT||8080);
 if(!Number.isInteger(port)||port<1||port>65535)throw Error('PORT must be a valid port.');
@@ -22,6 +23,7 @@ if((railway&&publicUrl.protocol!=='https:')||!['http:','https:'].includes(public
  throw Error('GAME_PUBLIC_ORIGIN must be a valid origin.');
 }
 const {DB,sqlite}=openGameDatabase(join(directory,'gd-lvl-battles.sqlite'));
+const discord=createDiscordAuth(sqlite,{origin:publicUrl.origin,clientId:process.env.DISCORD_CLIENT_ID});
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,publicUrl);
@@ -35,8 +37,13 @@ const server=http.createServer(async(req,res)=>{
   headers.delete('oai-authenticated-user-id');
   const hasBody=!['GET','HEAD'].includes(req.method);
   const request=new Request(url,{method:req.method,headers,...(hasBody?{body:Readable.toWeb(req),duplex:'half'}:{})});
-  const response=await worker.fetch(request,{DB,guestOnly:true});
-  res.writeHead(response.status,Object.fromEntries(response.headers));
+  const response=await discord?.handle(request,url)??await worker.fetch(request,{
+   DB,guestOnly:true,discordEnabled:Boolean(discord),discordUser:discord?.user(request)
+  });
+  const outputHeaders=Object.fromEntries(response.headers);
+  const cookies=response.headers.getSetCookie();
+  if(cookies.length)outputHeaders['set-cookie']=cookies;
+  res.writeHead(response.status,outputHeaders);
   if(response.body)await pipeline(Readable.fromWeb(response.body),res);
   else res.end();
  }catch(error){

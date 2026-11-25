@@ -1,7 +1,7 @@
-export const localSave = typeof location !== 'undefined' && new URLSearchParams(location.search).get('save') === 'local';
 const updates = typeof window !== 'undefined' && typeof BroadcastChannel === 'function'
- ? new BroadcastChannel(localSave ? 'gdlb-pack-updates' : 'gdlb-online-updates') : null;
+ ? new BroadcastChannel('gdlb-online-updates') : null;
 let opening;
+let legacy;
 let ordered = Promise.resolve();
 
 async function exchange(url, options) {
@@ -15,68 +15,111 @@ function connect() {
  if (!opening) {
   const begin = () => exchange('/api/game');
   opening = (navigator.locks ? navigator.locks.request('gdlb-session', begin) : begin())
+   .then(data => {renderAccount(data); return data;})
    .catch(error => { opening = null; throw error; });
  }
  return opening;
 }
 
 export async function gameRead(view) {
- if (localSave) {
-  const {readLocal} = await import('./legacy-game.js');
-  return readLocal(view);
- }
  const initial = !opening;
  const session = await connect();
  const data = initial && view === 'wallet' ? session : await exchange('/api/game?view=' + view);
  if (view === 'wallet') renderAccount(data);
  return data[view];
 }
-export function gameCommand(action, args = {}, notice = 'changed') {
- const run = async () => {
-  let data;
-  if (localSave) {
-   const {playLocal} = await import('./legacy-game.js');
-   data = await playLocal(action, args);
-  } else {
-   await connect();
-   const options = {method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action, args, requestId:crypto.randomUUID()})};
-   try { data = await exchange('/api/game', options); }
-   catch (error) {
-    if (!(error instanceof TypeError)) throw error;
-    data = await exchange('/api/game', options);
-   }
-   renderAccount(data);
-  }
-  if (notice) updates?.postMessage(notice);
-  return data;
- };
- const pending = ordered.then(run);
- ordered = pending.catch(() => {});
+
+async function submit(url,body) {
+ const options = {method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
+ try { return await exchange(url,options); }
+ catch (error) {
+  if (!(error instanceof TypeError)) throw error;
+  return exchange(url,options);
+ }
+}
+
+function queue(run) {
+ const pending=ordered.then(run);
+ ordered=pending.catch(()=>{});
  return pending;
+}
+
+export function gameCommand(action, args = {}, notice = 'changed') {
+ return queue(async()=>{
+  await connect();
+  const data=await submit('/api/game',{action,args,requestId:crypto.randomUUID()});
+  renderAccount(data);
+  if(notice)updates?.postMessage(notice);
+  return data;
+ });
 }
 export function onOtherTab(fn) { updates?.addEventListener('message', fn); }
 
-function renderAccount({signedIn,accountSignIn=true}) {
- const account = document.getElementById('gameAccount');
- if (account) account.hidden = Boolean(signedIn||!accountSignIn);
- if (!accountSignIn) {
-  const label = document.getElementById('gameSaveMode');
-  const local = document.getElementById('gameLocal');
-  if (label) { label.textContent = 'Guest save'; label.title = 'Your server save is linked to this browser.'; }
-  if (local) local.hidden = true;
- }
+function saveLinks(provider) {
+ const link=document.getElementById('gameAccount');
+ if(!link||!provider)return;
+ const target=provider==='discord'?'/signin-with-discord':'/signin-with-chatgpt';
+ link.href=target+'?return_to='+encodeURIComponent('/'+(location.hash||'#gacha'));
 }
-if (typeof document !== 'undefined') {
- const local = document.getElementById('gameLocal');
- const label = document.getElementById('gameSaveMode');
- const account = document.getElementById('gameAccount');
- if (label) label.textContent = localSave ? 'Local save · unranked' : 'Online save';
- if (local) local.textContent = localSave ? 'Switch to online save' : 'Open old local save';
- function saveLinks() {
-  if (local) local.href = (localSave ? '/' : '/?save=local') + (location.hash || '#gacha');
-  if (account) account.href = '/signin-with-chatgpt?return_to=' + encodeURIComponent('/' + (location.hash || '#gacha'));
+
+function renderAccount({signedIn,accountProvider,wallet}) {
+ const account=document.getElementById('gameAccount');
+ const label=document.getElementById('gameSaveMode');
+ const logout=document.getElementById('gameSignOut');
+ const transfer=document.getElementById('gameTransfer');
+ const status=document.getElementById('gameSaveNotice');
+ if(label)label.textContent=signedIn?'Online save':'Online guest save';
+ if(account){
+  account.hidden=!accountProvider||signedIn;
+  account.textContent=accountProvider==='discord'?'Sign in with Discord':'Sign in to sync your save';
+  account.dataset.provider=accountProvider||'';
+  saveLinks(accountProvider);
  }
- saveLinks();
- window.addEventListener('hashchange',saveLinks);
+ if(logout)logout.hidden=accountProvider!=='discord'||!signedIn;
+ if(!transfer||!wallet)return;
+ const receipt=wallet.legacyTransfer;
+ if(receipt)transfer.hidden=true;
+ if(receipt?.skipped&&status)status.textContent='Transferred save. '+receipt.skipped+' older card entries are in a browser backup.';
+ legacy??=import('./legacy-game.js').then(module=>module.findLegacySave()).catch(()=>null);
+ legacy.then(async saved=>{
+  if(receipt&&saved?.id===receipt.id){
+   const {finishLegacyTransfer}=await import('./legacy-game.js');
+   await finishLegacyTransfer(receipt);
+   legacy=Promise.resolve(null);
+  }
+  if(!transfer.disabled)transfer.hidden=Boolean(receipt)||!saved;
+ }).catch(()=>{});
+}
+
+if (typeof document !== 'undefined') {
+ const url=new URL(location.href);
+ const error=url.searchParams.get('discord');
+ const status=document.getElementById('gameSaveNotice');
+ if(url.searchParams.get('save')==='local')url.searchParams.delete('save');
+ if(error){
+  url.searchParams.delete('discord');
+  if(status)status.textContent=error==='cancelled'?'Discord sign-in was cancelled.':'Discord sign-in could not finish. Try again.';
+ }
+ if(url.href!==location.href)history.replaceState(history.state,'',url);
+ window.addEventListener('hashchange',()=>saveLinks(document.getElementById('gameAccount')?.dataset.provider));
+ const transfer=document.getElementById('gameTransfer');
+ transfer?.addEventListener('click',async()=>{
+  transfer.disabled=true;
+  status.textContent='Transferring your save…';
+  try{
+   const {readLegacyTransfer,finishLegacyTransfer}=await import('./legacy-game.js');
+   const snapshot=await readLegacyTransfer();
+   if(!snapshot){transfer.hidden=true;status.textContent='';return;}
+   const data=await queue(async()=>{
+    await connect();
+    return submit('/api/game/transfer',snapshot);
+   });
+   transfer.hidden=true;
+   await finishLegacyTransfer(data.result).catch(()=>{});
+   updates?.postMessage('changed');
+   location.reload();
+  }catch(error){
+   status.textContent=error.message;
+  }finally{transfer.disabled=false;}
+ });
 }

@@ -1,10 +1,12 @@
 import {createCardPool,normalizeWallet} from '../web/pack-engine.js';
 import {newWallet,prepareGameAction} from '../web/game-rules.js';
+import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
 
 const guestCookie='__Host-gdlb-save';
 const cookieLifetime=60*60*24*365;
 const receiptLifetime=10*60*1000;
 const maxBody=550000;
+const maxTransferBody=2500000;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const encoder=new TextEncoder();
 
@@ -26,16 +28,16 @@ function sameOrigin(request){
  if(origin!==new URL(request.url).origin||request.headers.get('Sec-Fetch-Site')==='cross-site')
   reject('Open the game on this site to play.',403);
 }
-async function readBody(request){
+async function readBody(request,limit=maxBody){
  if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type')||''))reject('JSON required.',415);
- if(!request.body||Number(request.headers.get('content-length'))>maxBody)reject('This action is too large.',413);
+ if(!request.body||Number(request.headers.get('content-length'))>limit)reject('This action is too large.',413);
  const stream=request.body.getReader(),decoder=new TextDecoder();
  let length=0,text='';
  while(true){
   const {done,value}=await stream.read();
   if(done)break;
   length+=value.byteLength;
-  if(length>maxBody){await stream.cancel();reject('This action is too large.',413);}
+  if(length>limit){await stream.cancel();reject('This action is too large.',413);}
   text+=decoder.decode(value,{stream:true});
  }
  let body;
@@ -49,15 +51,13 @@ function cookieSpec(url){
  const secure=new URL(url).protocol==='https:';
  return {name:secure?guestCookie:'gdlb-preview-save',attributes:'; Path=/; HttpOnly; SameSite=Lax'+(secure?'; Secure':'')};
 }
-async function identity(request,db,initial,accountSignIn){
- const signed=accountSignIn?request.headers.get('oai-authenticated-user-id'):null;
+async function identity(request,db,initial,owner){
  const {name,attributes}=cookieSpec(request.url);
  const prefix=name+'=';
  const value=(request.headers.get('cookie')||'').split(';').map(part=>part.trim()).find(part=>part.startsWith(prefix))?.slice(prefix.length);
  const token=/^[a-f0-9]{64}$/.test(value||'')?value:null;
  const guest=token?await guestOwner(token):null;
- if(signed){
-  const owner='account:'+signed;
+ if(owner){
   let cookie;
   if(initial&&guest){
    const claimed=await db.prepare(`UPDATE game_profiles SET owner=?,revision=revision+1
@@ -93,13 +93,16 @@ async function inventory(db,id){
  return results.map(entry=>JSON.parse(entry.card));
 }
 
-async function commit(db,{owner,record,wallet,changes,requestId,result,now}){
+async function commit(db,{owner,record,wallet,changes,requestId,result,now,transferId}){
  const id=record.player_id,version=record.revision+1;
  // Concurrent retries share a request ID. Only the winning write may update cards.
  const writeId=crypto.randomUUID();
  const guard='EXISTS(SELECT 1 FROM game_profiles WHERE player_id=? AND revision=? AND last_request=?)';
+ const transferGuard=transferId?` AND NOT EXISTS(
+  SELECT 1 FROM game_profiles WHERE json_extract(wallet,'$.legacyTransfer.id')=?)`:'';
  const statements=[db.prepare(`UPDATE game_profiles SET wallet=?, revision=?, last_request=?,updated_at=?
-  WHERE player_id=? AND owner=? AND revision=?`).bind(JSON.stringify(wallet),version,writeId,now,id,owner,record.revision)];
+  WHERE player_id=? AND owner=? AND revision=?`+transferGuard)
+  .bind(JSON.stringify(wallet),version,writeId,now,id,owner,record.revision,...(transferId?[transferId]:[]))];
  const cards=[...changes.values()];
  for(let i=0;i<cards.length;i+=250){
   const chunk=JSON.stringify(cards.slice(i,i+250));
@@ -144,21 +147,54 @@ async function play(db,session,{action,args,requestId},getPool,hasArt){
  reject('Your save changed in another tab. Please try again.',409);
 }
 
+async function transferSave(db,session,body,getPool){
+ if(typeof body.id!=='string'||!uuid.test(body.id))reject('This browser save could not be identified.');
+ const transferId=body.id.toLowerCase();
+ let prepared;
+ for(let attempt=0;attempt<4;attempt++){
+  const record=await profile(db,session.owner,false);
+  if(!record)reject('Reload the page to reconnect to your save.',401);
+  const wallet=normalizeWallet(JSON.parse(record.wallet));
+  if(wallet.legacyTransfer){
+   if(wallet.legacyTransfer.id!==transferId)reject('This online save already has a browser transfer.',409);
+   return {wallet:visibleWallet(wallet),result:wallet.legacyTransfer};
+  }
+  if(await one(db,"SELECT 1 FROM game_profiles WHERE json_extract(wallet,'$.legacyTransfer.id')=?",transferId))
+   reject('This browser save was already transferred to another online save.',409);
+  try{prepared??=await prepareSaveTransfer(body,getPool);}
+  catch(error){reject(error.message);}
+  const records=await inventory(db,record.player_id),now=Date.now();
+  const {changes,result}=applySaveTransfer(wallet,records,prepared,now);
+  wallet.legacyTransfer={id:transferId,...result};
+  if(JSON.stringify(wallet).length>1700000)reject('This browser save is too large to transfer.',413);
+  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId:crypto.randomUUID(),result,now,transferId})){
+   return {wallet:visibleWallet(wallet),result:wallet.legacyTransfer};
+  }
+ }
+ reject('Your save changed in another tab. Please try again.',409);
+}
+
 export function gameRoutes(readJson,hasArt){
  const getPool=createCardPool(readJson);
  return async function handleGame(request,env){
   const db=env?.DB;
   if(!db)return json({error:'The online save is temporarily unavailable.'},503);
-  const accountSignIn=!env.guestOnly;
+  const chatgpt=!env.guestOnly;
+  const accountProvider=env.discordEnabled?'discord':chatgpt?'chatgpt':null;
   try{
    const url=new URL(request.url);
    if(!['GET','POST'].includes(request.method))reject('Method not supported.',405);
+   const isTransfer=url.pathname==='/api/game/transfer';
+   if(isTransfer&&request.method!=='POST')reject('Method not supported.',405);
    if(request.method==='POST')sameOrigin(request);
    const view=url.searchParams.get('view')||'wallet';
    const initial=request.method==='GET'&&view==='wallet'&&url.pathname==='/api/game';
-   const session=await identity(request,db,initial,accountSignIn);
-   if(url.pathname==='/api/players')return await standings(request,db,session,accountSignIn);
-   const account={signedIn:session.signedIn,accountSignIn};
+   const subject=chatgpt?request.headers.get('oai-authenticated-user-id'):null;
+   const owner=env.discordUser?'discord:'+env.discordUser:subject?'account:'+subject:null;
+   const session=await identity(request,db,initial,owner);
+   if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt);
+   const account={signedIn:session.signedIn,accountSignIn:Boolean(accountProvider),accountProvider};
+   if(isTransfer)return json({...await transferSave(db,session,await readBody(request,maxTransferBody),getPool),...account});
    if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt),...account});
    const record=await profile(db,session.owner,initial);
    if(!record)reject('Open the game to start your save.',401);
@@ -175,12 +211,15 @@ export function gameRoutes(readJson,hasArt){
 
 async function standings(request,db,session,accountSignIn){
  const record=await profile(db,session.owner,false);
- const canPost=Boolean(record&&(session.signedIn||!accountSignIn));
+ const wallet=record&&JSON.parse(record.wallet);
+ const legacyProgress=Boolean(wallet?.legacyTransfer);
+ const canPost=Boolean(record&&!legacyProgress&&(session.signedIn||!accountSignIn));
  if(request.method==='POST'){
+  if(legacyProgress)reject('Transferred browser progress is playable online. Public rankings use progress earned online.',403);
   if(!canPost)reject(accountSignIn?'Sign in to post a score.':'Open the game to start your save.',401);
   const {alias}=await readBody(request);
   if(typeof alias!=='string'||!/^[\p{L}\p{N}_ .-]{2,24}$/u.test(alias.trim()))reject('Enter a 2–24 character player name.');
-  const best=record&&JSON.parse(record.wallet).arenaBest;
+  const best=wallet?.arenaBest;
   if(!best)reject('Win an online arena battle before posting a score.');
   await db.prepare(`INSERT INTO game_scores(player_id,alias,tier,survivors,turns,score,posted_at)
    VALUES(?,?,?,?,?,?,?) ON CONFLICT(player_id) DO UPDATE SET
@@ -192,5 +231,5 @@ async function standings(request,db,session,accountSignIn){
   ROW_NUMBER() OVER (ORDER BY score DESC,turns,posted_at,player_id) AS place FROM game_scores)
   SELECT place,alias,tier,survivors,turns,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place`)
   .bind(record?.player_id||'',record?.player_id||'').all();
- return json({rows:results,signedIn:session.signedIn,canPost});
+ return json({rows:results,signedIn:session.signedIn,canPost,legacyProgress});
 }

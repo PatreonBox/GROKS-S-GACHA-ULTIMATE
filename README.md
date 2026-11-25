@@ -10,4 +10,8 @@ Use Node.js 24. Run `npm ci` and `npm run dev` for a preview. Run `npm test` to 
 
 Deploy the `main` branch using the supplied Dockerfile. Attach a volume at `/data` and generate a public domain. The service uses Railway's mount path for SQLite and reports readiness at `/health`.
 
-This deployment has its own campaign, inventory, and leaderboard. Guest saves are stored on the server and tied to the browser that created them.
+Guest saves are stored on the server and tied to the browser that created them. A legacy browser save can transfer once into its current online profile on the same domain. The transfer combines collections and keeps the higher balance for each currency. Transferred progress is playable online and is excluded from new public leaderboard submissions.
+
+## Discord sign-in
+
+Set `DISCORD_CLIENT_ID` to the app's Application ID. Register `<public game origin>/api/auth/discord/callback` under OAuth2 Redirects in the Discord Developer Portal. The server uses the authorization code flow with PKCE and requests the `identify` scope. On first sign-in a Discord account claims the current online guest save when the account has no existing save.

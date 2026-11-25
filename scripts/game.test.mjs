@@ -75,6 +75,38 @@ test('pack purchase commits the debit, cards, and receipt together',async()=>{
  assert.equal((await f.wallet(session)).pending,null);
 });
 
+test('browser transfer keeps existing progress and commits once across retries',async()=>{
+ const f=fixture(),session=await f.open(),other=await f.open();
+ const [row]=await pool('Easy');
+ f.store(session.id,wallet=>{wallet.coins=20000;wallet.gems=12;});
+ f.addCards(session.id,[row]);
+ const saved={id:crypto.randomUUID(),wallet:{coins:10000,gems:24,training:{[row[0]]:{xp:100}},
+  campaign:{1:{turns:12,survivors:3,tempo:true,squad:true}},arenaBest:{tier:10,score:9999999}},
+  cards:[[row[0],3,1,0,1,0.2],[Number.MAX_SAFE_INTEGER,1,0,0,0]]};
+ const [first,retry]=await Promise.all([f.call('/api/game/transfer',{...session,body:saved}),
+  f.call('/api/game/transfer',{...session,body:saved})]);
+ assert.equal(first.status,200);
+ assert.equal(retry.status,200);
+ assert.deepEqual((await first.json()).result,{id:saved.id,cards:1,skipped:1});
+ assert.deepEqual((await retry.json()).result,{id:saved.id,cards:1,skipped:1});
+ const wallet=await f.wallet(session);
+ assert.equal(wallet.coins,20000);
+ assert.equal(wallet.gems,24);
+ assert.equal(wallet.training[row[0]].xp,100);
+ assert.equal(wallet.campaign[1].turns,12);
+ assert.equal(wallet.arenaBest,undefined);
+ assert.equal(f.sqlite.prepare('SELECT revision FROM game_profiles WHERE player_id=?').get(session.id).revision,1);
+ const {cards}=await (await f.call('/api/game?view=cards',session)).json();
+ assert.equal(cards.length,1);
+ assert.equal(cards[0].copies,3);
+ assert.equal(cards[0].holoCopies,1);
+ assert.deepEqual(cards[0].row,row);
+ assert.equal((await f.call('/api/game/transfer',{...session,body:{...saved,id:crypto.randomUUID()}})).status,409);
+ assert.equal((await f.call('/api/game/transfer',{...other,body:saved})).status,409);
+ assert.equal((await f.call('/api/players',{...session,body:{alias:'Player'}})).status,403);
+ assert.equal((await f.wallet(other)).coins,1500);
+});
+
 test('server-clock mine earnings and idempotent credits',async()=>{
  const f=fixture(),session=await f.open();
  const id=crypto.randomUUID();
