@@ -15,7 +15,8 @@ const orderByName = new Intl.Collator('en', {sensitivity: 'base', numeric: true}
 
 export function readRoute(hash) {
   const [page, slug] = hash.replace(/^#/, '').toLowerCase().split('/');
-  if (page === 'battle') return {section:'battle',tier:['training','players','army','arcade'].includes(slug)?slug:'easy'};
+  if ((page==='leaderboard'||page==='battle')&&slug==='players')return {section:'leaderboard',tier:'players'};
+  if (page === 'battle') return {section:'battle',tier:['training','army','arcade'].includes(slug)?slug:'easy'};
   if (page === 'kingdom') return {section:'kingdom',tier:'kingdom'};
   if (page === 'cubes') return {section:'gacha',tier:'cubes'};
   if (page === 'gacha') return {section: 'gacha', tier: ['mine','collection','upgrades','results','index','merge','vault','cubes'].includes(slug) ? slug : 'shop'};

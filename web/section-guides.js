@@ -49,7 +49,8 @@ export const sectionGuides={
  ]},
  'kingdom':{title:'Your Kingdom',art:'/assets/gd-kingdom-castle-icon.png',steps:[
   ['Look around','Drag to orbit the plot. Use Pan to slide the camera, and zoom with the scroll wheel, pinch, or the on-screen buttons.'],
-  ['Inspect your plot','Select the starter tower or follow your roaming cube. Change its appearance in Gacha’s Cube shop.']
+  ['Build a GD House','Open Build mode, click a clear spot, and press E or Place to spend 50,000 coins. Press R to rotate and Q to cancel.'],
+  ['Attract visitors','Houses raise your Kingdom’s star rating. Check the Visitor index to see who visits at each rating.']
  ]},
  'battle-campaign':{title:'Battle campaign',art:'/assets/faces/demon-extreme.webp',steps:[
   ['Build a squad of four','Choose four different cards from your collection. Start at the earliest unlocked campaign stage.'],
@@ -72,9 +73,9 @@ export const sectionGuides={
   ['Choose a mini level','Each level has its own cube, wave, or ship controls. Open How to Play in its corner to review them.'],
   ['Finish the run','A full clear gives your squad extra starting charge in that level’s arena.']
  ]},
- 'player-ranks':{title:'Player ranks',art:'/assets/faces/demon-extreme.webp',steps:[
-  ['Compare arena records','Rankings use arena difficulty, surviving cards, and turns taken.'],
-  ['Post your result','Win an eligible arena battle, enter a player name, and post your personal best.']
+ 'player-ranks':{title:'Player leaderboard',art:'/assets/faces/demon-extreme.webp',steps:[
+  ['Build your collection','Each distinct owned card adds its HP and three times its Attack to your Power. Training raises both stats.'],
+  ['Raise your player level','Opening packs, beating rivals, training, and building earn player XP. The blue bar shows progress to your next level.']
  ]},
  'saved-levels':{title:'Saved levels',art:'/assets/gd-kingdom-castle-icon.png',steps:[
   ['Keep levels nearby','Use the bookmark on any level to add it here.'],
@@ -84,10 +85,11 @@ export const sectionGuides={
 
 const gachaGuides={shop:'pack-shop',collection:'my-cards',index:'card-index',vault:'secret-vault',
  merge:'merge-station',mine:'coin-mine',upgrades:'gem-upgrades',results:'pack-results',cubes:'cube-shop'};
-const battleGuides={army:'army-mode',training:'training-zone',arcade:'meme-levels',players:'player-ranks'};
+const battleGuides={army:'army-mode',training:'training-zone',arcade:'meme-levels'};
 const mainGuides={leaderboard:'level-leaderboard',stars:'star-levels',demons:'demon-lists',kingdom:'kingdom',saved:'saved-levels'};
 
 export function sectionGuideId(section,tier){
+ if(section==='leaderboard'&&tier==='players')return 'player-ranks';
  if(section==='gacha')return gachaGuides[tier];
  if(section==='battle')return battleGuides[tier];
  return mainGuides[section];

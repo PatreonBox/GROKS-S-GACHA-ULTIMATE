@@ -6,7 +6,7 @@ import {createGameDatabase} from './game-preview-db.mjs';
 import {createCardPool,difficulties,oddsFor,packs,rollPacks,packOddsVersion} from '../web/pack-engine.js';
 import {armyFrame,makeArmyBattle,stepArmy} from '../web/army-battle.js';
 import {armySignatureVersion,beginArmyRun} from '../web/army-trilogy.js';
-import {makeBattle,playTurn} from '../web/battle-engine.js';
+import {makeBattle,playTurn,statsFor} from '../web/battle-engine.js';
 import {attackTiming,paintArmyCast} from '../web/combat-scene.js';
 import {classicCampaignMoves,previousBossMoves} from '../web/main-list-moves.js';
 import {skillsFor} from '../web/card-skills.js';
@@ -15,8 +15,10 @@ import {seededRandom,drillInput} from '../web/game-replay.js';
 import {findRemix} from '../web/remixes.js';
 import {STEP,makeCourse,newAttempt,advanceRunner} from '../web/remix-physics.js';
 import {stageFor,settleCampaignClear} from '../web/campaign.js';
-import {levelRewardTenths} from '../web/card-economy.js';
+import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/card-economy.js';
 import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
+import {playerProgress,packPlayerXp} from '../web/player-progression.js';
+import {kingdomStats} from '../web/kingdom-rules.js';
 
 const origin='https://game.example';
 const pool=createCardPool(path=>JSON.parse(fs.readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
@@ -161,8 +163,8 @@ test('mine milestones double at 20 and the extra branches have prerequisites',()
 });
 
 test('demon index gems follow the new payouts and Extreme rank range',async()=>{
- assert.deepEqual([6,7,8,9].map(tier=>levelRewardTenths(tier,0,0)),[25,30,40,60]);
- assert.deepEqual([1,51,101,0].map(rank=>levelRewardTenths(10,rank,101)),[120,95,70,70]);
+ assert.deepEqual([6,7,8,9].map(tier=>levelRewardTenths(tier,0,0)),[25,40,80,120]);
+ assert.deepEqual([1,51,101,0].map(rank=>levelRewardTenths(10,rank,101)),[300,215,130,130]);
  const f=fixture(),player=await f.open();
  const rows=(await pool('Easy Demon')).slice(0,2);
  f.addCards(player.id,rows);
@@ -172,6 +174,74 @@ test('demon index gems follow the new payouts and Extreme rank range',async()=>{
  assert.equal(wallet.gems,12.5);
  const {cards}=await f.call('/api/game?view=cards',player).then(response=>response.json());
  assert.equal(cards.find(card=>card.id===oldCard.id).indexReward,3);
+});
+
+test('player level starts at zero and pack experience credits each opening once',async()=>{
+ const f=fixture(),player=await f.open();
+ assert.deepEqual(playerProgress(0),{level:0,xp:0,goal:120,total:0,ratio:0});
+ assert.equal(playerProgress(120).level,1);
+ assert.equal(playerProgress(120).goal,156);
+ const bought=await f.command(player,'pack.buy',{packId:'common',quantity:10}).then(r=>r.json());
+ assert.equal(bought.wallet.playerXp,0);
+ const id=bought.wallet.pending.id;
+ for(const opened of [1,1,3,2,10,10])assert.equal((await f.command(player,'pack.advance',{id,opened})).status,200);
+ const wallet=await f.wallet(player);
+ assert.equal(wallet.playerXp,120);
+ assert.equal(wallet.lastPull.playerXpEarned,120);
+ assert.ok(packs.every((pack,i)=>!i||packPlayerXp(pack.id)>packPlayerXp(packs[i-1].id)));
+});
+
+test('power rankings backfill distinct owned cards and sort by trained card stats',async()=>{
+ const f=fixture(),weak=await f.open('rank-weak'),strong=await f.open('rank-strong');
+ const alpha=(await pool('Easy'))[0],beta=(await pool('Extreme Demon')).find(row=>row[10]===100);
+ f.addCards(weak.id,[alpha]);
+ f.addCards(strong.id,[alpha,beta]);
+ f.store(strong.id,w=>{w.playerXp=120;w.training={[beta[0]]:{endurance:20,drillsVersion:1}}});
+ const {rows}=await f.call('/api/players',strong).then(r=>r.json());
+ const score=stats=>stats.maxHp+3*stats.attack;
+ assert.equal(rows[0].power,score(statsFor(alpha))+score(statsFor(beta,{endurance:20,drillsVersion:1})));
+ assert.equal(rows[0].level,1);
+ assert.equal(rows[0].mine,true);
+ assert.equal(rows[1].power,score(statsFor(alpha)));
+});
+
+test('Extreme bands outrank the prior trained band and the highest pulls are rarer',async()=>{
+ const rows=await pool('Extreme Demon');
+ const grief=rows.find(row=>row[10]===1),thinking=rows.find(row=>row[0]===119544028);
+ assert.equal(statsFor(grief).maxHp,300_000_000);
+ assert.equal(extremeStage(1629).hp,500_000);
+ const trained={endurance:100,spike:100,saw:100,xp:9000,drillsVersion:1};
+ const insane=(await pool('Insane Demon'))[0];
+ assert.ok(statsFor(insane,trained).maxHp<statsFor(rows.find(row=>row[10]===1629)).maxHp);
+ assert.ok(statsFor(thinking).maxHp>100_000_000);
+ for(const [upper,lower] of [[10,11],[50,51],[150,151],[500,501]]){
+  assert.ok(statsFor(rows.find(row=>row[10]===upper)).maxHp>statsFor(rows.find(row=>row[10]===lower),trained).maxHp);
+ }
+ const current=extremeTable(rows),old=extremeTable(rows,4);
+ for(const rank of [1,4,10,50]){
+  assert.ok(extremeOdds(rank,current,99)<extremeOdds(rank,old,99));
+ }
+});
+
+test('house placement validates the plot and spends coins only once per request',async()=>{
+ const f=fixture(),player=await f.open();
+ const args={x:-7.54,z:7.22,rotation:1};
+ assert.equal((await f.command(player,'kingdom.house',args)).status,400);
+ f.store(player.id,w=>{w.coins=150_000});
+ for(const invalid of [{x:-2.65,z:0,rotation:0},{x:6.5,z:2.1,rotation:0},{x:30,z:7,rotation:0},{x:0,z:0,rotation:4}]){
+  assert.equal((await f.command(player,'kingdom.house',invalid)).status,400);
+ }
+ const requestId=crypto.randomUUID();
+ const results=await Promise.all([f.command(player,'kingdom.house',args,requestId),f.command(player,'kingdom.house',args,requestId)]);
+ for(const response of results)assert.equal(response.status,200);
+ assert.equal((await f.command(player,'kingdom.house',args)).status,400);
+ const wallet=await f.wallet(player);
+ const buildings=wallet.kingdom.houses;
+ assert.equal(buildings.length,1);
+ assert.equal(buildings[0].rotation,1);
+ assert.equal(wallet.coins,100_000);
+ assert.equal(wallet.playerXp,55);
+ assert.deepEqual([kingdomStats(buildings).stars,kingdomStats(buildings).value,kingdomStats(buildings).visitors.length],[.3,50_000,1]);
 });
 
 test('sign-in claims a verified guest save and preserves its cards',async()=>{
@@ -206,8 +276,14 @@ test('arena scores use server-owned turns and reject client-only records',async(
  const board=await f.call('/api/players',{...player,body:{alias:'Fixture',tier:10,turns:1,survivors:4}});
  assert.equal(board.status,200);
  const {rows:posted}=await board.json();
- assert.equal(posted[0].tier,1);
- assert.equal(posted[0].turns,battle.seq);
+ const power=rows.reduce((sum,row)=>{
+  const {maxHp,attack}=statsFor(row);
+  return sum+maxHp+3*attack;
+ },0);
+ assert.equal(posted[0].power,power);
+ assert.equal(posted[0].level,0);
+ assert.equal((await f.wallet(player)).playerXp,49);
+ assert.deepEqual(f.sqlite.prepare('SELECT tier,turns FROM game_scores WHERE player_id=?').get(player.id).turns,battle.seq);
 });
 
 test('minigame rewards are derived by replaying legal controls',async()=>{
@@ -299,7 +375,7 @@ test('named signature moves cast in both engines and draw finite 3D geometry',as
   const row=extreme.get(id),battle=makeBattle([row,...rivals.slice(1)],rivals,10,random);
   battle.seq=1;battle.charge=3;
   battle.allies[0].hp=Math.round(battle.allies[0].maxHp*.42);
-  for(const foe of battle.enemies)foe.hp=foe.maxHp=5_000_000;
+  for(const foe of battle.enemies)foe.hp=foe.maxHp=Math.max(5_000_000,battle.allies[0].attack*40);
   battle.enemies[0].shield=1_000_000;
   playTurn({battle,coins:0},battle.id,battle.seq,'pulse',0,0,random);
   assert.ok(battle.events.some(e=>e.kind==='pulse'&&e.visual===visual&&e.name===name),name);

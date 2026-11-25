@@ -4,6 +4,8 @@ import {campaignStages,stageCleared} from '../web/campaign.js';
 import {mineEarnings,settleMine} from '../web/mine-economy.js';
 import {createMergePlanner,gemTenths} from '../web/card-economy.js';
 import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
+import {collectionPower,powerIsCurrent,playerStandings,rankingVersion} from './player-rankings.mjs';
+import {playerProgress} from '../web/player-progression.js';
 
 const guestCookie='__Host-gdlb-save';
 const cookieLifetime=60*60*24*365;
@@ -79,16 +81,17 @@ async function identity(request,db,initial,owner){
 }
 
 async function profile(db,owner,create){
- let record=await one(db,'SELECT player_id, revision, wallet, leaderboard_excluded FROM game_profiles WHERE owner=?',owner);
+ const query='SELECT player_id,revision,wallet,leaderboard_excluded,collection_power,power_version FROM game_profiles WHERE owner=?';
+ let record=await one(db,query,owner);
  if(record||!create)return record;
  await db.prepare('INSERT OR IGNORE INTO game_profiles(player_id,owner,wallet,updated_at) VALUES(?,?,?,?)')
   .bind(crypto.randomUUID(),owner,JSON.stringify(newWallet()),Date.now()).run();
- record=await one(db,'SELECT player_id, revision, wallet, leaderboard_excluded FROM game_profiles WHERE owner=?',owner);
+ record=await one(db,query,owner);
  return record;
 }
 
 function visibleWallet(wallet){
- const {tapLimit,drills,remixRun,armyRun,armyReceipt,...review}=wallet;
+ const {tapLimit,minePlayerXp,drills,remixRun,armyRun,armyReceipt,...review}=wallet;
  return review;
 }
 async function inventory(db,id){
@@ -106,11 +109,13 @@ async function profileStats(db,record,collectibleIds){
   copies+=Math.max(0,entry.copies||0);
  }
  return {coins:wallet.coins+mineEarnings(wallet).coins,gems:wallet.gems,unique,copies,
+  level:playerProgress(wallet.playerXp).level,
+  power:powerIsCurrent(record)?record.collection_power:collectionPower(await inventory(db,record.player_id),wallet),
   collectible:collectibleIds.size,campaignTotal:campaignStages.length,
   campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(wallet,i+1)),0)};
 }
 
-async function commit(db,{owner,record,wallet,changes,requestId,result,now,transferId,admin=false,reset=false}){
+async function commit(db,{owner,record,wallet,changes,requestId,result,now,power,transferId,admin=false,reset=false}){
  const id=record.player_id,version=record.revision+1;
  // Concurrent retries share a request ID. Only the winning write may update cards.
  const writeId=crypto.randomUUID();
@@ -119,9 +124,10 @@ async function commit(db,{owner,record,wallet,changes,requestId,result,now,trans
   SELECT 1 FROM game_profiles WHERE json_extract(wallet,'$.legacyTransfer.id')=?)`:'';
  if(changes.size||reset)wallet.cardsRevision=version;
  const statements=[db.prepare(`UPDATE game_profiles SET wallet=?, revision=?, last_request=?,updated_at=?,
-  leaderboard_excluded=MAX(leaderboard_excluded,?)
+  leaderboard_excluded=MAX(leaderboard_excluded,?),collection_power=?,power_version=?,ranking_xp=?
   WHERE player_id=? AND owner=? AND revision=?`+transferGuard)
-  .bind(JSON.stringify(wallet),version,writeId,now,Number(admin),id,owner,record.revision,...(transferId?[transferId]:[]))];
+  .bind(JSON.stringify(wallet),version,writeId,now,Number(admin),power,rankingVersion,wallet.playerXp||0,
+   id,owner,record.revision,...(transferId?[transferId]:[]))];
  if(reset)statements.push(
   db.prepare('DELETE FROM game_cards WHERE player_id=? AND '+guard).bind(id,id,version,writeId),
   db.prepare('DELETE FROM game_scores WHERE player_id=? AND '+guard).bind(id,id,version,writeId)
@@ -178,7 +184,8 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    return {wallet:visibleWallet(JSON.parse(current.wallet)),result:JSON.parse(previous.result)};
   }
   const changes=new Map(),now=Date.now();
-  let result;
+  const trainingVersion=wallet.trainingRevision;
+  let result,records;
   if(reset){
    const legacyTransfer=wallet.legacyTransfer;
    wallet=newWallet();
@@ -190,11 +197,16 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
   }else{
    try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
-   const records=prepared.cards?await inventory(db,record.player_id):[];
-   try{result=prepared.apply(wallet,records,changes,now,true);}
+   if(prepared.cards)records=await inventory(db,record.player_id);
+   try{result=prepared.apply(wallet,records||[],changes,now,true);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
   }
-  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId,result,now,admin,reset})){
+  let power=record.collection_power;
+  if(reset)power=0;
+  else if(!powerIsCurrent(record)||changes.size||wallet.trainingRevision!==trainingVersion){
+   power=collectionPower(records??await inventory(db,record.player_id),wallet,changes);
+  }
+  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId,result,now,power,admin,reset})){
    return {wallet:visibleWallet(wallet),result};
   }
  }
@@ -221,7 +233,8 @@ async function transferSave(db,session,body,getPool){
   const {changes,result}=applySaveTransfer(wallet,records,prepared,now);
   wallet.legacyTransfer={id:transferId,...result};
   if(JSON.stringify(wallet).length>1700000)reject('This browser save is too large to transfer.',413);
-  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId:crypto.randomUUID(),result,now,transferId})){
+  const power=collectionPower(records,wallet,changes);
+  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId:crypto.randomUUID(),result,now,power,transferId})){
    return {wallet:visibleWallet(wallet),result:wallet.legacyTransfer};
   }
  }
@@ -288,7 +301,7 @@ export function gameRoutes(readJson,hasArt){
     return json(body,status);
    }
    const session=await identity(request,db,initial,owner);
-   if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt,adminOwner);
+   if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt,adminOwner,requiresSignIn);
    if(isTransfer)return json({...await transferSave(db,session,await readBody(request,maxTransferBody),getPool),...account});
    if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt,admin),...account});
    const record=await profile(db,session.owner,initial);
@@ -306,7 +319,7 @@ export function gameRoutes(readJson,hasArt){
  };
 }
 
-async function standings(request,db,session,accountSignIn,adminOwner){
+async function standings(request,db,session,accountSignIn,adminOwner,discordOnly){
  const record=await profile(db,session.owner,false);
  const wallet=record&&JSON.parse(record.wallet);
  const legacyProgress=Boolean(wallet?.legacyTransfer);
@@ -326,10 +339,6 @@ async function standings(request,db,session,accountSignIn,adminOwner){
    score=excluded.score,posted_at=CASE WHEN excluded.score>game_scores.score THEN excluded.posted_at ELSE game_scores.posted_at END
    WHERE excluded.score>=game_scores.score`).bind(record.player_id,alias.trim(),best.tier,best.survivors,best.turns,best.score,Date.now()).run();
  }
- const {results}=await db.prepare(`WITH ranked AS (SELECT s.player_id,s.alias,s.tier,s.survivors,s.turns,
-  ROW_NUMBER() OVER (ORDER BY s.score DESC,s.turns,s.posted_at,s.player_id) AS place FROM game_scores s
-  JOIN game_profiles p ON p.player_id=s.player_id WHERE p.leaderboard_excluded=0 AND p.owner<>?)
-  SELECT place,alias,tier,survivors,turns,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place`)
-  .bind(adminOwner,record?.player_id||'',record?.player_id||'').all();
- return json({rows:results,signedIn:session.signedIn,canPost,legacyProgress,privateProfile});
+ const rows=await playerStandings(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record?.player_id||'',inventory});
+ return json({rows,signedIn:session.signedIn,canPost,legacyProgress,privateProfile});
 }

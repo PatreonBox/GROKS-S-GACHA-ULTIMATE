@@ -1,25 +1,45 @@
-import {readWallet,difficulties} from './pack-engine.js';
-export function playerBoard({enc,faceIcon}){
- let version=0;
- async function show(){
-  const token=++version,el=document.getElementById('arcBody');
-  el.innerHTML='<section class="station-heading"><div><h1>Player leaderboard</h1><p>Verified online arena results, ranked by difficulty, surviving cards, then fewest turns.</p></div><a href="#battle" class="outline">Battle mode</a></section><div id="playerStandings" aria-live="polite">Loading standings…</div>';
-  const slot=el.querySelector('#playerStandings');const active=()=>version===token&&el.isConnected;
-  try{
-   const wallet=await readWallet();
-   const response=await fetch('/api/players',{cache:'no-store'});let data=await response.json();if(!response.ok)throw Error(data.error);
-   const best=wallet.arenaBest;
-   function draw(msg=''){
-    if(!active())return;
-    const mine=data.rows.find(r=>r.mine);
-    slot.innerHTML='<section class="score-submit"><h3>Your arena record</h3><p>'+(best?difficulties[best.tier]+' · '+best.survivors+'/4 standing · '+best.turns+' turns':data.privateProfile?'':'Win an online arena battle to post your first score.')+'</p>'+(best&&(data.canPost??data.signedIn)?'<form><label>Player name<input name="alias" required minlength="2" maxlength="24" autocomplete="off" value="'+enc(mine?.alias||'')+'" placeholder="Your GD name"></label><button class="primary">Post personal best</button></form>':'')+(data.privateProfile?'<p>Your profile is private on player rankings.</p>':data.legacyProgress?'<p>Transferred saves are playable online. Public rankings use progress earned online.</p>':'')+'<p role="status">'+enc(msg)+'</p></section><div class="score-table">'+(data.rows.length?'<table><thead><tr><th>Rank</th><th>Player</th><th>Arena</th><th>Standing</th><th>Turns</th></tr></thead><tbody>'+data.rows.map(r=>'<tr class="'+(r.mine?'mine':'')+'"><td>#'+r.place+'</td><td>'+enc(r.alias)+(r.mine?' · you':'')+'</td><td>'+faceIcon(difficulties[r.tier])+difficulties[r.tier]+'</td><td>'+r.survivors+'/4</td><td>'+r.turns+'</td></tr>').join('')+'</tbody></table>':'<p>No scores posted yet.</p>')+'</div>';
-    const form=slot.querySelector('form');if(form)form.onsubmit=async e=>{
-     e.preventDefault();form.querySelector('button').disabled=true;
-     try{const response=await fetch('/api/players',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alias:form.elements.alias.value.trim()})});const result=await response.json();if(!response.ok)throw Error(result.error);data=result;draw('Personal best posted.')}
-     catch(e){if(active()){form.querySelector('button').disabled=false;slot.querySelector('[role=status]').textContent=e.message}}
-    };
-   }draw();
-  }catch(e){if(active()){slot.textContent=e.message+' ';const retry=document.createElement('button');retry.className='outline';retry.textContent='Retry';retry.onclick=show;slot.append(retry)}}
+import {stat} from './card-economy.js';
+
+const full=n=>n.toLocaleString('en-US');
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const avatar=row=>'<span class="rank-avatar">'+(row.avatar?'<img src="'+esc(row.avatar)+'" alt="" loading="lazy">':'')+'<b aria-hidden="true">'+esc(row.alias.slice(0,1).toUpperCase())+'</b></span>';
+const power=row=>'<strong title="'+full(row.power)+' power">'+stat(row.power)+'</strong>';
+const player=row=>esc(row.alias)+(row.mine?' <small class="rank-you">You</small>':'');
+export function playerBoard(spotlight,standings){
+ let view=null,revision=0;
+ const panel=standings.querySelector('[data-player-rows]');
+ standings.querySelector('[data-reload-ranks]').onclick=()=>load('full');
+ function drawTop(rows){
+  spotlight.innerHTML=rows.length?rows.slice(0,3).map(row=>'<div class="podrow rank-row"><span class="podrank">#'+row.place+'</span>'+avatar(row)+
+   '<span class="podname"><strong>'+player(row)+'</strong><small>Level '+row.level+'</small></span>'+
+   '<span class="rank-power">'+power(row)+'<small>Power</small></span></div>').join(''):
+   '<p class="rank-empty">Player rankings will appear here as players start collecting cards.</p>';
  }
- return {show,leave(){version++}};
+ function drawFull({rows,privateProfile,legacyProgress}){
+  const message=privateProfile?'Your profile is private on player rankings.':legacyProgress?'Imported browser saves are private on player rankings.':'';
+  panel.innerHTML=(message?'<p class="rank-private">'+message+'</p>':'')+
+   (rows.length?'<table><thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Level</th><th scope="col">Power</th></tr></thead><tbody>'+
+    rows.map(row=>'<tr'+(row.mine?' class="mine"':'')+'><td>#'+row.place+'</td><td><span class="rank-player">'+avatar(row)+'<b>'+player(row)+'</b></span></td><td>'+full(row.level)+'</td><td>'+power(row)+'</td></tr>').join('')+'</tbody></table>':
+    '<p class="rank-empty">Player rankings will appear here as players start collecting cards.</p>');
+ }
+ async function load(mode){
+  const request=++revision,slot=mode==='full'?panel:spotlight;
+  slot.setAttribute('aria-busy','true');
+  try{
+   const response=await fetch('/api/players',{cache:'no-store',signal:AbortSignal.timeout(12000)});
+   if(!response.ok)throw Error('Player rankings are temporarily unavailable.');
+   const data=await response.json();
+   if(request!==revision)return;
+   drawTop(data.rows);
+   if(mode==='full')drawFull(data);
+  }catch{
+   if(request===revision)slot.textContent='Player rankings could not load.';
+  }finally{slot.removeAttribute('aria-busy')}
+ }
+ return {show(mode){
+  standings.hidden=mode!=='full';
+  if(mode===view)return;
+  view=mode;
+  if(mode)load(mode);else revision++;
+ }};
 }

@@ -14,33 +14,36 @@ export const arenas=[
  [40,200],[320,640],[1200,2000],[6000,10000],[20000,36000],
  [40000,80000],[140000,260000],[300000,500000],[1200000,2000000],[4000000,32000000]
 ];
+export const combatStatsVersion=2;
 const titles=['Runner','Striker','Sentinel'];
 const clamp=(x,a,b)=>Math.max(a,Math.min(x,b));
 const directHits=new Set(['strike','pulse','retaliate']);
 const nextBasicStaggered=(u,seq)=>(u.staggerUntil||0)>seq;
 
-export function statsFor(row,progress){
+export function statsFor(row,progress,version=combatStatsVersion){
  const secret=row[6]===impossibleCategory,tier=secret?10:Math.max(0,difficulties.indexOf(row[6])),id=Number(row[0]),role=id%3;
  const rank=Number(row[10])||0;
  const drillCap=trainingCapacity(row),training=trainingOf(progress,drillCap);
- const stage=secret?{name:'Impossible',strength:1}:tier===10?extremeStage(rank):null;
  const secretStrength=secret?Math.max(0,(impossibleCount-rank)/(impossibleCount-1)):0;
+ const stage=secret?{name:'Impossible',hp:330_000_000+24_000_000*secretStrength,legacyStrength:1}:tier===10?extremeStage(rank):null;
+ const modern=version>=combatStatsVersion,ranked=modern&&stage;
  const grade=clamp((Number(row[11])||0)/36,0,1),base=420*2**tier*(1+.10*grade);
- const rawHp=Math.round(secret?660000+40000*secretStrength:stage?550000*stage.strength:base*[1,.97,1.07][role]);
- const rawAttack=Math.round(secret?226000+18000*secretStrength:stage?188000*stage.strength:base*.32*[1,1.07,.96][role]);
- const hpCap=stage?Math.round(5000000*stage.strength):null,attackCap=stage?Math.round(3000000*stage.strength):null;
- // Both attack disciplines contribute to Extreme mastery, which keeps its existing cap.
+ const rawHp=Math.round(ranked?stage.hp:secret?660000+40000*secretStrength:stage?550000*stage.legacyStrength:base*[1,.97,1.07][role]);
+ const rawAttack=Math.round(ranked?stage.hp*.34:secret?226000+18000*secretStrength:stage?188000*stage.legacyStrength:base*.32*[1,1.07,.96][role]);
+ const hpCap=ranked?Math.round(stage.hp*1.65):stage?Math.round(5000000*stage.legacyStrength):modern&&tier===9?475000:Infinity;
+ const attackCap=ranked?Math.round(rawAttack*1.65):stage?Math.round(3000000*stage.legacyStrength):modern&&tier===9?155000:Infinity;
+ // Both attack disciplines contribute to Extreme mastery.
  const mastery=p=>p*(.15+.85*p);
  const hpGain=stage?Math.round((hpCap-rawHp)*mastery(training.endurance/drillCap)):
   training.endurance*Math.max(1,Math.round(rawHp*.012));
  const attackProgress=(4*training.spike+3*training.saw)/(7*drillCap);
  const attackGain=stage?Math.round((attackCap-rawAttack)*mastery(attackProgress)):
   training.spike*Math.max(1,Math.round(rawAttack*.010))+training.saw*Math.max(1,Math.round(rawAttack*.0075));
- const growth=cardGrowth(progress),trainedHp=rawHp+hpGain,trainedAttack=rawAttack+attackGain;
- const maxHp=Math.min(hpCap??Infinity,Math.round(trainedHp*(1+growth.hpBonus)));
- const attack=Math.min(attackCap??Infinity,Math.round(trainedAttack*(1+growth.attackBonus)));
+ const growth=cardGrowth(progress),trainedHp=Math.min(hpCap,rawHp+hpGain),trainedAttack=Math.min(attackCap,rawAttack+attackGain);
+ const maxHp=Math.min(hpCap,Math.round(trainedHp*(1+growth.hpBonus)));
+ const attack=Math.min(attackCap,Math.round(trainedAttack*(1+growth.attackBonus)));
  return {tier,maxHp,attack,level:growth.level,levelHp:maxHp-trainedHp,levelAttack:attack-trainedAttack,
-  role:titles[role],recovery:60+24*tier,drillCap,training,hpGain,attackGain,
+  role:titles[role],recovery:60+24*tier,drillCap,training,hpGain:trainedHp-rawHp,attackGain:trainedAttack-rawAttack,
   ...(stage?{stage:stage.name,hpCap,attackCap}:{})};
 }
 function fighter(row,enemy,training){

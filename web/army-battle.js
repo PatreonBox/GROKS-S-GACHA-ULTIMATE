@@ -30,8 +30,8 @@ const casts=new Set(['interrupt','watch','key']);
 const openings=new Set(['strike','slam','shot']);
 const spawnX=388;
 
-export function armyStats(row,training,kit=skillsFor(row)){
- const stats=statsFor(row,training),style=unitStyle(Number(row[0]),kit);
+export function armyStats(row,training,kit=skillsFor(row),version){
+ const stats=statsFor(row,training,version),style=unitStyle(Number(row[0]),kit);
  const rank=Number(row[10])||0;
  const seed=row[6]===impossibleCategory?1.14:row[6]==='Extreme Demon'&&rank>0?(1+(rank-1)/365)**-1.32:0;
  // Trained stats use a compressed scale. High Extreme placements contribute an additional bonus.
@@ -40,8 +40,8 @@ export function armyStats(row,training,kit=skillsFor(row)){
   attack:Math.round(18*(stats.attack/134)**.48*(1+.25*seed))};
 }
 
-function fighter(card,side,index,map,count,random,signatures){
- const {row,training}=card,kit=skillsFor(row,0,signatures),stats=armyStats(row,training,kit),melee=stats.style==='Melee';
+function fighter(card,side,index,map,count,random,signatures,statsVersion){
+ const {row,training}=card,kit=skillsFor(row,0,signatures),stats=armyStats(row,training,kit,statsVersion),melee=stats.style==='Melee';
  const rowSize=count>5?Math.ceil(count/2):count;
  const rank=Math.floor(index/rowSize);
  const offset=index%rowSize-(Math.min(count-rank*rowSize,rowSize)-1)/2;
@@ -75,12 +75,12 @@ export function mixedSquad(cards,count){
  });
 }
 
-export function makeArmyBattle(players,rivals,key,tier,random=Math.random,{preview=false,previousMoves=false}={}){
+export function makeArmyBattle(players,rivals,key,tier,random=Math.random,{preview=false,previousMoves=false,statsVersion}={}){
  if((!players.length&&!preview)||!rivals.length||players.length>armyLimit||rivals.length>armyLimit)throw Error('Deploy between one and ten fighters per side.');
  const map=armyMaps[key]||armyMaps.harbor;
  const signatures=previousMoves?previousLevelSignatures:undefined;
  return {map,tier,time:0,status:'fighting',teams:[players,rivals].map((team,side)=>
-  team.map((card,index)=>fighter(card,side,index,map,team.length,random,signatures))),random};
+  team.map((card,index)=>fighter(card,side,index,map,team.length,random,signatures,statsVersion))),random};
 }
 
 function chooseTarget(unit,enemies,tier){

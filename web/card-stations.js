@@ -111,7 +111,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
  function index(){
   const t=category,d=difficulties[t],ready=pending(t),total=ready.reduce((sum,r)=>sum+valueFor(t,r),0);
   const progress=pools.map(rows=>rows.reduce((acc,r)=>{if(own.has(r[0]))acc++;return acc},0));
-  const perLevel=t===10?'7–12 gems per level by AREDL rank':gems(valueFor(t,pools[t][0]))+' gems per level';
+  const perLevel=t===10?'13–30 gems per level by AREDL rank':gems(valueFor(t,pools[t][0]))+' gems per level';
   return '<section class="station-heading"><div><h2>Card index</h2><p>Each discovered level has its own one-time reward.</p></div><span>'+all.length.toLocaleString()+' discovered</span></section>'+vaultEntry()+'<div class="index-categories">'+difficulties.map((diff,i)=>{
    const available=i>0&&pools[i].some(r=>own.has(r[0])&&own.get(r[0]).indexReward===undefined);
    return '<button data-category="'+i+'" aria-pressed="'+(i===t)+'">'+faceIcon(diff)+'<span>'+diff+'<small>'+progress[i]+' / '+pools[i].length+'</small></span>'+(available?'<i title="Unclaimed gems">◆</i>':'')+'</button>';

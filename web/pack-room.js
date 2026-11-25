@@ -1,7 +1,6 @@
 import {createRewardFlight,rewardOrigin} from './reward-flight.js';
 import {cardStations} from './card-stations.js';
 import {stat,extremeTable,extremeOdds,extremeBandOdds,bandNames,stageNames,extremeStage,compareMergeStrength} from './card-economy.js';
-import {playerBoard} from './player-board.js';
 import {packs,packQuantities,difficulties,cardCategories,oddsFor,mostLikelyDifficulty,mythicExtremeCap,godlyExtremeTickets,inventoryOdds,readWallet,readCollection,buyPack,collectMineIncome,redeemCoinCode,advanceOpening,onOtherTab,upgrades,quoteUpgrade,bonusChance,purchaseUpgrade,orderedPull,pool} from './pack-engine.js';
 import {ico,ratingLabel} from './icons.js';
 import {playRareReveal,revealTier} from './rare-reveal.js';
@@ -19,6 +18,7 @@ import {createCubeShop} from './cube-shop.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {createCoinMine} from './coin-mine.js';
 import {createKingdom} from './kingdom.js';
+import {packPlayerXp} from './player-progression.js';
 import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,skillOwned} from './mine-economy.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
@@ -79,11 +79,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  const battle=createBattleRoom({root:byId('battleRoom'),sound,rewards,coverSource,enc,applyWallet,announce,onGuide});
  const army=createArmyRoom({root:byId('armyRoom'),sound,coverSource,enc,getWallet:()=>wallet,applyWallet,rewards});
  const stations=cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,openLevel,announce});
- const board=playerBoard({enc,faceIcon});
  const cubeRoot=document.createElement('section');
  cubeRoot.id='cubeShop';
  const cubes=createCubeShop({root:cubeRoot,applyWallet,sound,announce});
- const kingdom=createKingdom(byId('kingdomRoom'),sound);
+ const kingdom=createKingdom(byId('kingdomRoom'),sound,applyWallet);
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
  const markKingdomNav=()=>{
   const badge=byId('kingdomNew'),visited=seenGuide(newAreas.kingdom);
@@ -217,7 +216,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  }
  function page(next){
   if(view!==next){stopTimers();rewards.clear()}
-  stations.leave();board.leave();coinMine.leave();version++;view=next;const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army';
+  stations.leave();coinMine.leave();version++;view=next;const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army';
   const home=next==='kingdom';
   root.hidden=!view||combat||home;battle.show(classic,next==='training',next==='arcade');army.show(next==='army');
   cubes.show(false);kingdom.show(home);
@@ -228,7 +227,6 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   const destination=next==='vault'?'index':next;
   if(tabLinks.some(([key])=>key===destination))markGuide(tabVisit(destination));
   root.innerHTML='<div class="arc-heading"><h1>Gacha</h1><div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div></div><div id="arcBody"></div>';
-  if(view==='players'){root.innerHTML='<div id="arcBody"></div>';board.show();return}
   if(['index','merge','vault'].includes(view))stations.show(view,wallet);
   if(view==='results'){root.innerHTML='<div id="arcBody"></div>';resultsPage();window.scrollTo(0,0);bestSound()}
   if(view==='shop')shop();
@@ -253,7 +251,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   const shelf=packs.map(p=>'<button class="pack-choice" data-choose="'+p.id+'" aria-pressed="'+(p===pack)+'" style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small></span></button>').join('');
   byId('arcBody').innerHTML='<div class="pack-shelf" role="group" aria-label="Choose a gacha pack">'+shelf+'</div>'+
    '<div class="shop-display" style="'+colors(pack)+'"><div class="foil-stage" id="foilStage"><div class="pack-scene-caption" id="packSceneCaption" hidden></div><div class="package-float" id="previewPile"></div><div class="turn-handle" role="group" tabindex="0"></div><div class="turn-tools"><span>Drag to rotate</span><button data-reset-view aria-label="Reset pack rotation">Reset view</button></div></div>'+
-   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+packQuantities.map(q=>'<button data-qty="'+q+'">'+q+' '+plural(q)+' <small data-pack-size="'+q+'">'+5*q+' cards</small></button>').join('')+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
+   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+packQuantities.map(q=>'<button data-qty="'+q+'">'+q+' '+plural(q)+' <small data-pack-size="'+q+'">'+5*q+' cards</small></button>').join('')+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per opened pack</div><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
    '<section class="odds-panel" style="'+colors(pack)+'"><div class="odds-heading"><h3>Difficulty odds</h3>'+(pack.id==='godly'?'<span>Includes an exclusive ??? slot.</span>':pack.id==='mythic'?'<span>Extreme Demon chance caps at '+mythicExtremeCap+'%.</span>':'')+'<a id="luckStatus" class="luck-link" href="#gacha/upgrades"></a></div><p class="pull-odds-note">Each card rolls a difficulty, then a level and a finish.</p><div class="odds-groups" id="oddsTable"></div><details class="rank-odds"><summary>Extreme Demon rank odds per card</summary><div id="rankOdds"></div></details></section>';
   updatePurchase();bindTurntable(byId('foilStage'));
  }
@@ -510,7 +508,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    '<button class="outline" data-rare-replay>'+ico('spark')+' Replay rare reveal</button></div>':
    '<button class="sound-replay" data-encore>'+ico('volume')+' Replay best pull sound</button>';
   body.innerHTML='<section class="result-sheet" style="'+colors(p)+'"><div class="result-hero"><div class="result-emblem"><img src="'+packArt(p)+'" alt=""></div><div><div class="pack-meta">'+p.name.toUpperCase()+' GACHA</div><h1>Opened '+last.quantity+' '+plural(last.quantity)+'</h1><p>Rarest pull <b>'+bestRank+enc(best.row[1])+'</b> · '+enc(best.row[6])+'</p>'+replay+'</div><div class="result-metrics"><b>'+last.rows.length+'</b><span>cards collected</span></div></div>'+
-   '<div class="result-rewards">'+(Array.isArray(last.newIds)?'<strong>✦ '+last.newIds.length+' new levels</strong>':'')+(last.gemsEarned?'<span>'+gem+' +'+last.gemsEarned+' gems</span>':'')+(last.holos?.length?'<span>✧ '+last.holos.length+' holo</span>':'')+(last.antimatters?.length?'<span class="antimatter-label">◈ '+last.antimatters.length+' Antimatter</span>':'')+(bonuses?'<span>+'+bonuses+' bonus '+(bonuses===1?'card':'cards')+'</span>':'')+'</div>'+
+   '<div class="result-rewards">'+(Array.isArray(last.newIds)?'<strong>✦ '+last.newIds.length+' new levels</strong>':'')+(last.playerXpEarned?'<span>'+ico('spark')+' +'+number(last.playerXpEarned)+' player XP</span>':'')+(last.gemsEarned?'<span>'+gem+' +'+last.gemsEarned+' gems</span>':'')+(last.holos?.length?'<span>✧ '+last.holos.length+' holo</span>':'')+(last.antimatters?.length?'<span class="antimatter-label">◈ '+last.antimatters.length+' Antimatter</span>':'')+(bonuses?'<span>+'+bonuses+' bonus '+(bonuses===1?'card':'cards')+'</span>':'')+'</div>'+
    '<div class="result-counts">'+[...counts].map(([d,n])=>'<span>'+faceIcon(d)+enc(d)+' <b>×'+n+'</b></span>').join('')+'</div>'+
    '<p class="pull-odds-note">Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,drawChance:item})).join('')+'</div>'+
    '<div class="result-actions"><a class="outline" href="#gacha/collection">My cards</a><a class="primary" href="#gacha">Continue</a></div></section>';

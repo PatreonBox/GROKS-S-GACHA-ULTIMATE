@@ -1,18 +1,20 @@
 import {cardCategories,difficulties,packs,packQuantities,rollPacks,upgrades,quoteUpgrade,randomBelow,
  grantCoinCode,applyFeeding,fuseCollection} from './pack-engine.js';
 import {createMergePlanner,extremeTable,gemTenths,levelRewardTenths} from './card-economy.js';
-import {starterCube,cubeCatalogVersion,claimCube} from './cube-catalog.js';
-import {settleMine,mineTapPower,mineTapBatch,buyMineMachine,buyMineSkill} from './mine-economy.js';
-import {makeBattle,playTurn,grantTraining} from './battle-engine.js';
+import {starterCube,cubeCatalogVersion,claimCube,ownsCube} from './cube-catalog.js';
+import {settleMine,mineTapPower,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines,mineSkill} from './mine-economy.js';
+import {combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
 import {findRemix} from './remixes.js';
 import {armyMaps,armyLimit} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix} from './game-replay.js';
+import {awardPlayerXp,minePlayerXp,packPlayerXp} from './player-progression.js';
+import {buildHouse} from './kingdom-rules.js';
 
 export function newWallet() {
- return {coins:1500,gems:10,luck:0,bonus:0,pending:null,cubeCatalogVersion,equippedCube:starterCube.id};
+ return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
 }
 const levelId = value => Number.isSafeInteger(value)&&value>0;
 const key = value => typeof value==='string'&&value.length>0&&value.length<=80;
@@ -119,12 +121,31 @@ const rules={
   }
   const gain=Math.min(Number.MAX_SAFE_INTEGER-w.coins,accepted*mineTapPower(w.mine));
   w.coins+=gain;
+  minePlayerXp(w,accepted,now);
   return {gain,accepted,retryAfter};
  }},
- 'mine.machine':{run:({w,args,now})=>buyMineMachine(w,args.id,args.mode,now)},
- 'mine.skill':{run:({w,args,now})=>{requireRule(key(args.id),'Choose a mine skill.');buyMineSkill(w,args.id,now);}},
+ 'mine.machine':{run:({w,args,now})=>{
+  const result=buyMineMachine(w,args.id,args.mode,now);
+  awardPlayerXp(w,result.count*[2,4,7,12,20][mineMachines.findIndex(m=>m.id===args.id)]);
+  return result;
+ }},
+ 'mine.skill':{run:({w,args,now})=>{
+  requireRule(key(args.id),'Choose a mine skill.');
+  buyMineSkill(w,args.id,now);
+  awardPlayerXp(w,10+Math.floor(6*Math.log10(mineSkill(args.id).price)));
+ }},
  'mine.code':{run:({w,args})=>{requireRule(key(args.code),'Enter a valid code.');return {amount:grantCoinCode(w,args.code)};}},
- 'cube.equip':{run:({w,args})=>{requireRule(key(args.id),'Choose a cube.');return {cube:claimCube(w,args.id)};}},
+ 'cube.equip':{run:({w,args})=>{
+  requireRule(key(args.id),'Choose a cube.');
+  const buying=!ownsCube(w,args.id),cube=claimCube(w,args.id);
+  if(buying)awardPlayerXp(w,6+Math.floor(4*Math.log10(cube.price)));
+  return {cube};
+ }},
+ 'kingdom.house':{run:({w,args})=>{
+  const house=buildHouse(w,args);
+  awardPlayerXp(w,55);
+  return {house};
+ }},
  'pack.buy':{cards:true,prepare:async ({packId,quantity},getPool)=>{
   const pack=packs.find(item=>item.id===packId);
   requireRule(pack&&packQuantities.includes(quantity),'Choose a valid pack and quantity.');
@@ -134,7 +155,11 @@ const rules={
   requireRule(key(args.id)&&within(args.opened,0,50),'Choose a valid opening step.');
   const run=w.pending;
   if(!run||run.id!==args.id)return;
+  const previous=run.opened;
   run.opened=Math.max(run.opened,Math.min(run.quantity,args.opened));
+  const earned=(run.opened-previous)*packPlayerXp(run.packId);
+  awardPlayerXp(w,earned);
+  run.playerXpEarned=(run.playerXpEarned||0)+earned;
   if(run.opened===run.quantity){w.lastPull=run;w.pending=null;}
  }},
  'upgrade.buy':{run:({w,args:{key:id,expectedLevel,mode=1}})=>{
@@ -146,10 +171,12 @@ const rules={
   requireRule(affordable,'You need more gems.');
   w.gems=(gemTenths(w.gems)-gemTenths(cost))/10;
   w[id]=level+count;
+  awardPlayerXp(w,4*count);
  }},
  'card.feed':{cards:true,run:({w,records,changes,args})=>{
   const result=applyFeeding(w,records,args);
   changes.set(result.source.id,result.source);
+  awardPlayerXp(w,Math.min(35,result.consumed*3));
   return result;
  }},
  'card.claim':{cards:true,prepare:async ({tier,ids},getPool)=>{
@@ -167,12 +194,14 @@ const rules={
   }
   requireRule(count,'There are no unclaimed gems for those levels.');
   w.gems=(gemTenths(w.gems)+tenths)/10;
+  awardPlayerXp(w,count);
   return {gems:tenths/10,count};
  }},
  'card.merge':{cards:true,prepare:async (_,getPool)=>createMergePlanner(await allPools(getPool,difficulties),difficulties),
   run:({w,records,changes,args,prepared,now})=>{
    const {changed,preview}=fuseCollection(w,records,prepared,args,randomBelow,now);
    for(const [id,card] of changed)changes.set(id,card);
+   awardPlayerXp(w,w.lastMerge.count*3);
    return {preview};
  }},
  'arena.squad':{cards:true,run:({w,records,args:{ids},now})=>{ownedRows(records,ids);readySquad(w,ids,now);w.squad=[...ids];}},
@@ -192,7 +221,15 @@ const rules={
  }},
  'arena.move':{run:({w,args:{id,seq,move,target,actor},now})=>{
   requireRule(key(id)&&within(seq,0,100000)&&(within(target,0,3)||move==='retreat')&&(actor==null||within(actor,0,3)),'Choose a valid arena move.');
-  playTurn(w,id,seq,move,target,now,randomUnit,actor);
+  const previous=w.battle?.kills||0;
+  const battle=playTurn(w,id,seq,move,target,now,randomUnit,actor);
+  const {tier,campaignReceipt}=battle;
+  let xp=(battle.kills-previous)*(3+2*tier);
+  if(battle.status==='won'){
+   xp+=campaignReceipt?.first?55+14*tier:22+7*tier;
+   if(campaignReceipt?.mastered)xp+=24+7*tier;
+  }
+  awardPlayerXp(w,xp);
  }},
  'arena.technique':{run:({w,args:{id,seq,actor,choice}})=>{
   const battle=w.battle,unit=battle?.allies[actor];
@@ -221,7 +258,10 @@ const rules={
  'drill.finish':{cards:true,run:({w,records,args:{token,proof},now})=>{
   const drill=key(token)&&Object.hasOwn(w.drills||{},token)&&w.drills[token];
   requireRule(drill&&Number.isInteger(drill.seed)&&records.some(c=>c.id===drill.id&&c.copies>0),'Start a new training run.');
-  return grantTraining(w,token,replayDrill(drill,proof,now).run.score,now,drill.capacity);
+  const score=replayDrill(drill,proof,now).run.score;
+  const result=grantTraining(w,token,score,now,drill.capacity);
+  awardPlayerXp(w,Math.min(36,score*2)+(result.newBest?8:0));
+  return result;
  }},
  'remix.begin':{run:({w,args:{id},now})=>{
   requireRule(levelId(id)&&findRemix(id),'Choose a featured level.');
@@ -234,7 +274,9 @@ const rules={
   requireRule(key(token)&&run?.token===token,'Start a new arcade attempt.');
   const percent=replayRemix(findRemix(run.id),run,proof,now);
   w.remixBest??={};
-  w.remixBest[run.id]=Math.max(w.remixBest[run.id]||0,percent);
+  const prior=w.remixBest[run.id]||0;
+  w.remixBest[run.id]=Math.max(prior,percent);
+  if(percent>prior)awardPlayerXp(w,Math.floor((percent-prior)*.3)+(percent===100?25:0));
   delete w.remixRun;
   return {percent};
  }},
@@ -242,14 +284,15 @@ const rules={
   const {series,rivals,starterRows}=prepared;
   requireRule(series?seriesUnlocked(w,series.key,chapter):chapterUnlocked(w,tier,chapter),'Clear the previous Army stage first.');
   const run={id:crypto.randomUUID(),map,chapter,tier,seriesKey:series?.key,started:now,seed:randomBelow(0x100000000),
-   signatureVersion:armySignatureVersion,rivals,players:armyPlayers(w,records,ids,starterRows,now)};
+   signatureVersion:armySignatureVersion,statsVersion:combatStatsVersion,rivals,players:armyPlayers(w,records,ids,starterRows,now)};
   w.armyRun=run;
   return run;
  }},
  'army.finish':{run:({w,args:{id,frames,withdrawn},now})=>{
   if(w.armyReceipt?.id===id)return w.armyReceipt.result;
   requireRule(key(id)&&w.armyRun?.id===id,'Start an Army battle before claiming rewards.');
-  const result=grantArmyLoot(w,replayArmy(w.armyRun,frames,withdrawn,now));
+  const battle=replayArmy(w.armyRun,frames,withdrawn,now),result=grantArmyLoot(w,battle);
+  awardPlayerXp(w,result.defeated*(2+2*battle.tier)+(battle.status==='won'?21+5*battle.tier:0)+(result.first?26:0));
   w.armyReceipt={id,result};
   delete w.armyRun;
   return result;

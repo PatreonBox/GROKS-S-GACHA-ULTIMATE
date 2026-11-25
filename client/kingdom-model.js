@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {houseSize,towerPlot,trailCorners} from '../web/kingdom-rules.js';
 
 const vertex=(x,y,z)=>new THREE.Vector3(x,y,z);
 const material=(color,options={})=>new THREE.MeshStandardMaterial({color,roughness:.9,...options});
@@ -99,11 +101,7 @@ function makeGround(loader){
 }
 
 export function residentPath(){
- return new THREE.CatmullRomCurve3([
-  vertex(-3.3,0,2.65),vertex(-.8,0,4.2),vertex(3.1,0,4.3),vertex(6.5,0,2.1),
-  vertex(5.7,0,-2.7),vertex(2.7,0,-4.3),vertex(-3.4,0,-4.4),vertex(-6.4,0,-1.2),
-  vertex(-6.1,0,1.3)
- ],true,'centripetal');
+ return new THREE.CatmullRomCurve3(trailCorners.map(([x,z])=>vertex(x,0,z)),true,'centripetal');
 }
 function makeTrail(path){
  const rows=180,lanes=[-1,-.65,0,.65,1],positions=[],uv=[],colors=[],indices=[];
@@ -146,10 +144,10 @@ function vegetation(group){
  const random=randomFor(2011),matrix=new THREE.Object3D();
  const trees=[];
  for(let i=0;i<48;i++){
-  const angle=i/48*tau+(random()-.5)*.24,radius=15+random()*29;
+  const angle=i/48*tau+(random()-.5)*.24,radius=17.4+random()*27;
   trees.push([Math.cos(angle)*radius,Math.sin(angle)*radius,1.8+random()*3.7,random()]);
  }
- trees.push([-10.2,-5.1,4.5,.2],[9.2,-7.4,4.0,.84],[-9.8,-8.5,5.4,.09],[12.3,-5.2,3.2,.59],[10.1,5.75,3.15,.35]);
+ trees.push([-12.8,-5.1,4.5,.2],[10.0,-11.8,4.0,.84],[-11.1,-11.9,5.4,.09],[13.5,-5.2,3.2,.59],[12.9,5.75,3.15,.35]);
  const trunkGeometry=new THREE.CylinderGeometry(.055,.11,1,6);
  const canopyGeometry=new THREE.IcosahedronGeometry(1,1);
  const trunks=new THREE.InstancedMesh(trunkGeometry,material('#604f41'),trees.length);
@@ -199,7 +197,8 @@ function vegetation(group){
 
 export function makeLandscape(loader,path){
  const ground=new THREE.Group();
- ground.add(makeGround(loader),makeTrail(path));
+ const surface=makeGround(loader);
+ ground.add(surface,makeTrail(path));
  vegetation(ground);
  const random=randomFor(371),hills=['#6f9f99','#6e9b97','#7a9e96','#89adab'].map(color=>material(color,{flatShading:true}));
  const geometry=new THREE.IcosahedronGeometry(1,2);
@@ -208,7 +207,7 @@ export function makeLandscape(loader,path){
   const hill=meshAt(ground,geometry,hills[i%hills.length],Math.cos(angle)*radius,-.9,Math.sin(angle)*radius,false);
   hill.rotation.y=angle;hill.scale.set(11+random()*9,2.7+random()*5.4,14+random()*9);
  }
- return ground;
+ return {ground,surface};
 }
 
 function masonry(){
@@ -279,7 +278,7 @@ function opening(group,stone,wood,iron,light,width,height,y,z,isDoor=false){
 
 export function makeTower(){
  const tower=new THREE.Group();
- tower.position.set(-2.65,0,0);
+ tower.position.set(towerPlot.x,0,towerPlot.z);
  const stone=material('#f3ecda',{map:masonry(),roughness:1}),trim=material('#d8c79d'),
   base=material('#8e8b82'),pine=material('#a36c3b'),iron=material('#493f3a',{metalness:.25}),
   gold=material('#e8be58',{metalness:.37,roughness:.39}),
@@ -318,6 +317,64 @@ export function makeTower(){
   meshAt(tower,new THREE.BoxGeometry(1.31-i*.13,.104,1.24-i*.23),i===0?base:trim,0,.06+i*.10,1.22);
  }
  return tower;
+}
+
+export function makeHouse(){
+ const house=new THREE.Group(),positions=new Map();
+ const slate=material('#1d2e4e',{roughness:.75}),steel=material('#3b648f',{metalness:.24});
+ const wall=material('#42698a',{roughness:.73}),plinth=material('#456358');
+ const trim=material('#aadde1',{roughness:.7}),lime=material('#d9ee83',{emissive:'#45582e',emissiveIntensity:.24});
+ const glow=material('#7beaef',{emissive:'#34c6db',emissiveIntensity:.80,roughness:.4});
+ function block(finish,x,y,z,w,h,d){
+  const piece=new THREE.BoxGeometry(w,h,d);
+  piece.translate(x,y,z);
+  if(!positions.has(finish))positions.set(finish,[]);
+  positions.get(finish).push(piece);
+ }
+ const {width,depth}=houseSize;
+ block(plinth,0,-.06,0,width,.26,depth);
+ block(trim,0,.08,0,width-.08,.12,depth-.08);
+ block(slate,0,.19,0,2.96,.22,2.52);
+ block(wall,0,1.03,-.04,2.8,1.55,2.31);
+ for(const x of [-1.28,1.28])for(const z of [-1.13,1.07]){
+  block(steel,x,1.04,z,.24,1.67,.22);
+  block(lime,x,.4,z,.27,.11,.25);
+  block(trim,x,1.65,z,.24,.12,.23);
+ }
+ block(slate,0,1.93,-.05,3.14,.24,2.63);
+ block(trim,0,2.045,-.05,3.12,.045,2.59);
+ block(steel,0,2.18,-.08,2.85,.25,2.33);
+ block(slate,0,2.34,-.1,2.14,.15,1.78);
+ block(steel,0,2.49,-.12,1.32,.17,1.03);
+ block(lime,0,2.59,-.14,1.16,.05,.85);
+ for(const x of [-1.09,-.57,.57,1.09])block(glow,x,1.92,1.275,.31,.077,.016);
+ block(plinth,.02,.18,1.19,1.22,.13,.33);
+ block(slate,.02,.827,1.134,1.04,1.29,.10);
+ block(trim,.02,.86,1.195,.86,1.20,.062);
+ block(steel,.02,.82,1.235,.68,1.11,.024);
+ block(glow,.02,.82,1.256,.43,.83,.014);
+ block(slate,.02,.82,1.268,.29,.69,.017);
+ block(lime,.20,.71,1.284,.055,.073,.022);
+ for(const x of [-.95,.92]){
+  block(slate,x,1.15,1.145,.51,.57,.090);
+  block(trim,x,1.15,1.198,.42,.47,.037);
+  block(glow,x,1.15,1.224,.32,.35,.02);
+  block(slate,x,1.15,1.238,.032,.36,.012);
+ }
+ for(const side of [-1,1]){
+  block(steel,side*1.407,1.08,-.44,.073,.66,1.21);
+  block(slate,side*1.449,1.08,-.44,.024,.56,1.10);
+  for(const z of [-.76,-.44,-.12])block(glow,side*1.467,1.08,z,.012,.29,.22);
+  for(const z of [.49,.67,.85])block(lime,side*1.425,.51,z,.03,.14,.11);
+ }
+ block(steel,-1.01,2.29,-.72,.48,.46,.44);
+ block(slate,-1.01,2.54,-.72,.55,.09,.51);
+ block(lime,-1.01,2.60,-.72,.30,.03,.31);
+ for(const [finish,pieces] of positions){
+  meshAt(house,mergeGeometries(pieces),finish,0,0,0);
+  pieces.forEach(piece=>piece.dispose());
+ }
+ return house;
 }
 
 export function makeResident(loader){

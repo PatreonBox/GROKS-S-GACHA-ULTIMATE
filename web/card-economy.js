@@ -5,17 +5,22 @@ import {impossibleTier,impossibleGems} from './impossible-cards.js';
 export const bandFor=rank=>rank<=10?0:rank<=50?1:rank<=150?2:rank<=500?3:4;
 export const bandNames=['#1–10','#11–50','#51–150','#151–500','#501+'];
 export const stageNames=['Stage V','Stage IV','Stage III','Stage II','Stage I'];
-export const rankOddsVersion=4;
+export const rankOddsVersion=5;
 const tablesByVersion=new Map();
 const baseGodlyExtremeTickets=990000;
-// A million difficulty tickets and a 1/15,000 target simplify to 200/(3 × Godly Extreme tickets).
-const topTickets=200;
+const topTickets=version=>version>=5?160:200;
+const extremeHp=[
+ [1,10,300_000_000,82_000_000],[11,50,45_000_000,22_000_000],[51,150,13_000_000,7_000_000],
+ [151,500,4_200_000,1_800_000],[501,1629,1_050_000,500_000]
+];
 
 export function extremeStage(rank){
- const place=rank>0?rank:Infinity,band=bandFor(place),first=[1,11,51,151,501][band],last=[10,50,150,500][band];
- const within=last?(last-place)/(last-first):501/place;
- const strength=.84+.16*(4-band+.70*within)/4.70;
- return {name:stageNames[band],range:bandNames[band],strength};
+ const place=rank>0?rank:Infinity,band=bandFor(place),[first,last,maxHp,minHp]=extremeHp[band];
+ const position=Math.min(1,(place-first)/(last-first));
+ const hp=Math.round(maxHp*(minHp/maxHp)**position);
+ const legacyPosition=band===4?501/place:1-position;
+ const legacyStrength=.84+.16*(4-band+.70*legacyPosition)/4.70;
+ return {name:stageNames[band],range:bandNames[band],hp,legacyStrength};
 }
 function rankWeight(rank,last,version){
  const place=Math.max(0,Math.min(1,((rank||last)-1)/Math.max(1,last-1)));
@@ -23,7 +28,9 @@ function rankWeight(rank,last,version){
  const base=410000+Math.round(590000*Math.pow(place,.60));
  if(version===3)return base;
  // Ease the first few dozen positions into the standard rank curve.
- return Math.round(base*(1-.79*Math.exp(-((rank||last)-1)/24)));
+ const previous=base*(1-.79*Math.exp(-((rank||last)-1)/24));
+ const highRankAdjustment=version>=5?.78+.22*Math.min(1,(rank||last)/160):1;
+ return Math.round(previous*highRankAdjustment);
 }
 export function extremeTable(rows,version=rankOddsVersion){
  let cache=tablesByVersion.get(version);
@@ -42,14 +49,15 @@ export function extremeTable(rows,version=rankOddsVersion){
 function topShare(table,referenceTickets){
  if(!table.top.length)return 0;
  if(!table.total)return 1;
- return table.top.length*topTickets/(3*referenceTickets);
+ return table.top.length*topTickets(table.version)/(3*referenceTickets);
 }
 export function pickExtreme(rows,random,referenceTickets=baseGodlyExtremeTickets){
- const {weighted,top,ends,total}=extremeTable(rows);
+ const {weighted,top,ends,total,version}=extremeTable(rows);
  if(!weighted.length)return top[random(top.length)];
  if(top.length){
+  const each=topTickets(version);
   const ticket=random(3*referenceTickets);
-  if(ticket<top.length*topTickets)return top[Math.floor(ticket/topTickets)];
+  if(ticket<top.length*each)return top[Math.floor(ticket/each)];
  }
  const ticket=random(total);
  let lo=0,hi=weighted.length-1;
@@ -67,12 +75,12 @@ export function extremeBandOdds(index,table,tierPercent,referenceTickets){
 }
 // The ledger uses tenths for every price and credit; balances stay compatible with existing saves.
 export const gemTenths=amount=>Math.round(amount*10);
-export const indexBaseTenths=[0,2,5,10,15,20,25,30,40,60,70];
+export const indexBaseTenths=[0,2,5,10,15,20,25,40,80,120,130];
 export function levelRewardTenths(tier,rank,lastRank){
  if(tier===impossibleTier)return impossibleGems*10;
  if(tier!==10||!(rank>0)||!(lastRank>1))return indexBaseTenths[tier]??0;
  const standing=Math.max(0,Math.min(1,(lastRank-rank)/(lastRank-1)));
- return 70+Math.round(50*standing);
+ return 130+Math.round(170*standing);
 }
 export const mergeGems=tier=>[1,1,2,2,3,4,6,8,11,15,22][tier];
 const duration={Tiny:0,Short:1,Medium:2,Long:3,XL:4,Platformer:2};

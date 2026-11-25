@@ -352,7 +352,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Meme arcade':'Battle mode')+'</h1><div class="combat-links">'+
    (gym||arcadePage?'<a class="outline" href="#battle">Return to battle</a>':'')+
    (!gym?battleShortcut('training'):'')+(!arcadePage?battleShortcut('remix'):'')+
-   '<a class="outline" href="#battle/army">Army mode</a><a class="outline" href="#battle/players">Player ranks</a>'+mutedBtn()+'</div></div>';
+   '<a class="outline" href="#battle/army">Army mode</a>'+mutedBtn()+'</div></div>';
   root.innerHTML=heading+(collectionError&&!loaded?'<p>Your squad could not load. <button class="outline" data-retry-collection>Try again</button></p>':!wallet||!loaded?'<p>Loading your squad…</p>':gym?training():match?arena(match):lobby())+'<div class="bt-feedback" role="status">'+enc(feedback)+'</div>';
   if(live){
    bindArenaCamera(root,camera);

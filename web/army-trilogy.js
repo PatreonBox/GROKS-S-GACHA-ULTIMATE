@@ -128,7 +128,8 @@ export function armyRivals(rows,tier,chapter,series,illustrated) {
 
 export function beginArmyRun(run) {
  const previousMoves=(run.signatureVersion??1)<armySignatureVersion;
- const battle = configureTrilogy(makeArmyBattle(run.players,run.rivals,run.map,run.tier,seededRandom(run.seed),{previousMoves}),run.chapter,run.seriesKey);
+ const statsVersion=run.statsVersion??1;
+ const battle=configureTrilogy(makeArmyBattle(run.players,run.rivals,run.map,run.tier,seededRandom(run.seed),{previousMoves,statsVersion}),run.chapter,run.seriesKey);
  battle.id=run.id;
  battle.frames=0;
  return battle;
