@@ -139,42 +139,74 @@ export function createKingdom(root,sound,applyWallet){
   build.spot=spot;
   build.error=housePlacementError(plot.houses,spot);
  }
- function paintBuild(){
-  if(!ui)return;
-  const {houses,tower,houseCost}=plot,full=houses.length>=tower.limit;
+ function paintBuildMenu(){
+  const {houses,tower,houseCost}=plot,free=Math.max(0,tower.limit-houses.length),full=free===0;
   const required=towerPlayerLevel(tower.level+1),playerLevel=playerProgress(wallet?.playerXp).level;
-  ui.toolbar.classList.toggle('is-building',Boolean(build));
-  ui.openBuild.hidden=Boolean(build);
-  ui.openBuild.disabled=!world||!wallet||full;
-  ui.limits.textContent=houses.length+' / '+tower.limit+' house lots';
-  ui.price.textContent=full?'':readout.format(houseCost)+' coins';
-  ui.priceLine.hidden=full;
-  ui.upgrade.hidden=!full||!tower.next||Boolean(build);
-  ui.upgrade.disabled=upgrading||!wallet||coins<(tower.next?.price??Infinity);
+  const short=Math.max(0,houseCost-coins);
+  ui.limits.textContent=houses.length+' / '+tower.limit+' used';
+  ui.available.textContent=free+' available';
+  ui.lotMeter.max=tower.limit;
+  ui.lotMeter.value=houses.length;
+  ui.price.textContent=readout.format(houseCost)+' coins';
+  ui.priceLine.hidden=full&&!tower.next;
+  ui.choose.disabled=!world||!wallet||upgrading||full||short>0;
+  ui.upgrade.hidden=!full||!tower.next;
   if(tower.next){
    setLevelLock(ui.upgrade,required,playerLevel);
+   ui.upgrade.disabled=upgrading||!wallet||coins<tower.next.price;
    ui.towerGate.textContent='Lvl '+required+'+';
    ui.upgradePrice.textContent=readout.format(tower.next.price);
    ui.upgrade.title='Upgrade to Level '+(tower.level+1)+' for '+tower.next.limit+' house lots';
   }
+  let hint='';
+  if(full)hint=!tower.next?'All house lots are full.':playerLevel<required?'Reach player Level '+required+' to expand your tower.':
+   'Upgrade your tower to open '+(tower.next.limit-tower.limit)+' more house lots.';
+  else if(short)hint='Need '+readout.format(short)+' more coins.';
+  else if(!world)hint='The 3D plot is unavailable.';
+  const notice=upgrading?'Upgrading tower…':ui.buildNotice.dataset.notice||hint;
+  if(ui.buildNotice.textContent!==notice)ui.buildNotice.textContent=notice;
+ }
+ function openBuildMenu(){
+  if(!wallet||build||ui.buildDialog.open)return;
+  delete ui.buildNotice.dataset.notice;
+  ui.buildDialog.showModal();
+  paintBuildMenu();
+  ui.previewStatus.hidden=false;
+  try{
+   if(world){
+    world.setHousePreview(ui.preview);
+    ui.previewStatus.hidden=true;
+   }
+  }catch{
+   ui.previewStatus.hidden=false;
+  }
+ }
+ function paintBuild(){
+  if(!ui)return;
+  const {houses,tower,houseCost}=plot,full=houses.length>=tower.limit;
+  ui.toolbar.classList.toggle('is-building',Boolean(build));
+  ui.openBuild.hidden=Boolean(build);
+  ui.openBuild.disabled=!wallet||(!world&&!ui.controls.hidden);
   ui.editTools.hidden=!build;
   ui.place.hidden=!build?.locked;
-  const short=Math.max(0,houseCost-coins);
-  ui.place.disabled=placing||Boolean(build?.error)||short>0||full;
+  const short=Math.max(0,(build?.cost??houseCost)-coins),priceChanged=Boolean(build&&build.cost!==houseCost);
+  ui.place.disabled=placing||Boolean(build?.error)||short>0||full||priceChanged;
   ui.cancel.disabled=placing;
   ui.rotate.disabled=placing;
   ui.snap.disabled=placing;
   ui.snap.setAttribute('aria-pressed',String(snap));
   ui.snap.textContent=snap?'Snap on':'Snap off';
   ui.canvas.dataset.locked=String(Boolean(build?.locked));
-  const instruction=build?(build.error||(placing?'Building your house…':full?'The tower’s house lots are full.':build.locked?
-   (short?'Need '+readout.format(short)+' more coins.':'Position locked. Confirm to build.'):
-   'Click or tap an open spot to lock the house.')):'';
-  const limitNotice=full?(tower.next?(playerLevel<required?'Reach player Level '+required+' to expand your tower.':
-   'Tower Level '+tower.level+' is full. Upgrade for '+tower.next.limit+' house lots.'):'All house lots are full.'):'';
-  const status=instruction||ui.status.dataset.notice||limitNotice;
-  if(ui.status.textContent!==status)ui.status.textContent=status;
-  ui.status.classList.toggle('invalid',Boolean(build?.error||build?.locked&&short));
+  if(build){
+   ui.placementPrice.textContent=readout.format(build.cost)+' coins';
+   const problem=full?'The tower’s house lots are full.':priceChanged?'The price changed. Reopen Build Mode to review it.':build.error;
+   const instruction=placing?'Building your house…':problem||(build.locked?
+    (short?'Need '+readout.format(short)+' more coins.':'Position locked. Confirm to build.'):
+    'Click or tap an open spot to lock the house.');
+   if(ui.status.textContent!==instruction)ui.status.textContent=instruction;
+   ui.status.classList.toggle('invalid',Boolean(problem||build.locked&&short));
+  }
+  if(ui.buildDialog.open)paintBuildMenu();
   world?.setBuild(build?{...build,snap}:null);
  }
  function pointOnPlot(point,lock){
@@ -189,14 +221,15 @@ export function createKingdom(root,sound,applyWallet){
   paintBuild();
  }
  function startBuild(){
-  if(!wallet||!world||placing||plot.houses.length>=plot.tower.limit)return;
-  delete ui.status.dataset.notice;
-  build={rotation:0,point:null,spot:null,locked:false,error:''};
+  if(!wallet||!world||placing||upgrading||plot.houses.length>=plot.tower.limit||coins<plot.houseCost)return;
+  ui.buildDialog.close();
+  build={cost:plot.houseCost,rotation:0,point:null,spot:null,locked:false,error:''};
   pan=false;setPan();paintBuild();
+  ui.canvas.focus({preventScroll:true});
  }
  function cancelBuild(){
   if(!build||placing)return;
-  build=null;paintBuild();
+  build=null;paintBuild();ui.openBuild.focus({preventScroll:true});
  }
  function rotate(){
   if(!build||placing)return;
@@ -204,15 +237,14 @@ export function createKingdom(root,sound,applyWallet){
   updatePreview();paintBuild();
  }
  async function place(){
-  if(!build?.locked||build.error||placing||coins<plot.houseCost||plot.houses.length>=plot.tower.limit)return;
-  const epoch=visit,spot={...build.spot,expectedPrice:plot.houseCost};
+  if(!build?.locked||build.error||placing||build.cost!==plot.houseCost||coins<build.cost||plot.houses.length>=plot.tower.limit)return;
+  const epoch=visit,spot={...build.spot,expectedPrice:build.cost};
   placing=true;paintBuild();
   try{
    const {wallet:next,result}=await gameCommand('kingdom.house',spot);
    applyWallet(next);
    if(epoch!==visit)return;
    build=null;placing=false;
-   ui.status.dataset.notice=plot.houses.length<plot.tower.limit?'GD House built.':'';
    select('house:'+result.house.id);
    sound.play('buy',{level:.74});
   }catch(error){
@@ -228,16 +260,17 @@ export function createKingdom(root,sound,applyWallet){
   const {tower,houses}=plot;
   if(upgrading||!tower.next||houses.length<tower.limit||coins<tower.next.price||
    playerProgress(wallet?.playerXp).level<towerPlayerLevel(tower.level+1))return;
+  delete ui.buildNotice.dataset.notice;
   upgrading=true;paintBuild();
   const epoch=visit;
   try{
    const {wallet:next,result}=await gameCommand('kingdom.tower',{level:tower.level});
    applyWallet(next);
    if(epoch!==visit)return;
-   ui.status.dataset.notice='Tower Level '+result.tower.level+' · '+result.tower.limit+' house lots';
+   ui.buildNotice.dataset.notice='Tower Level '+result.tower.level+' · '+result.tower.limit+' house lots';
    select('tower');sound.play('buy',{level:.74});
   }catch(error){
-   if(epoch===visit)ui.status.dataset.notice=error.message;
+   if(epoch===visit)ui.buildNotice.dataset.notice=error.message;
   }finally{
    if(epoch===visit){upgrading=false;paintBuild()}
   }
@@ -256,20 +289,17 @@ export function createKingdom(root,sound,applyWallet){
    '<div class="kingdom-controls"><span id="kingdomControls">Drag to orbit · Scroll or pinch to zoom</span><div role="group" aria-label="Camera controls">'+
    cameraButton('pan','pan','Pan camera')+cameraButton('out','zoomOut','Zoom out')+cameraButton('in','zoomIn','Zoom in')+
    cameraButton('reset','aim','Reset camera')+'</div></div></div>'+
-   '<div class="kingdom-builder"><div class="kingdom-build-item"><span class="house-emblem">'+ico('box')+'</span><div><b>'+houseName+'</b>'+
-   '<small data-house-price-line>'+coin+'<span data-house-price></span></small><span class="house-lots" data-house-lots></span></div></div>'+
-   '<p data-build-status role="status"></p><div class="kingdom-build-controls">'+
-   '<button type="button" class="primary" data-build="start" disabled>Build mode</button>'+
-   '<button type="button" class="outline tower-upgrade" data-tower-upgrade hidden>Upgrade tower <span>'+coin+'<b data-tower-cost></b></span>'+
-   '<small class="level-lock" data-level-badge hidden>'+ico('lock')+'<b data-tower-gate></b></small></button>'+
-   '<div data-build-tools hidden><button type="button" class="outline" data-build="snap" aria-pressed="true">Snap on</button>'+
+   '<div class="kingdom-builder"><button type="button" class="primary" data-build="start" aria-haspopup="dialog" disabled>'+ico('tower')+'Build Mode</button>'+
+   '<div data-build-tools hidden><div class="kingdom-placement-copy"><strong>'+houseName+'</strong>'+
+   '<span>'+coin+'<b data-placement-price></b></span><p data-build-status role="status"></p></div>'+
+   '<div class="kingdom-build-controls"><button type="button" class="outline" data-build="snap" aria-pressed="true">Snap on</button>'+
    '<button type="button" class="outline" data-build="rotate">Rotate <kbd>R</kbd></button>'+
    '<button type="button" class="outline" data-build="cancel">Cancel <kbd>Q</kbd></button>'+
    '<button type="button" class="primary" data-build="place" hidden>Place <kbd>E</kbd></button></div></div></div>'+
    '<div class="kingdom-dashboard"><section class="kingdom-inspector" aria-label="Inspect your plot"><div class="kingdom-objects" role="group" aria-label="Select an object">'+
    '<button type="button" data-object="tower">'+ico('tower')+towerName+'</button>'+
    '<button type="button" data-object="cube"><img alt="" data-resident-avatar><span data-resident-name></span></button>'+
-   '<button type="button" data-last-house hidden>'+ico('box')+houseName+'</button>'+
+   '<button type="button" data-last-house hidden>'+houseName+'</button>'+
    '<button type="button" data-visitor-index aria-haspopup="dialog">Visitors 0 / '+visitorSlots.length+'</button></div>'+
    '<div class="kingdom-detail" aria-live="polite"><div><h2></h2><span data-plot-state></span></div><p></p>'+
    '<a href="#gacha/cubes" data-change-cube hidden>Change cube '+ico('right')+'</a></div></section>'+
@@ -279,10 +309,23 @@ export function createKingdom(root,sound,applyWallet){
    '<dialog class="kingdom-guest-index" aria-labelledby="guestTitle"><div class="guest-index-heading"><h2 id="guestTitle">Visitor index</h2>'+
    '<button type="button" class="iconbtn" data-close-visitors aria-label="Close visitor index">'+ico('x')+'</button></div>'+
    '<div class="visitor-collection"><b data-visitor-count></b><progress aria-label="Visitors discovered" max="'+visitorSlots.length+'" value="0"></progress></div>'+
-   '<p>Develop your Kingdom to discover more visitors.</p><div class="visitor-list" data-visitor-rows></div></dialog>';
+   '<p>Develop your Kingdom to discover more visitors.</p><div class="visitor-list" data-visitor-rows></div></dialog>'+
+   '<dialog class="kingdom-build-menu" aria-labelledby="buildModeTitle"><div class="build-menu-header">'+
+   '<h2 id="buildModeTitle">Build Mode</h2><button type="button" class="iconbtn" data-build="close" aria-label="Close Build Mode">'+ico('x')+'</button></div>'+
+   '<div class="build-capacity"><div><b>House lots</b><span data-house-lots></span></div><strong data-lots-available></strong>'+
+   '<progress aria-label="House lots used" data-lot-meter max="2" value="0"></progress></div>'+
+   '<article class="build-option"><div class="build-viewport"><canvas tabindex="0" aria-label="GD House 3D preview" aria-describedby="housePreviewControls"></canvas>'+
+   '<p data-preview-status role="status" hidden>3D preview unavailable.</p>'+
+   '<span id="housePreviewControls">Drag or use arrow keys to rotate</span></div>'+
+   '<div class="build-option-info"><h3>'+houseName+'</h3><span class="build-rating">'+star+'+0.3 stars</span>'+
+   '<small class="build-price" data-house-price-line>'+coin+'<b data-house-price></b></small>'+
+   '<button class="primary" type="button" data-build="choose">Build GD House</button></div></article>'+
+   '<div class="build-menu-footer"><p data-build-notice role="status"></p>'+
+   '<button type="button" class="outline tower-upgrade" data-tower-upgrade hidden>Upgrade tower <span>'+coin+'<b data-tower-cost></b></span>'+
+   '<small class="level-lock" data-level-badge hidden>'+ico('lock')+'<b data-tower-gate></b></small></button></div></dialog>';
   const get=selector=>root.querySelector(selector);
   ui={
-   canvas:get('canvas'),loading:get('.kingdom-loading'),hover:get('.kingdom-hover'),
+   canvas:get('.kingdom-frame canvas'),loading:get('.kingdom-loading'),hover:get('.kingdom-hover'),
    controls:get('.kingdom-controls'),instructions:get('#kingdomControls'),
    pan:get('[data-camera="pan"]'),tower:get('[data-object="tower"]'),resident:get('[data-object="cube"]'),lastHouse:get('[data-last-house]'),
    avatar:get('[data-resident-avatar]'),residentName:get('[data-resident-name]'),
@@ -291,7 +334,10 @@ export function createKingdom(root,sound,applyWallet){
    value:get('[data-plot-value]'),buildings:get('[data-plot-buildings]'),starValue:get('[data-plot-rating]'),
    stars:get('.kingdom-stars'),starFills:[...root.querySelectorAll('.kingdom-stars i')],
    toolbar:get('.kingdom-builder'),status:get('[data-build-status]'),editTools:get('[data-build-tools]'),
-   price:get('[data-house-price]'),priceLine:get('[data-house-price-line]'),limits:get('[data-house-lots]'),
+   buildDialog:get('.kingdom-build-menu'),preview:get('.build-viewport canvas'),previewStatus:get('[data-preview-status]'),
+   buildNotice:get('[data-build-notice]'),choose:get('[data-build="choose"]'),
+   price:get('[data-house-price]'),priceLine:get('[data-house-price-line]'),placementPrice:get('[data-placement-price]'),
+   limits:get('[data-house-lots]'),available:get('[data-lots-available]'),lotMeter:get('[data-lot-meter]'),
    upgrade:get('[data-tower-upgrade]'),upgradePrice:get('[data-tower-cost]'),towerGate:get('[data-tower-gate]'),
    openBuild:get('[data-build="start"]'),cancel:get('[data-build="cancel"]'),rotate:get('[data-build="rotate"]'),
    snap:get('[data-build="snap"]'),place:get('[data-build="place"]'),
@@ -299,21 +345,32 @@ export function createKingdom(root,sound,applyWallet){
    discoveries:get('[data-visitor-count]'),indexProgress:get('.visitor-collection progress')
   };
   ui.avatar.src=cube.icon;ui.residentName.textContent=cube.name;
+  const buildMenu=ui.buildDialog;
+  buildMenu.addEventListener('close',()=>{
+   if(ui?.buildDialog===buildMenu&&!buildMenu.open)world?.setHousePreview(null);
+  });
   root.onclick=event=>{
    if(event.target===ui.guestDialog){ui.guestDialog.close();return}
+   if(event.target===ui.buildDialog){
+    const box=ui.buildDialog.getBoundingClientRect();
+    if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)ui.buildDialog.close();
+    return;
+   }
    const button=event.target.closest('button');
    if(!button)return;
    if(button.dataset.object){select(button.dataset.object);return}
    if(button===ui.visitors){ui.guestDialog.showModal();return}
    if(button.matches('[data-close-visitors]')){ui.guestDialog.close();return}
    if(button.dataset.visit){ui.guestDialog.close();select('visitor:'+button.dataset.visit);return}
+   if(button===ui.openBuild){openBuildMenu();return}
+   if(button.dataset.build==='close'){ui.buildDialog.close();return}
+   if(button===ui.choose){startBuild();return}
+   if(button===ui.upgrade){improveTower();return}
    if(!world)return;
    const action=button.dataset.camera;
    if(action==='pan'){pan=!pan;setPan();return}
    if(action==='reset'){reset();return}
    if(action==='in'||action==='out'){world.zoom(action==='in'?.79:1.26);return}
-   if(button===ui.openBuild)startBuild();
-   if(button===ui.upgrade)improveTower();
    if(button===ui.cancel)cancelBuild();
    if(button===ui.rotate)rotate();
    if(button===ui.place)place();
@@ -354,6 +411,7 @@ export function createKingdom(root,sound,applyWallet){
    ui.loading.textContent='The 3D view could not start. You can still check your Kingdom and visitors below.';
    ui.controls.hidden=true;
    ui.canvas.tabIndex=-1;
+   paintBuild();
   }
  }
  return {show,setWallet,setCoins};

@@ -18,7 +18,7 @@ import {createCubeShop} from './cube-shop.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {createCoinMine} from './coin-mine.js';
 import {createKingdom} from './kingdom.js';
-import {packPlayerXp,playerProgress} from './player-progression.js';
+import {packPlayerXp,packXpAllowance,packXpLimit,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels} from './level-access.js';
 import {lockAttributes,lockBadge,lockedPage,setLevelLock} from './level-lock.js';
 import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,skillOwned} from './mine-economy.js';
@@ -177,6 +177,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  setInterval(()=>{
   if(document.hidden)return;
   refreshCoins();
+  refreshPackXp();
   refreshActivity();
   if(wallet?.mine?.collectedAt&&Date.now()-wallet.mine.collectedAt>=mineCheckpointMs)checkpointMine();
  },1000);
@@ -291,7 +292,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    (q===50?lockBadge(featureLevel('bulk'),locked('bulk')):'')+'</button>').join('');
   byId('arcBody').innerHTML='<div class="pack-shelf" role="group" aria-label="Choose a gacha pack">'+shelf+'</div>'+
    '<div class="shop-display" style="'+colors(pack)+'"><div class="foil-stage" id="foilStage"><div class="pack-scene-caption" id="packSceneCaption" hidden></div><div class="package-float" id="previewPile"></div><div class="turn-handle" role="group" tabindex="0"></div><div class="turn-tools"><span>Drag to rotate</span><button data-reset-view aria-label="Reset pack rotation">Reset view</button></div></div>'+
-   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+quantityButtons+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per opened pack</div><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
+   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+quantityButtons+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per eligible pack</div><p class="pack-xp-allowance" id="packXpAllowance" title="All pack tiers share this rolling 60-minute allowance."></p><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
    '<section class="odds-panel" style="'+colors(pack)+'"><div class="odds-heading"><h3>Difficulty odds</h3>'+(pack.id==='godly'?'<span>Includes an exclusive ??? slot.</span>':pack.id==='mythic'?'<span>Extreme Demon chance caps at '+mythicExtremeCap+'%.</span>':'')+'<a id="luckStatus" class="luck-link" href="#gacha/upgrades"></a></div><p class="pull-odds-note">Each card rolls a difficulty, then a level and a finish.</p><div class="odds-groups" id="oddsTable"></div><details class="rank-odds"><summary>Extreme Demon rank odds per card</summary><div id="rankOdds"></div></details></section>';
   updatePurchase();bindTurntable(byId('foilStage'));
  }
@@ -364,8 +365,18 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   catch(e){failure(e);await sync()}
   finally{upgrading=false;if(view==='upgrades')renderUpgrades()}
  }
+ function refreshPackXp(){
+  const label=byId('packXpAllowance');
+  if(!label||!wallet)return;
+  const now=Date.now(),{remaining,nextAt}=packXpAllowance(wallet,now);
+  const wait=Math.ceil((nextAt-now)/60000);
+  const message=remaining+' / '+packXpLimit+' XP-eligible packs left'+(nextAt?' · Next in '+wait+' min':' · Per hour');
+  if(label.textContent!==message)label.textContent=message;
+  label.dataset.depleted=String(remaining===0);
+ }
  function updatePurchase(){
   const buy=byId('buyPack');if(!buy)return;
+  refreshPackXp();
   if(quantity===50&&locked('bulk'))quantity=1;
   for(const el of root.querySelectorAll('[data-choose]'))setLevelLock(el,packLevels[el.dataset.choose],playerLevel);
   setLevelLock(byId('luckStatus'),featureLevel('upgrades'),playerLevel);
@@ -560,7 +571,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    '<button class="outline" data-rare-replay>'+ico('spark')+' Replay rare reveal</button></div>':
    '<button class="sound-replay" data-encore>'+ico('volume')+' Replay best pull sound</button>';
   body.innerHTML='<section class="result-sheet" style="'+colors(p)+'"><div class="result-hero"><div class="result-emblem"><img src="'+packArt(p)+'" alt=""></div><div><div class="pack-meta">'+p.name.toUpperCase()+' GACHA</div><h1>Opened '+last.quantity+' '+plural(last.quantity)+'</h1><p>Rarest pull <b>'+bestRank+enc(best.row[1])+'</b> · '+enc(best.row[6])+'</p>'+replay+'</div><div class="result-metrics"><b>'+last.rows.length+'</b><span>cards collected</span></div></div>'+
-   '<div class="result-rewards">'+(Array.isArray(last.newIds)?'<strong>✦ '+last.newIds.length+' new levels</strong>':'')+(last.playerXpEarned?'<span>'+ico('spark')+' +'+number(last.playerXpEarned)+' player XP</span>':'')+(last.gemsEarned?'<span>'+gem+' +'+last.gemsEarned+' gems</span>':'')+(last.holos?.length?'<span>✧ '+last.holos.length+' holo</span>':'')+(last.antimatters?.length?'<span class="antimatter-label">◈ '+last.antimatters.length+' Antimatter</span>':'')+(bonuses?'<span>+'+bonuses+' bonus '+(bonuses===1?'card':'cards')+'</span>':'')+'</div>'+
+   '<div class="result-rewards">'+(Array.isArray(last.newIds)?'<strong>✦ '+last.newIds.length+' new levels</strong>':'')+(last.playerXpEarned?'<span>'+ico('spark')+' +'+number(last.playerXpEarned)+' player XP</span>':'')+
+   (last.playerXpCappedPacks?'<span class="capped-pack-xp">'+last.playerXpCappedPacks+' '+plural(last.playerXpCappedPacks)+' over the hourly XP limit</span>':'')+
+   (last.gemsEarned?'<span>'+gem+' +'+last.gemsEarned+' gems</span>':'')+(last.holos?.length?'<span>✧ '+last.holos.length+' holo</span>':'')+(last.antimatters?.length?'<span class="antimatter-label">◈ '+last.antimatters.length+' Antimatter</span>':'')+(bonuses?'<span>+'+bonuses+' bonus '+(bonuses===1?'card':'cards')+'</span>':'')+'</div>'+
    '<div class="result-counts">'+[...counts].map(([d,n])=>'<span>'+faceIcon(d)+enc(d)+' <b>×'+n+'</b></span>').join('')+'</div>'+
    '<p class="pull-odds-note">Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,drawChance:item})).join('')+'</div>'+
    '<div class="result-actions"><a class="outline" href="#gacha/collection">My cards</a><a class="primary" href="#gacha">Continue</a></div></section>';

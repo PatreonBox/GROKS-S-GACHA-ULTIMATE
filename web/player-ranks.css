@@ -28,6 +28,8 @@
 .pack-xp{display:flex;align-items:center;gap:5px;margin-top:9px;color:#bfcede;font-size:13px}
 .pack-xp svg,.result-rewards svg{width:15px;height:15px;color:#9de5fb}
 .pack-xp b{color:#a5ecff}
+.pack-xp-allowance{margin:3px 0 7px;color:#b4bfd3;font-size:.77rem;font-variant-numeric:tabular-nums}
+.pack-xp-allowance[data-depleted="true"],.result-rewards .capped-pack-xp{color:#ffd194}
 .players-podium .podrows{display:block}
 .players-podium .rank-row{
  display:grid;grid-template-columns:29px 39px minmax(0,1fr) auto;min-height:60px;gap:8px;align-items:center;text-align:left;

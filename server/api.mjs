@@ -15,8 +15,13 @@ export async function api(request){
   const thumb=pathname.match(/^\/api\/thumbnail\/(\d{1,12})\/(small|high)$/);
   if(thumb){
    const image=await fetch('https://levelthumbs.prevter.me/thumbnail/'+thumb[1]+'/'+thumb[2],{headers:{Accept:'image/webp,image/*','User-Agent':'GD-Lvl-battles/1.0'},signal:AbortSignal.timeout(11000),cf:{cacheTtl:86400,cacheEverything:true}});
-   if(!image.ok||!/^image\//.test(image.headers.get('Content-Type')||''))return json({error:'No thumbnail'},404);
-   return new Response(image.body,{headers:{'Content-Type':image.headers.get('Content-Type'),'Cache-Control':'public, max-age=86400','X-Content-Type-Options':'nosniff'}});
+   const type=image.headers.get('Content-Type');
+   if(!image.ok||!/^image\//.test(type||'')){
+    await image.body?.cancel();
+    return json({error:'No thumbnail'},404);
+   }
+   const bytes=await image.arrayBuffer();
+   return new Response(bytes,{headers:{'Content-Type':type,'Cache-Control':'public, max-age=86400','X-Content-Type-Options':'nosniff'}});
   }
   if(pathname==='/api/demons'){
    const data=await source('https://api.aredl.net/v2/api/aredl/levels',11000);

@@ -49,7 +49,7 @@ export const sectionGuides={
  ]},
  'kingdom':{title:'Your Kingdom',art:'/assets/gd-kingdom-castle-icon.png',steps:[
   ['Look around','Drag to orbit the plot. Use Pan to slide the camera, and zoom with the scroll wheel, pinch, or the on-screen buttons.'],
-  ['Build a GD House','Open Build mode, click a clear spot, and press E or Place. Houses start at 50,000 coins and double in price. Press R to rotate and Q to cancel.'],
+   ['Build a GD House','Open Build Mode to see your lots and preview the house. Choose Build GD House, click a clear spot, and press E or Place. Press R to rotate and Q to cancel.'],
   ['Attract visitors','Your first tower holds two houses. Upgrade it to add more lots and raise your Kingdom’s rating. The Visitor index reveals creators as you reach their star requirements.']
  ]},
  'battle-campaign':{title:'Battle campaign',art:'/assets/faces/demon-extreme.webp',steps:[

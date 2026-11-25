@@ -10,7 +10,7 @@ import {findRemix} from './remixes.js';
 import {armyMaps,armyLimit} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix} from './game-replay.js';
-import {awardPlayerXp,minePlayerXp,packPlayerXp,playerProgress} from './player-progression.js';
+import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
 import {buildHouse,towerPlan,upgradeTower} from './kingdom-rules.js';
 
@@ -170,15 +170,17 @@ const rules={
   requireRule(pack&&packQuantities.includes(quantity),'Choose a valid pack and quantity.');
   return {pack,pools:await allPools(getPool,pack.id==='godly'?cardCategories:difficulties)};
  },run:({w,records,changes,args,prepared,now})=>awardPack(w,records,changes,prepared.pack,args.quantity,prepared.pools,now)},
- 'pack.advance':{run:({w,args})=>{
+ 'pack.advance':{run:({w,args,now})=>{
   requireRule(key(args.id)&&within(args.opened,0,50),'Choose a valid opening step.');
   const run=w.pending;
   if(!run||run.id!==args.id)return;
   const previous=run.opened;
   run.opened=Math.max(run.opened,Math.min(run.quantity,args.opened));
-  const earned=(run.opened-previous)*packPlayerXp(run.packId);
-  awardPlayerXp(w,earned);
-  run.playerXpEarned=(run.playerXpEarned||0)+earned;
+  if(run.opened>previous){
+   const {xp,capped}=awardPackXp(w,run.packId,run.opened-previous,now);
+   run.playerXpEarned=(run.playerXpEarned||0)+xp;
+   if(capped)run.playerXpCappedPacks=(run.playerXpCappedPacks||0)+capped;
+  }
   if(run.opened===run.quantity){w.lastPull=run;w.pending=null;}
  }},
  'upgrade.buy':{run:({w,args:{key:id,expectedLevel,mode=1}})=>{

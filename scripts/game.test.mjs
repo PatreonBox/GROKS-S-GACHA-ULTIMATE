@@ -17,7 +17,7 @@ import {STEP,makeCourse,newAttempt,advanceRunner} from '../web/remix-physics.js'
 import {stageFor,settleCampaignClear} from '../web/campaign.js';
 import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/card-economy.js';
 import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
-import {playerProgress,packPlayerXp} from '../web/player-progression.js';
+import {playerProgress,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
 import {housePlacementError,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
 
@@ -193,6 +193,48 @@ test('player level starts at zero and pack experience credits each opening once'
  assert.equal(wallet.playerXp,70);
  assert.equal(wallet.lastPull.playerXpEarned,70);
  assert.deepEqual(packs.map(pack=>packPlayerXp(pack.id)),[7,12,12,22,31,44,61,83]);
+});
+
+test('pack XP shares a rolling 50-opening cap without stopping card pulls',async t=>{
+ const start=Date.now(),minute=60_000;
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),player=await f.open(),baseXp=playerXpAt(8);
+ f.store(player.id,w=>{w.playerXp=baseXp;w.coins=3_000_000;});
+ const command=async(action,args,requestId)=>{
+  const response=await f.command(player,action,args,requestId);
+  assert.equal(response.status,200);
+  return (await response.json()).wallet;
+ };
+ const buy=async(packId,quantity)=>(await command('pack.buy',{packId,quantity})).pending.id;
+ const open=(id,opened,requestId)=>command('pack.advance',{id,opened},requestId);
+ const common=await buy('common',10);
+ assert.equal((await open(common,4)).playerXp,baseXp+28);
+ t.mock.timers.setTime(start+20*minute);
+ assert.equal((await open(common,10)).playerXp,baseXp+70);
+ const rare=await buy('rare',50),retry=crypto.randomUUID();
+ const [credited,replayed]=await Promise.all([open(rare,50,retry),open(rare,50,retry)]);
+ for(const wallet of [credited,replayed]){
+  assert.equal(wallet.playerXp,baseXp+550);
+  assert.equal(wallet.lastPull.playerXpEarned,480);
+  assert.equal(wallet.lastPull.playerXpCappedPacks,10);
+  assert.deepEqual(packXpAllowance(wallet),{remaining:0,nextAt:start+60*minute});
+ }
+ assert.equal((await open(rare,50)).playerXp,baseXp+550);
+ const house=await command('kingdom.house',{x:-7.54,z:7.22,rotation:1});
+ assert.equal(house.playerXp,baseXp+605);
+
+ t.mock.timers.setTime(start+60*minute-1);
+ const capped=await open(await buy('common',1),1);
+ assert.equal(capped.playerXp,baseXp+605);
+ assert.equal(capped.lastPull.playerXpCappedPacks,1);
+ assert.equal(capped.lastPull.rows.length,5);
+ t.mock.timers.setTime(start+60*minute);
+ assert.deepEqual(packXpAllowance(await f.wallet(player)),{remaining:4,nextAt:start+80*minute});
+ const mixed=await open(await buy('uncommon',10),10);
+ assert.equal(mixed.playerXp,baseXp+653);
+ assert.equal(mixed.lastPull.playerXpCappedPacks,6);
+ t.mock.timers.setTime(start+80*minute);
+ assert.equal(packXpAllowance(await f.wallet(player)).remaining,46);
 });
 
 test('power rankings backfill distinct owned cards and sort by trained card stats',async()=>{

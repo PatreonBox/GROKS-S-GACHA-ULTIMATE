@@ -1,5 +1,27 @@
 const perPack={common:7,uncommon:12,rare:12,'super-rare':22,epic:31,legendary:44,mythic:61,godly:83};
 export const packPlayerXp=id=>perPack[id]||0;
+export const packXpLimit=50;
+const packXpWindowMs=60*60*1000;
+const recentPackOpenings=(wallet,now)=>(wallet?.packXpOpenings||[]).filter(at=>at>now-packXpWindowMs);
+
+export function packXpAllowance(wallet,now=Date.now()){
+ const recent=recentPackOpenings(wallet,now);
+ return {
+  remaining:packXpLimit-recent.length,
+  nextAt:recent.length?Math.min(...recent)+packXpWindowMs:0
+ };
+}
+
+export function awardPackXp(wallet,packId,count,now){
+ const recent=recentPackOpenings(wallet,now);
+ const packs=Math.min(count,packXpLimit-recent.length);
+ const xp=packs*packPlayerXp(packId);
+ if(xp>0){
+  wallet.packXpOpenings=recent.concat(Array(packs).fill(now));
+  awardPlayerXp(wallet,xp);
+ }
+ return {xp,capped:count-packs};
+}
 
 const levelStart=level=>120*level+17*level*(level-1)+level*(level-1)*(2*level-1)/3;
 export function playerProgress(totalXp){

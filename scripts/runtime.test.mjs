@@ -16,6 +16,15 @@ import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
 
+test('a thumbnail that times out during download returns a recoverable response',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>new Response(new ReadableStream({
+  start(controller){controller.error(new DOMException('Thumbnail download timed out','TimeoutError'));}
+ }),{headers:{'Content-Type':'image/webp'}}));
+ const response=await worker.fetch(new Request(publicOrigin+'/api/thumbnail/1314/small'));
+ assert.equal(response.status,503);
+ assert.equal(response.headers.get('Cache-Control'),'no-store');
+});
+
 test('Discord PKCE sign-in claims the online guest save once',async()=>{
  const {DB,sqlite}=openGameDatabase(':memory:');
  const clientId='1570000000000000000',userId='1580000000000000000';

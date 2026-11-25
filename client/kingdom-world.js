@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,residentPath} from './kingdom-model.js';
+import {createHousePreview} from './house-preview.js';
 import {houseHeight,houseSize,plotBounds,visitorSlots} from '../web/kingdom-rules.js';
 
 const clamp=THREE.MathUtils.clamp;
@@ -136,7 +137,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  controls.listenToKeyEvents(canvas);
  const offset=new THREE.Vector3(),pointer=new THREE.Vector2(),ray=new THREE.Raycaster();
  const motion=matchMedia('(prefers-reduced-motion: reduce)').matches;
- let selected='tower',hovered=null,build=null,frame=0,last=0,elapsed=0,inView=true,disposed=false,candidate=null;
+ let selected='tower',hovered=null,build=null,preview=null,previewOpen=false;
+ let frame=0,last=0,elapsed=0,inView=true,disposed=false,candidate=null;
  const fingers=new Set(),listeners=new AbortController(),signal=listeners.signal;
 
  function resize(){
@@ -265,7 +267,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  }
  function render(now){
   frame=0;
-  if(document.hidden||!inView||disposed)return;
+  if(document.hidden||!inView||disposed||previewOpen)return;
   const delta=last?Math.min(.05,(now-last)/1000):0;
   last=now;elapsed+=delta;
   controls.update(delta);
@@ -278,8 +280,16 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
   frame=requestAnimationFrame(render);
  }
  function wake(){
-  if(frame||document.hidden||!inView||disposed)return;
+  if(frame||document.hidden||!inView||disposed||previewOpen)return;
   last=0;frame=requestAnimationFrame(render);
+ }
+ function setHousePreview(canvas){
+  if(canvas){
+   if(!preview)preview=createHousePreview(canvas,houseModel);
+   else preview.resize();
+  }
+  previewOpen=Boolean(canvas);
+  wake();
  }
  const viewport=new IntersectionObserver(entries=>{inView=entries[0].isIntersecting;wake()});
  viewport.observe(canvas);
@@ -292,10 +302,11 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
   disposed=true;
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
+  preview?.dispose();
   scene.add(houseModel);
   release(scene);
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();
  }
- return {select,setCube:owner.setCube,setPlot,setBuild,panMode,zoom,reset,dispose};
+ return {select,setCube:owner.setCube,setPlot,setBuild,setHousePreview,panMode,zoom,reset,dispose};
 }
