@@ -10,10 +10,14 @@ export const campaignStages=[
  {name:'Water Bound',team:[7054561,4957691,5155022,4706930],captain:'Supersonic',first:3400000,master:1200000,turns:14,shield:.28,charge:3,power:1.10},
  {name:'Tie in a chess',team:[10565740,42584142,86407629,149992717],captain:'GRIEF',firstClear:300_000_000_000,master:12000000,turns:14,hp:1.16,power:1.12,shield:.25,openCast:true}
 ];
-export const campaignFirstMultiplier=30;
-export const campaignRepeatMultiplier=2;
-export const campaignFirstCoins=stage=>stage.firstClear??stage.first*campaignFirstMultiplier;
-export const campaignMasterCoins=(stage,first)=>stage.master*(first?campaignFirstMultiplier:campaignRepeatMultiplier);
+const rewardScale=.4;
+const legacyFirstMultiplier=30,legacyRepeatMultiplier=2;
+export const campaignFirstMultiplier=legacyFirstMultiplier*rewardScale;
+export const campaignRepeatMultiplier=legacyRepeatMultiplier*rewardScale;
+export const campaignFirstCoins=(stage,legacy=false)=>Math.floor((stage.firstClear??stage.first*legacyFirstMultiplier)*(legacy?1:rewardScale));
+export const campaignMasterCoins=(stage,first,legacy=false)=>campaignBounty(stage.master,first,legacy);
+export const campaignBounty=(bounty,first,legacy=false)=>Math.floor(bounty*(first?
+ (legacy?legacyFirstMultiplier:campaignFirstMultiplier):(legacy?legacyRepeatMultiplier:campaignRepeatMultiplier)));
 export const stageFor=tier=>campaignStages[tier-1];
 export const medalCount=record=>record?1+Number(record.tempo)+Number(record.squad):0;
 export const stageCleared=(w,tier)=>Boolean(w.campaign?.[tier]);
@@ -31,7 +35,7 @@ export function stageRules(stage){
 }
 export function configureCampaignBattle(b){
  const stage=stageFor(b.tier);
- b.campaign=b.tier;b.charge=stage.charge||b.charge;
+ b.campaign=b.tier;b.campaignRewardVersion=2;b.charge=stage.charge||b.charge;
  const bossIndex=b.enemies.length-1;
  if(stage.openCast)b.enemyTurn=bossIndex;
  for(const [i,u] of b.enemies.entries()){
@@ -55,12 +59,13 @@ export function settleCampaignClear(w,b,survivors){
  };
  const earnedMedals=medalCount(record)-medalCount(prior);
  const first=!prior,mastered=medalCount(record)===3&&medalCount(prior)<3;
- const multiplier=first?campaignFirstMultiplier:campaignRepeatMultiplier;
- // Bank the first-clear increase on victory. Incomplete attempts earn the standard campaign bounty.
+ const legacy=b.campaignRewardVersion!==2;
+ // Award the first-clear multiplier and any rounding remainder when the player wins.
  const bounties=b.enemies.reduce((total,unit)=>total+(unit.hp?0:unit.bounty),0);
- const bountyBonus=Math.max(0,bounties*multiplier-b.earned);
- const clearPrize=first?campaignFirstCoins(stage):0;
- const masteryPrize=mastered?campaignMasterCoins(stage,first):0;
+ const bountyBonus=Math.max(0,campaignBounty(bounties,first,legacy)-b.earned);
+ const clearPrize=first?campaignFirstCoins(stage,legacy):0;
+ const masteryPrize=mastered?campaignMasterCoins(stage,first,legacy):0;
+ record.clearPrize=first?clearPrize:prior.clearPrize??campaignFirstCoins(stage,true);
  if(masteryPrize)record.masteryPrize=masteryPrize;
  else if(prior?.masteryPrize!==undefined)record.masteryPrize=prior.masteryPrize;
  w.campaign[b.campaign]=record;

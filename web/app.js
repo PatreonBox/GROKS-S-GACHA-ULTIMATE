@@ -59,7 +59,7 @@ function drawTierNav() {
    return '<a class="tier-link standard-'+slug+(active?' selected':'')+'" href="#stars/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/'+slug+'.webp" alt=""><span><strong>'+tier.name+'</strong><small>'+range+' '+(range==='1'?'star':'stars')+'</small></span></a>';
   }).join('');
  }
- const nav=$('tierNav');nav.hidden=['saved','gacha','battle','cubes'].includes(section)||isStarList();
+ const nav=$('tierNav');nav.hidden=['saved','gacha','battle','kingdom'].includes(section)||isStarList();
  if(nav.hidden)return;
  nav.innerHTML=Object.entries(tierNames).map(([slug, label])=>{
   const meta=seed.demonTiers?.[slug],active=section==='demons'&&activeTier===slug;
@@ -74,7 +74,7 @@ function setSection(route){
  clearTimeout(timer);
  document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===section);if(b.dataset.tab===section)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
  $('showcase').hidden=section!=='leaderboard';drawTierNav();
- const inArcade=['gacha','battle','cubes'].includes(section);
+ const inArcade=['gacha','battle','kingdom'].includes(section);
  document.querySelector('.board').hidden=inArcade;
  arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null);
  guides.select(sectionGuideId(section,activeTier));
@@ -270,7 +270,7 @@ $('pageJump').onsubmit=event=>{
 };
 function changePage(delta){if(delta>0&&!nextPage||page+delta<0)return;if(section==='leaderboard'&&!offline&&delta>0)cursors[page+1]=nextPage;page+=delta;loadPage();if(document.querySelector('.board').getBoundingClientRect().top<0)document.querySelector('.board').scrollIntoView({block:'start'})}
 $('nextPage').onclick=()=>changePage(1);$('prevPage').onclick=()=>changePage(-1);
-document.addEventListener('keydown',e=>{if(e.key==='/'&&!['gacha','battle','cubes'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!['gacha','battle','kingdom'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
 window.addEventListener('hashchange',()=>seed&&setSection(location.hash.slice(1)));
 async function init(){try{const r=await fetch('/data/start.json');if(!r.ok)throw Error('init');seed=await r.json();localImages=new Set(seed.images);initialRows=seed.top;storeRows(initialRows);storeRows(seed.featured.map(x=>x.row));storeRows([...saved.values()].filter(r=>!rowMap.has(r[0])));featured();podium();refreshSaves();changeLayout(layout==='grid'?'grid':'list');if(!location.hash||location.hash==='#leaderboard'){render(initialRows.slice(0,20),seed.indexed,true,'index');$('retry').hidden=true}setSection(location.hash.slice(1));demons().catch(()=>{})}catch{$('resultMeta').textContent='Could not open the index.';$('results').innerHTML='<button class="outline" id="retryInit">Retry</button>';$('retryInit').onclick=init}}
 async function start(){

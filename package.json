@@ -9,6 +9,7 @@
     "start": "node server/runtime.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "three": "0.179.1"
   }
 }

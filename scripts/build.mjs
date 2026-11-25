@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {brotliCompressSync,gzipSync,gunzipSync,constants} from 'node:zlib';
 import {build} from 'esbuild';
+import {kingdomBundle} from './kingdom-bundle.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));process.chdir(root);
 restoreAssets(new URL('../',import.meta.url));
 const types={'.mp3':'audio/mpeg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.woff2':'font/woff2','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.svg':'image/svg+xml'};
@@ -47,6 +48,8 @@ function collect(dir){
  }
 }
 collect('web');
+const kingdomJs=await kingdomBundle(true);
+assets['/kingdom-world.js']=['text/javascript','br',brotliCompressSync(kingdomJs,{params:{[constants.BROTLI_PARAM_QUALITY]:6}}).toString('base64')];
 const entry=`
 import {api} from './server/api.mjs';
 import {mediaResponse} from './server/media-range.mjs';

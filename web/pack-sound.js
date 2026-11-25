@@ -20,7 +20,8 @@ export function revealSpacing(tier,rank,odds,id){
  return Math.max(280,Math.round((length+(remix?memeCues[remix.cue][1]+.06:0)+.04)*1000));
 }
 const asset='/assets/audio/arcade-v3.mp3';
-const gameSamples={arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3',ui:'/assets/audio/soft-ui-tap.mp3'};
+const gameSamples={arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3',ui:'/assets/audio/soft-ui-tap.mp3',
+ coin:'/assets/audio/mine-coin.mp3',coinDrop:'/assets/audio/coin-drop.mp3'};
 const gameCues={
  jump:[[.05,.26],'sweep','gameMove'],
  orb:[[.55,.36],'charged','gameMove'],
@@ -28,6 +29,8 @@ const gameCues={
  forge:[[2.05,.42],'forge','gameMove'],
  mintTap:[[.025,.198],'mine','coin','mint'],
  mintUnlock:[[.445,.46],'extraAccent','coin','mint'],
+ coin:[[0,.39],'mine','coinTap','coin'],
+ coinDrop:[[0,.95],'extraAccent','coinDrop','coinDrop'],
  uiTap:[[0,.13],'select','ui','ui']
 };
 const slideRates=[.94,.99,1.04,1.10,1.16,1.23];
@@ -41,7 +44,7 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,coin:2,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,coin:2,coinTap:5,coinDrop:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
@@ -138,6 +141,22 @@ export function createPackSound(){
   if(gameBuffer&&ctx.state==='running'){cueSerial++;emitClip(gameBuffer,clip,lane,rate,pan,level);}
   else play(fallback,{rate,pan,level});
  }
+ function coinReward(large,pans=[0]){
+  if(!enabled||document.hidden)return;
+  const cue=large?'coinDrop':'coin',epoch=generation;
+  const loading=prepareGame(cue);
+  function receive(){
+   if(!enabled||document.hidden||epoch!==generation)return;
+   if(large){playGame(cue,{level:.85});return}
+   pans.forEach((pan,i)=>{
+    const clip=()=>playGame(cue,{pan,rate:.96+Math.random()*.14,level:.50});
+    if(i===0){clip();return}
+    const timer=setTimeout(()=>{accents.delete(timer);clip()},i*36);
+    accents.add(timer);
+   });
+  }
+  if(loading)loading.then(receive);else receive();
+ }
  function play(name,{rate=1,pan=0,level=1,seed=0}={}){
   if(!enabled||!ctx||document.hidden)return;
   cueSerial++;
@@ -190,7 +209,9 @@ export function createPackSound(){
   const controls='button:not(:disabled),a[href],summary,select:not(:disabled),input[type=checkbox]:not(:disabled),input[type=radio]:not(:disabled)';
   const uiControl=target=>target.closest?.(controls)&&!target.closest('#mineHit,.turn-handle,[data-tear]');
   document.addEventListener('pointerdown',event=>{
-   if(event.button===0&&uiControl(event.target))prepareGame('ui');
+   if(event.button!==0)return;
+   if(uiControl(event.target))prepareGame('ui');
+   if(!gameBuffers.has('coinDrop'))prepareGame('coinDrop');
   },true);
   document.addEventListener('click',event=>{
    if(!enabled||!uiControl(event.target))return;
@@ -203,5 +224,5 @@ export function createPackSound(){
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
  window.addEventListener('pagehide',stop);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,listenForUiTaps,sweep,land,score,stopScore};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,coinReward,listenForUiTaps,sweep,land,score,stopScore};
 }

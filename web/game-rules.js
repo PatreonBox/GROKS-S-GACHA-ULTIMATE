@@ -2,7 +2,7 @@ import {cardCategories,difficulties,packs,packQuantities,rollPacks,upgrades,quot
  grantCoinCode,applyFeeding,fuseCollection} from './pack-engine.js';
 import {createMergePlanner,extremeTable,gemTenths,levelRewardTenths} from './card-economy.js';
 import {starterCube,cubeCatalogVersion,claimCube} from './cube-catalog.js';
-import {settleMine,mineTapPower,buyMineMachine,buyMineSkill} from './mine-economy.js';
+import {settleMine,mineTapPower,mineTapBatch,buyMineMachine,buyMineSkill} from './mine-economy.js';
 import {makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
@@ -106,16 +106,20 @@ const rules={
   if(!seen.includes(id)&&seen.length<128)seen.push(id);
  }},
  'mine.collect':{run:({income})=>({receipt:income})},
- 'mine.tap':{run:({w,now,online})=>{
+ 'mine.tap':{run:({w,args:{count=1},now,online})=>{
+  requireRule(within(count,1,mineTapBatch),'Choose a valid number of taps.');
+  let accepted=count,retryAfter=0;
   if(online){
+   const burst=36,refill=.016;
    const old=w.tapLimit;
-   const credit=Math.min(12,old?old.credit+Math.max(0,now-old.at)*.012:12);
-   w.tapLimit={at:now,credit:Math.max(0,credit-1)};
-   if(credit<1){w.tapLimit.credit=credit;return {gain:0};}
+   const credit=Math.min(burst,old?old.credit+Math.max(0,now-old.at)*refill:burst);
+   accepted=Math.min(count,Math.floor(credit));
+   w.tapLimit={at:now,credit:credit-accepted};
+   if(accepted<count)retryAfter=Math.ceil((Math.min(mineTapBatch,count-accepted)-w.tapLimit.credit)/refill);
   }
-  const gain=Math.min(Number.MAX_SAFE_INTEGER-w.coins,mineTapPower(w.mine));
+  const gain=Math.min(Number.MAX_SAFE_INTEGER-w.coins,accepted*mineTapPower(w.mine));
   w.coins+=gain;
-  return {gain};
+  return {gain,accepted,retryAfter};
  }},
  'mine.machine':{run:({w,args,now})=>buyMineMachine(w,args.id,args.mode,now)},
  'mine.skill':{run:({w,args,now})=>{requireRule(key(args.id),'Choose a mine skill.');buyMineSkill(w,args.id,now);}},

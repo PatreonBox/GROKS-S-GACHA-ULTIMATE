@@ -16,7 +16,9 @@ import {revealSpacing} from './pack-sound.js';
 import {skillsFor,trainingLabel} from './card-skills.js';
 import {statsFor} from './battle-engine.js';
 import {createCubeShop} from './cube-shop.js';
+import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {createCoinMine} from './coin-mine.js';
+import {createKingdom} from './kingdom.js';
 import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,skillOwned} from './mine-economy.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
@@ -39,7 +41,7 @@ const coin='<img class="gd-coin" src="/assets/packs/coin.png" alt="">';
 const faceIcon=label=>'<img class="p-face" src="'+cardFace(label)+'" alt="">';
 const colors=p=>'--foil:'+p.color+';--ink:'+p.dark;
 const setText=(sel,text)=>{const el=byId(sel);if(el)el.textContent=text};
-const tabLinks=[['shop','Pack shop','Shop'],['collection','My cards','Cards'],['index','Card index','Index'],['merge','Merge station','Merge'],['mine','Coin mine','Mine'],['upgrades','Upgrades','Upgrades']];
+const tabLinks=[['shop','Pack shop','Shop','pack'],['collection','My cards','Cards','grid'],['index','Card index','Index','list'],['merge','Merge station','Merge','grid'],['mine','Coin mine','Mine','mine'],['upgrades','Upgrades','Upgrades','spark'],['cubes','Cube shop','Cubes','box']];
 const tabVisit=key=>'gacha-tab-'+key+'-1';
 const plural=n=>n===1?'pack':'packs';
 const visiblePackLimit=10;
@@ -78,34 +80,48 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  const army=createArmyRoom({root:byId('armyRoom'),sound,coverSource,enc,getWallet:()=>wallet,applyWallet,rewards});
  const stations=cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,openLevel,announce});
  const board=playerBoard({enc,faceIcon});
- const cubes=createCubeShop({root:byId('cubeShop'),applyWallet,sound,announce});
+ const cubeRoot=document.createElement('section');
+ cubeRoot.id='cubeShop';
+ const cubes=createCubeShop({root:cubeRoot,applyWallet,sound,announce});
+ const kingdom=createKingdom(byId('kingdomRoom'),sound);
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
- const markCubeNav=()=>{byId('cubeNew').hidden=seenGuide(newAreas.cubes)};
- markCubeNav();
+ const markKingdomNav=()=>{
+  const badge=byId('kingdomNew'),visited=seenGuide(newAreas.kingdom);
+  badge.hidden=visited;
+  if(visited)badge.parentElement.removeAttribute('aria-describedby');
+  else badge.parentElement.setAttribute('aria-describedby',badge.id);
+ };
+ markKingdomNav();
  const failure=e=>announce(e?.message||'Could not save this change. Please try again.');
- function applyWallet(w){
+ function applyWallet(w,{pans=[],credited=0}={}){
   const first=!wallet,oldLuck=wallet?.luck;wallet=w;walletError='';refreshId++;
   cubes.setWallet(w);
+  kingdom.setWallet(w);
   if(view==='collection'&&collectionSort==='rarity'&&oldLuck!==w.luck&&byId('binderResults'))binder();
   if(first&&['merge','index','vault'].includes(view))stations.show(view,w);battle.setWallet(w);army.setWallet(w);
   coinMine.setWallet(w);
-  refreshCoins(true);
+  refreshCoins(true,pans,credited);
   byId('gemLink').title=number(w.gems)+' gems';
   byId('gemLink').setAttribute('aria-label',number(w.gems)+' gems. Open upgrades');
   if(view==='upgrades')renderUpgrades();
   if(view==='results')resultsPage();
   refreshActivity();
  }
- function refreshCoins(force=false){
+ function refreshCoins(force=false,pans=[],credited=0){
   if(!wallet)return;
   const coins=wallet.coins+mineEarnings(wallet).coins;
   if(!force&&coins===displayedCoins)return;
-  const increment=force?0:coins-displayedCoins;
+  const previous=displayedCoins<0?(credited?coins-credited:coins):displayedCoins;
+  const gain=coins-previous;
   displayedCoins=coins;
   rewards.balance({coins,gems:wallet.gems});
   byId('walletLink').title=number(coins)+' coins';
   byId('walletLink').setAttribute('aria-label',number(coins)+' coins. Open the coin mine');
-  coinMine.setCoins(coins,increment);
+  coinMine.setCoins(coins,force?0:gain);
+  kingdom.setCoins(coins);
+  if(gain>0&&gain>previous*.5)sound.coinReward(true);
+  else if(pans.length)sound.coinReward(false,pans);
+  else if(gain>0&&view==='mine'&&(!force||credited))sound.coinReward(false);
   if(view==='shop')updatePurchase();
   updateSectionAlerts();
  }
@@ -125,7 +141,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    }
    if(epoch!==refreshId)return;
    const ticket=away?rewards.reserve('coins',receipt.coins):null;
-   applyWallet(next);
+   applyWallet(next,{credited:away?receipt.coins:0});
    if(ticket)rewards.launch(ticket,rewardOrigin(byId('mineHit')||byId('walletLink')));
   }).catch(()=>{if(!wallet)sync()}).finally(()=>{savingMine=null});
   return savingMine;
@@ -160,7 +176,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    index:activity?.unclaimed?'Gems to claim':'',
    merge:activity?.mergeReady?'Merge ready':'',
    mine:canBuyMachine||canBuySkill?'Unlock ready':'',
-   upgrades:Object.keys(upgrades).some(id=>quoteUpgrade(id,wallet[id]||0,wallet.gems).affordable)?'Upgrade ready':''
+   upgrades:Object.keys(upgrades).some(id=>quoteUpgrade(id,wallet[id]||0,wallet.gems).affordable)?'Upgrade ready':'',
+   cubes:cubeCatalog.some(cube=>!ownsCube(wallet,cube.id)&&displayedCoins>=cube.price)?'Cube available':''
   };
  }
  function updateSectionAlerts(){
@@ -196,16 +213,17 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   }).catch(()=>{if(request===activityRequest){activityKey='';activityRetryAt=Date.now()+15000;}});
  }
  function sectionNav(){
-  return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'?'aria-current="page"':'')+' href="#gacha'+(key==='shop'?'':'/'+key)+'">'+ico(key==='shop'?'pack':key==='mine'?'mine':key==='upgrades'?'spark':'grid')+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small></a>').join('')+'</nav>';
+  return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short,icon])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'?'aria-current="page"':'')+' href="#gacha'+(key==='shop'?'':'/'+key)+'">'+ico(icon)+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small></a>').join('')+'</nav>';
  }
  function page(next){
   if(view!==next){stopTimers();rewards.clear()}
   stations.leave();board.leave();coinMine.leave();version++;view=next;const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army';
-  root.hidden=!view||combat||next==='cubes';battle.show(classic,next==='training',next==='arcade');army.show(next==='army');
-  cubes.show(next==='cubes');
-  if(next==='cubes'){markGuide(newAreas.cubes);markCubeNav()}
+  const home=next==='kingdom';
+  root.hidden=!view||combat||home;battle.show(classic,next==='training',next==='arcade');army.show(next==='army');
+  cubes.show(false);kingdom.show(home);
+  if(home){markGuide(newAreas.kingdom);markKingdomNav()}
   if(reveal.open)reveal.close();
-  if(!view||combat||next==='cubes')return;
+  if(!view||combat||home)return;
   sound.preload();
   const destination=next==='vault'?'index':next;
   if(tabLinks.some(([key])=>key===destination))markGuide(tabVisit(destination));
@@ -215,6 +233,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   if(view==='results'){root.innerHTML='<div id="arcBody"></div>';resultsPage();window.scrollTo(0,0);bestSound()}
   if(view==='shop')shop();
   if(view==='mine'){coinMine.show(byId('arcBody'),wallet);if(wallet)coinMine.setCoins(displayedCoins)}
+  if(view==='cubes'){byId('arcBody').append(cubeRoot);cubes.show(true)}
   if(view==='upgrades')renderUpgrades();
   if(view==='collection'){
    byId('arcBody').innerHTML='<div class="collection-head"><h2>My cards</h2><a class="outline" href="#gacha/merge">Merge duplicates</a><span id="ownedTotal"></span></div><div class="collection-tools"><input id="cardSearch" type="search" placeholder="Search your cards" aria-label="Search your cards" maxlength="80"><select id="cardCategory" aria-label="Card difficulty"><option value="all">All difficulties</option>'+cardCategories.map(d=>'<option>'+d+'</option>').join('')+'</select><select id="cardSort" aria-label="Sort your cards"><option value="recent">Recently pulled</option><option value="difficulty">Difficulty · hardest first</option><option value="rarity">Rarest first</option><option value="copies">Most copies</option></select><select id="rarityPack" aria-label="Pack used for rarity" hidden><option value="all">All packs equally</option>'+packs.map(p=>'<option value="'+p.id+'">'+p.name+' pack</option>').join('')+'</select></div><p id="rarityHint" class="rarity-hint" hidden>Odds use your current luck and rarest owned finish. All packs equally averages the odds across packs.</p><div id="binderResults"></div>';
@@ -496,11 +515,17 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    '<p class="pull-odds-note">Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,drawChance:item})).join('')+'</div>'+
    '<div class="result-actions"><a class="outline" href="#gacha/collection">My cards</a><a class="primary" href="#gacha">Continue</a></div></section>';
  }
+ function lastHandShown(){return stage==='shown'&&packIndex+1===run.quantity}
+ function revealActions(){
+  if(lastHandShown())return '<button type="button" class="reveal-continue" data-next>Click anywhere to continue</button>';
+  return (stage==='shown'?'<button class="primary" data-next>Next pack</button>':'')+
+   '<button class="outline" data-skip title="Show the rarest qualifying pull before results">Skip opening</button>';
+ }
  function drawReveal(){
   const p=packs.find(x=>x.id===run.packId),remaining=run.quantity-packIndex;
   reveal.style.setProperty('--foil',p.color);reveal.style.setProperty('--ink',p.dark);
-  const ready=stage==='shown',showPack=stage==='sealed'||stage==='peeling';
-  const controls=ready?'<button class="primary" data-next>'+(remaining===1?'See results':'Next pack')+'</button>':'';
+  const showPack=stage==='sealed'||stage==='peeling';
+  reveal.classList.toggle('hand-complete',lastHandShown());
   const hand=pullCards(run,packIndex);
   let content;
   if(showPack){
@@ -512,9 +537,13 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    content='<div class="opening-arena"><div class="reveal-grid hand-grid" style="--hand:'+hand.length+'">'+hand.map((x,i)=>card(x.row,{index:i,deal:stage==='dealing',bonus:x.bonus,fresh:x.fresh,finish:x.finish,drawChance:x})).join('')+'</div></div>';
   }
   const sub='Pack '+(packIndex+1)+' of '+run.quantity+(!showPack?' · Rarest first':'');
-  reveal.innerHTML='<div class="opening-theater"><div class="reveal-bar"><span>PACK OPENING</span><div class="reveal-tools">'+speaker(false)+'<button class="iconbtn" data-close-reveal aria-label="Close pack opening">'+ico('x')+'</button></div></div><h2 id="revealTitle">'+p.name+' Gacha</h2><p class="run-info">'+sub+'</p>'+content+'<div class="reveal-actions">'+controls+'<button class="outline" data-skip title="Show the rarest qualifying pull before results">Skip opening'+'</button></div></div>';
+  reveal.innerHTML='<div class="opening-theater"><div class="reveal-bar"><span>PACK OPENING</span><div class="reveal-tools">'+speaker(false)+'<button class="iconbtn" data-close-reveal aria-label="Close pack opening">'+ico('x')+'</button></div></div><h2 id="revealTitle">'+p.name+' Gacha</h2><p class="run-info">'+sub+'</p>'+content+'<div class="reveal-actions">'+revealActions()+'</div></div>';
   reveal.scrollTop=0;
   if(stage==='sealed')reveal.querySelector('[data-tear]')?.focus({preventScroll:true});
+  if(stage==='shown'){
+   if(lastHandShown())for(const card of reveal.querySelectorAll('.hand-grid .level-card'))card.tabIndex=-1;
+   reveal.querySelector('[data-next]')?.focus({preventScroll:true});
+  }
  }
  const reduced=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
  function peel(){
@@ -534,12 +563,17 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    const hand=pullCards(active,packIndex);
    function finishHand(){
     stage='shown';
-    for(const el of cards){el.disabled=false;delete el.dataset.unseen}
+    const final=lastHandShown();
+    for(const el of cards){
+     el.disabled=false;delete el.dataset.unseen;
+     if(final)el.tabIndex=-1;
+    }
+    reveal.classList.toggle('hand-complete',final);
     const actions=reveal.querySelector('.reveal-actions');
-    actions.insertAdjacentHTML('afterbegin','<button class="primary" data-next>'+(packIndex+1===run.quantity?'See results':'Next pack')+'</button>');
+    actions.innerHTML=revealActions();
     actions.querySelector('[data-next]').focus({preventScroll:true});
    }
-   if(quick){landPull(hand[0],0,0);finishHand();return}
+   if(quick){if(hand[0])landPull(hand[0],0,0);finishHand();return}
    for(const el of cards){el.dataset.unseen='';el.disabled=true}
    function dealNext(i){
     if(!current())return;
@@ -576,11 +610,13 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   // When that card is already on screen, let its scene finish without replaying it.
   const currentHighlight=skip&&activeRare&&activeRare.drawIndex===rarestHighlight(active)?.drawIndex?activeRare.scene:null;
   stopTimers(Boolean(currentHighlight));stage='saving';
+  const nextButton=reveal.querySelector('[data-next]');
+  if(nextButton)nextButton.disabled=true;
   const current=()=>reveal.open&&run===active;
   let w;
   try{w=await advanceOpening(active.id,opened)}
   catch(error){
-   if(current()){stopTimers();stage='sealed';drawReveal()}
+   if(current()){stopTimers();stage=skip?'sealed':'shown';drawReveal()}
    failure(error);return;
   }
   applyWallet(w);
@@ -611,6 +647,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  reveal.onclick=e=>{
   if(e.target.closest('[data-reveal-sound]')){toggleSound();return}
   if(e.target.closest('[data-close-reveal],[data-done],[data-collection]')){reveal.close();return}
+  if(lastHandShown()){progress(false);return}
   if(e.target.closest('[data-skip]')){progress(true);return}
   if(e.target.closest('[data-tear]')){peel();return}
   if(e.target.closest('[data-next]')){progress(false);return}

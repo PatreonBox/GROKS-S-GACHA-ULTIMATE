@@ -227,7 +227,7 @@ const resultFrom = async (action,args,notice) => {
  return {wallet,...result};
 };
 export const collectMineIncome = () => resultFrom('mine.collect',{},null);
-export const mineCoin = () => resultFrom('mine.tap',{},'mine');
+export const mineCoin = count => resultFrom('mine.tap',{count},'mine');
 export const purchaseMineMachine = (id,mode) => resultFrom('mine.machine',{id,mode},'mine');
 export const purchaseMineSkill = id => walletFrom('mine.skill',{id},'mine');
 export const redeemCoinCode = code => resultFrom('mine.code',{code});

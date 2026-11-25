@@ -15,6 +15,8 @@ import {seededRandom,drillInput} from '../web/game-replay.js';
 import {findRemix} from '../web/remixes.js';
 import {STEP,makeCourse,newAttempt,advanceRunner} from '../web/remix-physics.js';
 import {stageFor,settleCampaignClear} from '../web/campaign.js';
+import {levelRewardTenths} from '../web/card-economy.js';
+import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
 
 const origin='https://game.example';
 const pool=createCardPool(path=>JSON.parse(fs.readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
@@ -136,12 +138,40 @@ test('browser transfer keeps existing progress and commits once across retries',
 test('server-clock mine earnings and idempotent credits',async()=>{
  const f=fixture(),session=await f.open();
  const id=crypto.randomUUID();
- for(const response of await Promise.all([f.command(session,'mine.tap',{},id),f.command(session,'mine.tap',{},id)]))assert.equal(response.status,200);
- assert.equal((await f.wallet(session)).coins,1501);
+ for(const response of await Promise.all([f.command(session,'mine.tap',{count:18},id),f.command(session,'mine.tap',{count:18},id)])){
+  assert.equal(response.status,200);
+  assert.equal((await response.json()).result.gain,18);
+ }
+ assert.equal((await f.wallet(session)).coins,1518);
+ for(const count of [0,25,1.5])assert.equal((await f.command(session,'mine.tap',{count})).status,400);
  f.store(session.id,w=>{w.mine={collectedAt:Date.now()-6*60*60*1000,machines:{cursor:1},skills:{},remainder:0};});
  const receipt=await f.command(session,'mine.collect').then(res=>res.json()).then(data=>data.result.receipt);
  assert.equal(receipt.elapsed,5*60*60*1000);
  assert(receipt.coins>0);
+});
+
+test('mine milestones double at 20 and the extra branches have prerequisites',()=>{
+ const mine={machines:{mint:19},skills:{}};
+ assert.equal(mineMachineRate(mine,'mint'),19*130);
+ mine.machines.mint=20;
+ assert.equal(mineMachineRate(mine,'mint'),20*130*2);
+ assert.equal(mineSkills.length,28);
+ assert.deepEqual(mineSkillRequirements({machines:{mint:8}},'receipts'),['Unlock Mint Network','Own 12 Shopkeepers']);
+ assert.deepEqual(mineSkillRequirements({machines:{mint:12},skills:{network:true}},'receipts'),[]);
+});
+
+test('demon index gems follow the new payouts and Extreme rank range',async()=>{
+ assert.deepEqual([6,7,8,9].map(tier=>levelRewardTenths(tier,0,0)),[25,30,40,60]);
+ assert.deepEqual([1,51,101,0].map(rank=>levelRewardTenths(10,rank,101)),[120,95,70,70]);
+ const f=fixture(),player=await f.open();
+ const rows=(await pool('Easy Demon')).slice(0,2);
+ f.addCards(player.id,rows);
+ const oldCard={id:rows[0][0],row:rows[0],copies:2,indexReward:3};
+ f.sqlite.prepare('UPDATE game_cards SET card=? WHERE player_id=? AND level_id=?').run(JSON.stringify(oldCard),player.id,oldCard.id);
+ const {wallet}=await f.command(player,'card.claim',{tier:6,ids:rows.map(row=>row[0])}).then(response=>response.json());
+ assert.equal(wallet.gems,12.5);
+ const {cards}=await f.call('/api/game?view=cards',player).then(response=>response.json());
+ assert.equal(cards.find(card=>card.id===oldCard.id).indexReward,3);
 });
 
 test('sign-in claims a verified guest save and preserves its cards',async()=>{
@@ -318,20 +348,23 @@ test('campaign first clears and replays award different bounties once',async()=>
   return {base,battle};
  }
  const first=await clear(),second=await clear();
- assert.equal(first.battle.earned,first.base*30+(stageFor(1).first+stageFor(1).master)*30);
- assert.equal(first.battle.campaignReceipt.clearPrize,18_000);
- assert.equal(second.battle.earned,second.base*2);
+ assert.equal(first.battle.earned,first.base*12+(stageFor(1).first+stageFor(1).master)*12);
+ assert.equal(first.battle.campaignReceipt.clearPrize,7_200);
+ assert.equal(second.battle.earned,Math.floor(second.base*.8));
  assert.equal(second.battle.campaignReceipt.clearPrize,0);
 });
-test('the final campaign stage pays its 300 billion first-clear prize only once',()=>{
- const w={coins:2000};
- const battle={campaign:10,seq:15,earned:2000,enemies:[{hp:0,bounty:1000}]};
+test('the final campaign stage pays its scaled prize once and preserves active legacy battles',()=>{
+ const w={coins:800};
+ const battle={campaign:10,campaignRewardVersion:2,seq:15,earned:800,enemies:[{hp:0,bounty:1000}]};
  settleCampaignClear(w,battle,2);
- assert.equal(battle.campaignReceipt.clearPrize,300_000_000_000);
- assert.equal(w.coins,300_000_030_000);
- const replay={campaign:10,seq:14,earned:2000,enemies:[{hp:0,bounty:1000}]};
+ assert.equal(battle.campaignReceipt.clearPrize,120_000_000_000);
+ assert.equal(w.coins,120_000_012_000);
+ const replay={...battle,seq:14,earned:800};
  settleCampaignClear(w,replay,3);
  assert.equal(replay.campaignReceipt.clearPrize,0);
- assert.equal(replay.campaignReceipt.masteryPrize,24_000_000);
- assert.equal(replay.earned,24_002_000);
+ assert.equal(replay.campaignReceipt.masteryPrize,9_600_000);
+ assert.equal(replay.earned,9_600_800);
+ const legacy={campaign:10,seq:15,earned:2000,enemies:[{hp:0,bounty:1000}]},oldWallet={coins:2000};
+ settleCampaignClear(oldWallet,legacy,2);
+ assert.equal(oldWallet.coins,300_000_030_000);
 });

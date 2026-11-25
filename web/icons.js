@@ -1,4 +1,7 @@
 const paths={
+ tower:'<path d="M5 21h14M7 20V9L12 3l5 6v11M5 9h14m-8 11v-5h2v5M12 11h.01"/>',
+ box:'<path d="m12 2 8.7 5v10L12 22l-8.7-5V7L12 2Zm0 10 8.7-5M12 12 3.3 7M12 12v10"/>',
+ pan:'<path d="M12 3v18m-9-9h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/>',
  lock:'<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v3"/>',
  zoomIn:'<circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5m-12-9.5h5m-2.5-2.5v5"/>',
  zoomOut:'<circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 5 5m-12-9.5h5"/>',

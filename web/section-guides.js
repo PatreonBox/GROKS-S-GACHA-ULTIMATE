@@ -45,7 +45,11 @@ export const sectionGuides={
  ]},
  'cube-shop':{title:'Cube shop',art:'/assets/cubes/01.webp',steps:[
   ['Pick a cube','Browse the catalog or filter to Owned. Purchase a cube with coins to unlock it.'],
-  ['Equip it','Your equipped cube appears when you play supported training drills and meme levels.']
+  ['Equip it','Your equipped cube explores your Kingdom and appears in supported training drills and meme levels.']
+ ]},
+ 'kingdom':{title:'Your Kingdom',art:'/assets/gd-kingdom-castle-icon.png',steps:[
+  ['Look around','Drag to orbit the plot. Use Pan to slide the camera, and zoom with the scroll wheel, pinch, or the on-screen buttons.'],
+  ['Inspect your plot','Select the starter tower or follow your roaming cube. Change its appearance in Gacha’s Cube shop.']
  ]},
  'battle-campaign':{title:'Battle campaign',art:'/assets/faces/demon-extreme.webp',steps:[
   ['Build a squad of four','Choose four different cards from your collection. Start at the earliest unlocked campaign stage.'],
@@ -79,9 +83,9 @@ export const sectionGuides={
 };
 
 const gachaGuides={shop:'pack-shop',collection:'my-cards',index:'card-index',vault:'secret-vault',
- merge:'merge-station',mine:'coin-mine',upgrades:'gem-upgrades',results:'pack-results'};
+ merge:'merge-station',mine:'coin-mine',upgrades:'gem-upgrades',results:'pack-results',cubes:'cube-shop'};
 const battleGuides={army:'army-mode',training:'training-zone',arcade:'meme-levels',players:'player-ranks'};
-const mainGuides={leaderboard:'level-leaderboard',stars:'star-levels',demons:'demon-lists',cubes:'cube-shop',saved:'saved-levels'};
+const mainGuides={leaderboard:'level-leaderboard',stars:'star-levels',demons:'demon-lists',kingdom:'kingdom',saved:'saved-levels'};
 
 export function sectionGuideId(section,tier){
  if(section==='gacha')return gachaGuides[tier];

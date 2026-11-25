@@ -67,12 +67,12 @@ export function extremeBandOdds(index,table,tierPercent,referenceTickets){
 }
 // The ledger uses tenths for every price and credit; balances stay compatible with existing saves.
 export const gemTenths=amount=>Math.round(amount*10);
-export const indexBaseTenths=[0,2,5,10,15,20,30,50,80,120,250];
+export const indexBaseTenths=[0,2,5,10,15,20,25,30,40,60,70];
 export function levelRewardTenths(tier,rank,lastRank){
  if(tier===impossibleTier)return impossibleGems*10;
  if(tier!==10||!(rank>0)||!(lastRank>1))return indexBaseTenths[tier]??0;
  const standing=Math.max(0,Math.min(1,(lastRank-rank)/(lastRank-1)));
- return 250+Math.round(250*standing);
+ return 70+Math.round(50*standing);
 }
 export const mergeGems=tier=>[1,1,2,2,3,4,6,8,11,15,22][tier];
 const duration={Tiny:0,Short:1,Medium:2,Long:3,XL:4,Platformer:2};

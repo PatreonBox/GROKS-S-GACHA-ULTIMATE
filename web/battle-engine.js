@@ -2,7 +2,7 @@ import {addCardXP,cardGrowth} from './card-growth.js';
 import {difficulties} from './pack-engine.js';
 import {gameCommand} from './game-client.js';
 
-import {stageFor,settleCampaignClear,campaignRepeatMultiplier} from './campaign.js';
+import {stageFor,settleCampaignClear,campaignBounty} from './campaign.js';
 import {impossibleCategory,impossibleCount} from './impossible-cards.js';
 import {extremeStage} from './card-economy.js';
 import {keyTarget} from './remixes.js';
@@ -146,7 +146,7 @@ export function playTurn(wallet,id,seq,move,target,now=Date.now(),random=Math.ra
   const source=b[attackingSide][extra.from],credit=source?{sourceId:source.id,sourceName:source.name}:{};
   if(!u.hp){
    if(side==='enemies'){
-    const bounty=u.bounty*(b.campaign?campaignRepeatMultiplier:1);
+    const bounty=b.campaign?campaignBounty(u.bounty,false,b.campaignRewardVersion!==2):u.bounty;
     b.kills++;b.earned+=bounty;wallet.coins=Math.min(Number.MAX_SAFE_INTEGER,wallet.coins+bounty);
     if(source){
      b.takedowns??={};b.takedowns[source.id]=(b.takedowns[source.id]||0)+1;

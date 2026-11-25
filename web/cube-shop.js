@@ -11,7 +11,7 @@ export function createCubeShop({root,applyWallet,sound,announce}){
   const equipped=equippedCube(wallet),owned=cubeCatalog.filter(c=>ownsCube(wallet,c.id));
   const list=ownedOnly?owned:cubeCatalog;
   root.innerHTML='<section class="cube-shop-hero" style="--cube:'+equipped.color+'">'+
-   '<div><h1>Cube shop</h1><p>Pick your player skin for training and the Meme Arcade.</p><div class="cube-shop-count">'+
+   '<div><h2>Cube shop</h2><p>Pick your cube for your Kingdom, training, and the Meme Arcade.</p><div class="cube-shop-count">'+
    '<span>'+owned.length+' / '+cubeCatalog.length+' owned</span><span>'+coin+stat(wallet.coins)+' coins</span></div></div>'+
    '<div class="cube-equipped"><img src="'+equipped.icon+'" alt=""><div><small>Equipped</small><strong>'+equipped.name+'</strong></div></div></section>'+
    '<div class="cube-catalog-head"><h2>Cube catalog</h2><div class="cube-filters" role="group" aria-label="Filter cubes"><button type="button" data-cube-filter="all" aria-pressed="'+!ownedOnly+'">All cubes</button><button type="button" data-cube-filter="owned" aria-pressed="'+ownedOnly+'">Owned</button></div></div>'+

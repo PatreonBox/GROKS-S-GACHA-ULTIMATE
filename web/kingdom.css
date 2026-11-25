@@ -1,0 +1,66 @@
+main:has(#kingdomRoom:not([hidden])){
+ width:min(1700px,100%);padding-inline:clamp(12px,2.4vw,42px);
+}
+.kingdom-heading{margin:0 0 13px}
+.kingdom-heading h1{margin:0}
+.kingdom-plot-stats svg,.kingdom-objects svg,.kingdom-stats svg,.kingdom-detail a svg{width:17px;height:17px;flex:none}
+.kingdom-frame{
+ position:relative;isolation:isolate;block-size:clamp(470px,66svh,820px);overflow:hidden;border:1px solid #43566a;border-radius:15px;
+ background:linear-gradient(170deg,#4787b3,#aad6d9 45%,#617448 46%,#233b25);
+}
+.kingdom-frame canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.kingdom-frame canvas[data-dragging="true"]{cursor:grabbing}
+.kingdom-frame canvas[data-pointing="true"]{cursor:pointer}
+.kingdom-frame canvas:focus-visible{outline:2px solid #c9ffbb;outline-offset:-4px}
+.kingdom-loading{
+ position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%);width:min(83%,330px);
+ margin:0;padding:13px 16px;border-radius:8px;background:#102a43ec;color:#edf6ef;text-align:center;
+}
+.kingdom-plot-stats{position:absolute;inset:13px auto auto 13px;display:flex;gap:6px;pointer-events:none}
+.kingdom-plot-stats span,.kingdom-hover,.kingdom-controls{
+ color:#f2fbf7;background:#111e2adc;border:1px solid #c1e7dd65;box-shadow:0 3px 11px #14273159;
+}
+.kingdom-plot-stats span{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:7px;font-size:13px;font-weight:700}
+.kingdom-plot-stats svg{color:#aff2d7}
+.kingdom-hover{position:absolute;z-index:3;transform:translate(-50%,-120%);border-radius:7px;padding:5px 8px;font-size:13px;font-weight:750;pointer-events:none;white-space:nowrap}
+.kingdom-controls{
+ position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:9px;padding:5px 5px 5px 11px;border-radius:9px;
+}
+.kingdom-controls>span{font-size:12px;font-weight:650}
+.kingdom-controls>div{display:flex;gap:4px}
+.kingdom-controls button{
+ display:grid;place-items:center;width:40px;height:40px;border:1px solid #b7d3e240;border-radius:6px;background:#21384deb;color:#eefaff;
+}
+.kingdom-controls button:hover,.kingdom-controls button[aria-pressed="true"]{background:#315d52;border-color:#b5ecd2;color:#defbed}
+.kingdom-controls button svg{width:20px;height:20px}
+.kingdom-dashboard{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.80fr);gap:11px;margin-top:11px}
+.kingdom-inspector,.kingdom-stats{border:1px solid #3c4658;border-radius:11px;background:#161e2c}
+.kingdom-inspector{padding:11px 13px}
+.kingdom-objects{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 9px}
+.kingdom-objects button{
+ display:inline-flex;align-items:center;gap:7px;min-height:38px;padding:4px 9px;background:#1c2939;
+ border:1px solid #45556c;border-radius:6px;color:#d7e3f3;font-size:13px;font-weight:750;
+}
+.kingdom-objects button[aria-pressed="true"]{background:#233f3e;border-color:#81d9b7;color:#e4fff0}
+.kingdom-objects img{width:19px;height:19px;object-fit:contain}
+.kingdom-detail>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kingdom-detail h2{margin:0;font:800 27px/1 Cond,sans-serif}
+.kingdom-detail [data-plot-state]{color:#baf3dc;font-size:13px;font-weight:700}
+.kingdom-detail p{margin:5px 0;color:#bfcce0;font-size:13px}
+.kingdom-detail a{display:inline-flex;gap:3px;align-items:center;color:#aaf5d4;font-size:13px;font-weight:750}
+.kingdom-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;padding:0}
+.kingdom-stats>div{display:flex;min-width:0;flex-direction:column;justify-content:center;gap:6px;padding:11px 13px}
+.kingdom-stats>div+div{border-inline-start:1px solid #3c4658}
+.kingdom-stats dt{display:flex;align-items:center;gap:6px;color:#bdcfe2;font-size:13px}
+.kingdom-stats dt img{width:17px;height:17px;object-fit:contain;flex:none}
+.kingdom-stats dd{margin:0;font:800 clamp(18px,2.4vw,32px)/1 Cond,sans-serif;color:#f6f8fb;overflow-wrap:anywhere}
+@media(max-width:720px){
+ .kingdom-frame{block-size:max(390px,60svh)}
+ .kingdom-dashboard{grid-template-columns:1fr}
+ .kingdom-controls{right:7px;bottom:7px;gap:5px;padding:4px}
+ .kingdom-controls>span{display:none}
+ .kingdom-controls button{width:42px;height:42px}
+ .kingdom-plot-stats{inset:7px auto auto 7px}
+ .kingdom-plot-stats span{padding:5px 7px;font-size:12px}
+ .kingdom-stats>div{padding:9px}
+}
