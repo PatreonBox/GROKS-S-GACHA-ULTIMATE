@@ -10,6 +10,7 @@ import {createDiscordAuth} from './discord.mjs';
 const port=Number(process.env.PORT||8080);
 if(!Number.isInteger(port)||port<1||port>65535)throw Error('PORT must be a valid port.');
 const railway=Boolean(process.env.RAILWAY_ENVIRONMENT_ID);
+if(railway&&!process.env.DISCORD_CLIENT_ID)throw Error('Set DISCORD_CLIENT_ID before starting GD Kingdom.');
 const directory=process.env.RAILWAY_VOLUME_MOUNT_PATH||(railway?null:process.env.GAME_DATA_DIRECTORY);
 if(!directory||!statSync(directory,{throwIfNoEntry:false})?.isDirectory()){
  throw Error('Mount a persistent game volume before starting the server.');

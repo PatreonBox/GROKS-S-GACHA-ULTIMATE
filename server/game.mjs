@@ -181,6 +181,7 @@ export function gameRoutes(readJson,hasArt){
   if(!db)return json({error:'The online save is temporarily unavailable.'},503);
   const chatgpt=!env.guestOnly;
   const accountProvider=env.discordEnabled?'discord':chatgpt?'chatgpt':null;
+  const requiresSignIn=Boolean(env.discordEnabled);
   try{
    const url=new URL(request.url);
    if(!['GET','POST'].includes(request.method))reject('Method not supported.',405);
@@ -191,9 +192,13 @@ export function gameRoutes(readJson,hasArt){
    const initial=request.method==='GET'&&view==='wallet'&&url.pathname==='/api/game';
    const subject=chatgpt?request.headers.get('oai-authenticated-user-id'):null;
    const owner=env.discordUser?'discord:'+env.discordUser:subject?'account:'+subject:null;
+   const account={signedIn:Boolean(owner),accountSignIn:Boolean(accountProvider),accountProvider,requiresSignIn};
+   if(requiresSignIn&&!env.discordUser){
+    if(initial)return json(account);
+    reject('Sign in with Discord to play.',401);
+   }
    const session=await identity(request,db,initial,owner);
    if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt);
-   const account={signedIn:session.signedIn,accountSignIn:Boolean(accountProvider),accountProvider};
    if(isTransfer)return json({...await transferSave(db,session,await readBody(request,maxTransferBody),getPool),...account});
    if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt),...account});
    const record=await profile(db,session.owner,initial);

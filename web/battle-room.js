@@ -38,7 +38,7 @@ function battleShortcut(key,inArena=false){
  return '<a class="outline feature-shortcut '+style+'-shortcut'+(inArena?' arena-activity':'')+'" href="#battle/'+route+'" aria-label="'+name+'" title="'+name+'">'+ico(icon)+'<span class="feature-label">'+name+'</span>'+newBadge(newAreas[key])+'</a>';
 }
 
-export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet,announce}){
+export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet,announce,onGuide}){
  let gym=false,arcadePage=false,trainee=0,trainQuery='',trainingGame=null,relay=null,seqSeen=-1;
  let visible=false,wallet=null,owned=[],loaded=false,loadId=0,tier=1,target=0,knownBattle='',draft=[],picker=false,search='',page=0;
  let collectionError=false,busy=false,feedback='',loop=null,lastInjured=0,clockVersion='';
@@ -294,7 +294,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const done=b.status!=='active',actor=activeActor(b),remix=findRemix(b.remix);
   const stage=stageFor(b.campaign);
   const title=stage?.name||remix?.name||difficulties[b.tier]+' arena';
-  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img src="/assets/gd-kingdom.webp" alt=""><span>GD <b>Kingdom</b></span></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools">'+mutedBtn()+battleShortcut('training',true)+battleShortcut('remix',true)+'<a class="outline leave-field army-shortcut" href="#battle/army" aria-label="Army mode">'+ico('battle')+'<span>Army mode</span></a><a class="outline leave-field" href="#gacha">Packs</a></div></div>';
+  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img src="/assets/gd-kingdom.webp" alt=""><span>GD <b>Kingdom</b></span></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+battleShortcut('training',true)+battleShortcut('remix',true)+'<a class="outline leave-field army-shortcut" href="#battle/army" aria-label="Army mode">'+ico('battle')+'<span>Army mode</span></a><a class="outline leave-field" href="#gacha">Packs</a></div></div>';
   const side=(units,key,title,tip)=>'<div class="battle-side"><h3><span>'+title+'</span><small>'+enc(tip)+'</small></h3><div class="formation">'+units.map((u,i)=>tile(u,i,key,b)).join('')+'</div></div>';
   const relayWait=Math.max(0,(b.relayAt||0)-b.seq);
   const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><i></i><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span><i></i></div>';
@@ -338,6 +338,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const live=!gym&&!arcadePage&&wallet?.battle&&loaded;
   if(!live)arenaViewport?.detach();
   const match=live&&(playback||wallet.battle),current=root.querySelector('.live-arena');
+  if(!gym&&!arcadePage)onGuide?.((match?match.campaign:mode==='campaign')?'battle-campaign':'battle-arenas');
   if(match&&current?.dataset.encounter===match.id){
    syncArena(current,arena(match));
    root.querySelector('.bt-feedback').textContent=feedback;

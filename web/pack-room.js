@@ -19,7 +19,6 @@ import {statsFor} from './battle-engine.js';
 import {createCubeShop} from './cube-shop.js';
 import {createCoinMine} from './coin-mine.js';
 import {mineEarnings} from './mine-economy.js';
-import {createIntroduction} from './game-introduction.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 
 const byId=id=>document.getElementById(id);
@@ -46,7 +45,7 @@ const plural=n=>n===1?'pack':'packs';
 const visiblePackLimit=10;
 const mineCheckpointMs=20000;
 
-export function createPackRoom({localCover,openLevel,announce}){
+export function createPackRoom({localCover,openLevel,announce,onGuide}){
  const sound=createPackSound();
  const rewards=createRewardFlight(sound,headerAmount);
  const root=byId('arcade'),reveal=byId('packReveal'),code=byId('coinCode');
@@ -75,22 +74,18 @@ export function createPackRoom({localCover,openLevel,announce}){
  }
  const directCovers=new Map();
  const coverSource=id=>impossibleCover(id)||localCover(id)||directCovers.get(Number(id))||'/api/thumbnail/'+id+'/small';
- const battle=createBattleRoom({root:byId('battleRoom'),sound,rewards,coverSource,enc,applyWallet,announce});
+ const battle=createBattleRoom({root:byId('battleRoom'),sound,rewards,coverSource,enc,applyWallet,announce,onGuide});
  const army=createArmyRoom({root:byId('armyRoom'),sound,coverSource,enc,getWallet:()=>wallet,applyWallet,rewards});
  const stations=cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,openLevel,announce});
  const board=playerBoard({enc,faceIcon});
  const cubes=createCubeShop({root:byId('cubeShop'),applyWallet,sound,announce});
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
- const intro=createIntroduction(byId('gameGuide'));
  const markCubeNav=()=>{byId('cubeNew').hidden=seenGuide(newAreas.cubes)};
  markCubeNav();
  const failure=e=>announce(e?.message||'Could not save this change. Please try again.');
  function applyWallet(w){
   const first=!wallet,oldLuck=wallet?.luck;wallet=w;walletError='';refreshId++;
   cubes.setWallet(w);
-  if(first&&!w.pending&&!w.lastPull&&!w.squad?.length)readCollection().then(cards=>{
-   if(!cards.length)intro.welcome();
-  }).catch(()=>{});
   if(view==='collection'&&collectionSort==='rarity'&&oldLuck!==w.luck&&byId('binderResults'))binder();
   if(first&&['merge','index','vault'].includes(view))stations.show(view,w);battle.setWallet(w);army.setWallet(w);
   coinMine.setWallet(w);

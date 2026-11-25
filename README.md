@@ -10,7 +10,7 @@ Use Node.js 24. Run `npm ci` and `npm run dev` for a preview. Run `npm test` to 
 
 Deploy the `main` branch using the supplied Dockerfile. Attach a volume at `/data` and generate a public domain. The service uses Railway's mount path for SQLite and reports readiness at `/health`.
 
-Guest saves are stored on the server and tied to the browser that created them. A legacy browser save can transfer once into its current online profile on the same domain. The transfer combines collections and keeps the higher balance for each currency. Transferred progress is playable online and is excluded from new public leaderboard submissions.
+After signing in, a player can transfer a legacy browser save once into their online profile on the same domain. The transfer combines collections and keeps the higher balance for each currency. Transferred progress is playable online and is excluded from new public leaderboard submissions.
 
 ## Discord sign-in
 

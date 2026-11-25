@@ -2,16 +2,22 @@ const updates = typeof window !== 'undefined' && typeof BroadcastChannel === 'fu
  ? new BroadcastChannel('gdlb-online-updates') : null;
 let opening;
 let legacy;
+let discordRequired=false;
 let ordered = Promise.resolve();
 
 async function exchange(url, options) {
  const response = await fetch(url, {cache:'no-store', credentials:'same-origin', ...options});
  const result = await response.json().catch(() => ({}));
+ if(response.status===401&&discordRequired){
+  opening=null;
+  document.getElementById('gameAuthError').textContent='Your session has expired. Sign in again to continue.';
+  renderAccount({signedIn:false,accountProvider:'discord',requiresSignIn:true});
+ }
  if (!response.ok) throw Error(result.error || 'The game server is unavailable. Try again.');
  return result;
 }
 
-function connect() {
+export function gameSession() {
  if (!opening) {
   const begin = () => exchange('/api/game');
   opening = (navigator.locks ? navigator.locks.request('gdlb-session', begin) : begin())
@@ -23,7 +29,8 @@ function connect() {
 
 export async function gameRead(view) {
  const initial = !opening;
- const session = await connect();
+ const session = await gameSession();
+ if(session.requiresSignIn&&!session.signedIn)throw Error('Sign in with Discord to play.');
  const data = initial && view === 'wallet' ? session : await exchange('/api/game?view=' + view);
  if (view === 'wallet') renderAccount(data);
  return data[view];
@@ -46,7 +53,8 @@ function queue(run) {
 
 export function gameCommand(action, args = {}, notice = 'changed') {
  return queue(async()=>{
-  await connect();
+  const session=await gameSession();
+  if(session.requiresSignIn&&!session.signedIn)throw Error('Sign in with Discord to play.');
   const data=await submit('/api/game',{action,args,requestId:crypto.randomUUID()});
   renderAccount(data);
   if(notice)updates?.postMessage(notice);
@@ -62,16 +70,23 @@ function saveLinks(provider) {
  link.href=target+'?return_to='+encodeURIComponent('/'+(location.hash||'#gacha'));
 }
 
-function renderAccount({signedIn,accountProvider,wallet}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet}) {
  const account=document.getElementById('gameAccount');
  const label=document.getElementById('gameSaveMode');
  const logout=document.getElementById('gameSignOut');
  const transfer=document.getElementById('gameTransfer');
  const status=document.getElementById('gameSaveNotice');
+ const locked=requiresSignIn&&!signedIn;
+ discordRequired=Boolean(requiresSignIn);
+ document.body.dataset.account=locked?'locked':'ready';
+ document.getElementById('accountGate').hidden=!locked;
+ document.getElementById('gameMain').hidden=locked;
+ document.getElementById('gameGateLoading').hidden=true;
+ document.getElementById('gameAuthRetry').hidden=true;
+ if(locked)for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  if(label)label.textContent=signedIn?'Online save':'Online guest save';
  if(account){
-  account.hidden=!accountProvider||signedIn;
-  account.textContent=accountProvider==='discord'?'Sign in with Discord':'Sign in to sync your save';
+  account.hidden=!locked;
   account.dataset.provider=accountProvider||'';
   saveLinks(accountProvider);
  }
@@ -98,7 +113,8 @@ if (typeof document !== 'undefined') {
  if(url.searchParams.get('save')==='local')url.searchParams.delete('save');
  if(error){
   url.searchParams.delete('discord');
-  if(status)status.textContent=error==='cancelled'?'Discord sign-in was cancelled.':'Discord sign-in could not finish. Try again.';
+  const message=document.getElementById('gameAuthError');
+  if(message)message.textContent=error==='cancelled'?'Discord sign-in was cancelled.':'Discord sign-in could not finish. Try again.';
  }
  if(url.href!==location.href)history.replaceState(history.state,'',url);
  window.addEventListener('hashchange',()=>saveLinks(document.getElementById('gameAccount')?.dataset.provider));
@@ -111,7 +127,7 @@ if (typeof document !== 'undefined') {
    const snapshot=await readLegacyTransfer();
    if(!snapshot){transfer.hidden=true;status.textContent='';return;}
    const data=await queue(async()=>{
-    await connect();
+    await gameSession();
     return submit('/api/game/transfer',snapshot);
    });
    transfer.hidden=true;

@@ -38,9 +38,17 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
  const call=async(path,cookie,method)=>{const req=request(path,cookie,method);return auth.handle(req,new URL(req.url));};
  const game=async(cookie)=>{const req=request('/api/game',cookie);return worker.fetch(req,configure(req));};
  try{
-  const guest=await game();
+  const guest=await worker.fetch(request('/api/game'),{DB,guestOnly:true});
   const guestCookie=guest.headers.get('set-cookie').split(';')[0];
   const {player_id}=sqlite.prepare('SELECT player_id FROM game_profiles').get();
+  const locked=await game(guestCookie);
+  assert.deepEqual(await locked.json(),{signedIn:false,accountProvider:'discord',accountSignIn:true,requiresSignIn:true});
+  assert.equal(locked.headers.get('set-cookie'),null);
+  for(const [path,method] of [['/api/game?view=cards','GET'],['/api/players','GET'],
+   ['/api/game','POST'],['/api/game/transfer','POST']]){
+   const req=request(path,guestCookie,method);
+   assert.equal((await worker.fetch(req,configure(req))).status,401,path);
+  }
   const started=await call('/signin-with-discord?return_to=%2F%23gacha%2Fcollection',guestCookie);
   authorization=new URL(started.headers.get('location'));
   assert.equal(authorization.origin,'https://discord.com');
@@ -59,6 +67,15 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   assert.equal((await linked.json()).signedIn,true);
   assert.equal(sqlite.prepare('SELECT owner FROM game_profiles WHERE player_id=?').get(player_id).owner,'discord:'+userId);
   assert.equal((await (await game(sessionCookie)).json()).wallet.coins,1500);
+  for(let i=0;i<2;i++){
+   const guide=new Request(to('/api/game'),{method:'POST',headers:{Cookie:sessionCookie,
+    Origin:publicOrigin,'Content-Type':'application/json'},
+   body:JSON.stringify({action:'guide.seen',args:{id:'pack-shop'},requestId:crypto.randomUUID()})});
+   const response=await worker.fetch(guide,configure(guide));
+   assert.equal(response.status,200);
+   assert.deepEqual((await response.json()).wallet.guideSeen,['pack-shop']);
+  }
+  assert.deepEqual((await (await game(sessionCookie)).json()).wallet.guideSeen,['pack-shop']);
   assert.ok((await call(callback,flow)).headers.get('location').includes('discord=failed'));
   assert.equal(exchanges,1);
   const badLogout=request('/api/auth/discord/logout',sessionCookie,'POST','https://elsewhere.example');
@@ -74,9 +91,10 @@ async function unusedPort(){
  await new Promise(resolve=>probe.close(resolve));
  return port;
 }
-async function launch(port,volume){
+async function launch(port,volume,clientId=''){
  const child=spawn(process.execPath,['server/runtime.mjs'],{env:{...process.env,PORT:String(port),
-  RAILWAY_ENVIRONMENT_ID:'runtime-test',RAILWAY_VOLUME_MOUNT_PATH:volume,GAME_PUBLIC_ORIGIN:publicOrigin}});
+  RAILWAY_ENVIRONMENT_ID:clientId?'runtime-test':'',RAILWAY_VOLUME_MOUNT_PATH:volume,
+  GAME_PUBLIC_ORIGIN:publicOrigin,DISCORD_CLIENT_ID:clientId}});
  let stderr='';
  child.stderr.on('data',data=>{stderr+=data.toString()});
  try{
@@ -97,7 +115,35 @@ async function stop(child){
  }
 }
 
-test('the production HTTP server keeps the wallet and cards across a restart',async()=>{
+test('Railway serves the welcome guide and requires Discord for gameplay',async()=>{
+ const volume=await mkdtemp(join(tmpdir(),'gd-discord-gate-'));
+ const base='http://127.0.0.1:'+await unusedPort();
+ const clientId='1570000000000000000';
+ let child;
+ try{
+  child=await launch(new URL(base).port,volume,clientId);
+  const page=await (await fetch(base)).text();
+  assert.match(page,/id="accountGate"/);
+  assert.match(page,/class="discord-signin"/);
+  assert.match(page,/class="discord-symbol"/);
+  assert.match(page,/<summary>How to play<\/summary>/);
+  assert.match(page,/<main id="gameMain" hidden>/);
+  const start=await fetch(base+'/api/game');
+  assert.equal(start.headers.get('set-cookie'),null);
+  assert.equal((await start.json()).requiresSignIn,true);
+  const login=await fetch(base+'/signin-with-discord',{redirect:'manual'});
+  assert.equal(login.status,303);
+  const authorize=new URL(login.headers.get('location'));
+  assert.equal(authorize.origin,'https://discord.com');
+  assert.equal(authorize.searchParams.get('client_id'),clientId);
+  assert.equal(authorize.searchParams.get('redirect_uri'),publicOrigin+'/api/auth/discord/callback');
+ }finally{
+  await stop(child);
+  await rm(volume,{recursive:true,force:true});
+ }
+});
+
+test('the HTTP server keeps the wallet and cards across a restart',async()=>{
  const volume=await mkdtemp(join(tmpdir(),'gd-game-volume-'));
  const port=await unusedPort();
  const base='http://127.0.0.1:'+port;

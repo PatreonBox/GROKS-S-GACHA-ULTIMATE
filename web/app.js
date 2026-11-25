@@ -5,6 +5,10 @@ import {stat as cardNum} from './card-economy.js';
 import {ico,ratingLabel,ratingIcon} from './icons.js';
 import {createPackRoom} from './pack-room.js';
 import {tierNames, starTiers, readRoute, loadTier, browseTier} from './demon-tiers.js';
+import {gameSession,gameCommand} from './game-client.js';
+import {createSectionGuides} from './game-introduction.js';
+import {setGuideProgress} from './guide-progress.js';
+import {sectionGuideId} from './section-guides.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=n=>n==null?'—':Number(n).toLocaleString('en-US');
@@ -22,6 +26,7 @@ const isTierList=()=>section==='demons'&&activeTier!=='extreme';
 let section='leaderboard',layout=stored('gdlb.view','list'),page=0,focusSlide=0,serial=0,timer,toastTimer,queryAbort,localWorker,offline=false,nextPage=null,cursors=[null],liveTotal=null;
 let seed,localImages=new Set(),initialRows=[],rankRows=new Map(),demonRecords=[],demonLoading=null,liveDemonTime=0,current=[],currentDetails=null,statusMode='archive';
 const pageSize=20, rowMap=new Map(),sourceDate='22 Nov 2026';
+let arcade,guides;
 document.querySelectorAll('[data-icon]').forEach(i=>i.innerHTML=ico(i.dataset.icon));
 function storeRows(rows){for(const r of rows)if(!r[15])rowMap.set(r[0],r)}
 function announce(s){const t=document.querySelector('.toast');t.textContent=s;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),1600)}
@@ -69,6 +74,7 @@ function setSection(route){
  const inArcade=['gacha','battle','cubes'].includes(section);
  document.querySelector('.board').hidden=inArcade;
  arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null);
+ guides.select(sectionGuideId(section,activeTier));
  if(inArcade){serial++;queryAbort?.abort();return}
  $('sectiontag').textContent=isStarList()?'STAR LEVELS':section==='demons'?'DEMON LISTS':section==='saved'?'YOUR COLLECTION':'GEOMETRY DASH';
  $('boardTitle').textContent=isStarList()?starTiers[activeTier].name+' levels':section==='demons'?tierNames[activeTier]+' Demons':section==='saved'?'Saved levels':'Level leaderboard';
@@ -264,9 +270,25 @@ $('nextPage').onclick=()=>changePage(1);$('prevPage').onclick=()=>changePage(-1)
 document.addEventListener('keydown',e=>{if(e.key==='/'&&!['gacha','battle','cubes'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
 window.addEventListener('hashchange',()=>seed&&setSection(location.hash.slice(1)));
 async function init(){try{const r=await fetch('/data/start.json');if(!r.ok)throw Error('init');seed=await r.json();localImages=new Set(seed.images);initialRows=seed.top;storeRows(initialRows);storeRows(seed.featured.map(x=>x.row));storeRows([...saved.values()].filter(r=>!rowMap.has(r[0])));featured();podium();refreshSaves();changeLayout(layout==='grid'?'grid':'list');if(!location.hash||location.hash==='#leaderboard'){render(initialRows.slice(0,20),seed.indexed,true,'index');$('retry').hidden=true}setSection(location.hash.slice(1));demons().catch(()=>{})}catch{$('resultMeta').textContent='Could not open the index.';$('results').innerHTML='<button class="outline" id="retryInit">Retry</button>';$('retryInit').onclick=init}}
-const arcade=createPackRoom({
- localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
- openLevel:row=>{storeRows([row]);showDetails(row[0])},
- announce,
-});
-init();
+async function start(){
+ $('gameAuthRetry').hidden=true;
+ $('gameGateLoading').hidden=false;
+ try{
+  const session=await gameSession();
+  if(session.requiresSignIn&&!session.signedIn)return;
+  setGuideProgress(session.wallet.guideSeen,id=>gameCommand('guide.seen',{id},null).catch(()=>{}));
+  guides=createSectionGuides($('gameGuide'));
+  arcade=createPackRoom({
+   localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
+   openLevel:row=>{storeRows([row]);showDetails(row[0])},
+   announce,onGuide:guides.select,
+  });
+  init();
+ }catch(error){
+  $('gameGateLoading').hidden=true;
+  $('gameAuthError').textContent=error.message;
+  $('gameAuthRetry').hidden=false;
+ }
+}
+$('gameAuthRetry').onclick=start;
+start();

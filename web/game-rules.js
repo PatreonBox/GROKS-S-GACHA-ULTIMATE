@@ -96,6 +96,11 @@ function armyPlayers(wallet,records,ids,starterRows,now) {
 }
 
 const rules={
+ 'guide.seen':{run:({w,args:{id}})=>{
+  requireRule(typeof id==='string'&&/^[a-z0-9-]{1,80}$/.test(id),'Choose a guide.');
+  const seen=w.guideSeen??=[];
+  if(!seen.includes(id)&&seen.length<128)seen.push(id);
+ }},
  'mine.collect':{run:({income})=>({receipt:income})},
  'mine.tap':{run:({w,now,online})=>{
   if(online){
