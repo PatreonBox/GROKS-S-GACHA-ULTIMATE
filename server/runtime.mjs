@@ -6,6 +6,7 @@ import {pipeline} from 'node:stream/promises';
 import worker from '../dist/server/index.js';
 import {openGameDatabase} from './sqlite.mjs';
 import {createDiscordAuth} from './discord.mjs';
+import {createBugReports} from './bug-reports.mjs';
 
 const port=Number(process.env.PORT||8080);
 if(!Number.isInteger(port)||port<1||port>65535)throw Error('PORT must be a valid port.');
@@ -25,6 +26,8 @@ if((railway&&publicUrl.protocol!=='https:')||!['http:','https:'].includes(public
 }
 const {DB,sqlite}=openGameDatabase(join(directory,'gd-lvl-battles.sqlite'));
 const discord=createDiscordAuth(sqlite,{origin:publicUrl.origin,clientId:process.env.DISCORD_CLIENT_ID});
+const reports=createBugReports(sqlite,{apiKey:process.env.RESEND_API_KEY,from:process.env.BUG_REPORT_FROM,to:process.env.BUG_REPORT_TO});
+const reportTimer=reports.start();
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,publicUrl);
@@ -38,8 +41,10 @@ const server=http.createServer(async(req,res)=>{
   headers.delete('oai-authenticated-user-id');
   const hasBody=!['GET','HEAD'].includes(req.method);
   const request=new Request(url,{method:req.method,headers,...(hasBody?{body:Readable.toWeb(req),duplex:'half'}:{})});
+  const account=discord?.account(request);
   const response=await discord?.handle(request,url)??await worker.fetch(request,{
-   DB,guestOnly:true,discordEnabled:Boolean(discord),discordUser:discord?.user(request)
+   DB,guestOnly:true,discordEnabled:Boolean(discord),discordUser:account?.id,discordProfile:account?.profile,
+   submitBugReport:reports.submit
   });
   const outputHeaders=Object.fromEntries(response.headers);
   const cookies=response.headers.getSetCookie();
@@ -56,5 +61,5 @@ const server=http.createServer(async(req,res)=>{
 });
 server.listen(port,'0.0.0.0',()=>console.log('GD Lvl battles is listening on port '+port));
 for(const signal of ['SIGTERM','SIGINT']){
- process.once(signal,()=>server.close(()=>sqlite.close()));
+ process.once(signal,()=>{clearInterval(reportTimer);server.close(()=>sqlite.close());});
 }

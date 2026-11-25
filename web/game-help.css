@@ -40,7 +40,37 @@ body:not([data-account="ready"]) :is(.headwrap nav,.head-tools,.save-status,foot
 .headwrap .brand img.brand-emblem{
  width:58px;
  height:58px;
+ flex:none;
  object-fit:contain;
+}
+.headwrap .brand .brand-copy{
+ display:grid;
+ gap:2px;
+ min-width:0;
+ letter-spacing:normal;
+ overflow:visible;
+}
+.brand-name{
+ color:#f1faff;
+ font:800 clamp(20px,1.9vw,26px)/1.05 Cond,sans-serif;
+}
+.brand-credit{
+ color:#acc3d9;
+ font:600 11px/1.3 system-ui,sans-serif;
+}
+@media(min-width:1321px){
+ .headwrap{gap:16px}
+ .headwrap nav{gap:10px}
+ .headwrap nav .tab{gap:5px;font-size:14px}
+}
+@media(max-width:680px){
+ .headwrap .brand img.brand-emblem{width:46px;height:46px}
+ .brand-name{font-size:19px;white-space:normal}
+}
+@media(max-width:440px){
+ .headwrap .brand{grid-column:1/-1}
+ .headwrap .head-tools{grid-column:1/-1;grid-row:2;padding:0 0 6px}
+ .headwrap nav{grid-row:3}
 }
 .live-arena .arena-home img.brand-emblem{
  width:clamp(35px,5.5vh,48px);

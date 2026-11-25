@@ -66,7 +66,7 @@ const game=gameRoutes(async path=>{
 }, id=>Object.hasOwn(assets,'/assets/shots/'+id+'.webp')||Object.hasOwn(assets,'/assets/shots/'+id+'.avif'));
 export default {async fetch(request,env){
  const u=new URL(request.url);
- if(u.pathname==='/api/game'||u.pathname==='/api/game/transfer'||u.pathname==='/api/players')return game(request,env);
+ if(u.pathname==='/api/game'||u.pathname==='/api/game/transfer'||u.pathname==='/api/game/report'||u.pathname==='/api/players')return game(request,env);
  if(u.pathname.startsWith('/api/'))return api(request);
  const path=u.pathname==='/'?'/index.html':u.pathname;
  let key=path==='/assets/audio/arcade-v2.mp3'?'/assets/audio/arcade-v3.mp3':path.startsWith('/assets/faces/')&&path.endsWith('.png')?path.slice(0,-4)+'.webp':path;

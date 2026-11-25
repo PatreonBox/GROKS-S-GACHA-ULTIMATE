@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {createDiscordAuth} from '../server/discord.mjs';
+import {createBugReports} from '../server/bug-reports.mjs';
 import {openGameDatabase} from '../server/sqlite.mjs';
 import worker from '../dist/server/index.js';
 
@@ -29,9 +30,12 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   }
   assert.equal(url,'https://discord.com/api/v10/users/@me');
   assert.equal(options.headers.Authorization,'Bearer test-account-token');
-  return Response.json({id:userId});
+  return Response.json({id:userId,username:'fixture',global_name:'Fixture player',avatar:'a'.repeat(32)});
  });
- const configure=request=>({DB,guestOnly:true,discordEnabled:true,discordUser:auth.user(request)});
+ const configure=request=>{
+  const account=auth.account(request);
+  return {DB,guestOnly:true,discordEnabled:true,discordUser:account?.id,discordProfile:account?.profile};
+ };
  const request=(path,cookie,method='GET',origin=publicOrigin)=>new Request(to(path),{
   method,headers:{...(cookie?{Cookie:cookie}:{}),...(method==='POST'?{Origin:origin}:{})}
  });
@@ -64,8 +68,13 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   assert.equal(cookies.length,2);
   const sessionCookie=cookies[1].split(';')[0];
   const linked=await game(guestCookie+'; '+sessionCookie);
-  assert.equal((await linked.json()).signedIn,true);
+  const signedIn=await linked.json();
+  assert.equal(signedIn.signedIn,true);
+  assert.deepEqual(signedIn.playerProfile,{name:'Fixture player',username:'fixture',avatarUrl:`https://cdn.discordapp.com/avatars/${userId}/${'a'.repeat(32)}.webp?size=128`});
   assert.equal(sqlite.prepare('SELECT owner FROM game_profiles WHERE player_id=?').get(player_id).owner,'discord:'+userId);
+  const stats=request('/api/game?view=profile',sessionCookie);
+  assert.deepEqual((await (await worker.fetch(stats,configure(stats))).json()).profile,
+   {coins:1500,gems:10,unique:0,copies:0,campaignClears:0});
   assert.equal((await (await game(sessionCookie)).json()).wallet.coins,1500);
   for(let i=0;i<2;i++){
    const guide=new Request(to('/api/game'),{method:'POST',headers:{Cookie:sessionCookie,
@@ -82,6 +91,39 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   assert.equal(auth.handle(badLogout,new URL(badLogout.url)).status,403);
   assert.equal((await call('/api/auth/discord/logout',sessionCookie,'POST')).status,303);
   assert.equal(auth.user(request('/api/game',sessionCookie)),null);
+ }finally{sqlite.close();}
+});
+
+test('bug reports require sign-in and valid details and deliver once to the configured inbox',async()=>{
+ const {DB,sqlite}=openGameDatabase(':memory:');
+ const userId='1580000000000000001';
+ const outbox=[];
+ const {submit,deliver}=createBugReports(sqlite,{apiKey:'fixture',from:'reports@example.com',to:'owner@example.com'},
+  async(url,request)=>{outbox.push({url,request});return Response.json({id:'accepted'});});
+ const env={DB,discordEnabled:true,guestOnly:true,discordUser:userId,discordProfile:{name:'Fixture player'},submitBugReport:submit};
+ const entry={reportId:crypto.randomUUID(),category:'combat',title:'Guard never expires',
+  steps:'Open a campaign and use Guard.',actual:'The shield stays all game.',expected:'The shield should expire.',page:'#battle/campaign'};
+ const send=(payload,session=env,origin=publicOrigin)=>worker.fetch(new Request(publicOrigin+'/api/game/report',{
+  method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify(payload)}),session);
+ try{
+  assert.equal((await send(entry,{...env,discordUser:null})).status,401);
+  assert.equal((await send(entry,env,'https://elsewhere.example')).status,403);
+  assert.equal((await send({...entry,category:'unknown'})).status,400);
+  assert.equal((await send({...entry,steps:'  '})).status,400);
+  assert.equal((await send(entry)).status,202);
+  assert.equal((await send(entry)).status,202);
+  assert.equal((await send({...entry,reportId:crypto.randomUUID()})).status,429);
+  await deliver();
+  await deliver();
+  assert.equal(outbox.length,1);
+  const [{url,request}]=outbox;
+  assert.equal(url,'https://api.resend.com/emails');
+  assert.equal(request.headers['Idempotency-Key'],'gd-bug/'+entry.reportId);
+  const message=JSON.parse(request.body);
+  assert.deepEqual(message.to,['owner@example.com']);
+  assert.match(message.text,/#battle\/campaign/);
+  assert.match(message.text,/Guard never expires/);
+  assert.ok(sqlite.prepare('SELECT sent_at FROM game_bug_reports WHERE report_id=?').get(entry.reportId).sent_at);
  }finally{sqlite.close();}
 });
 async function unusedPort(){
@@ -123,6 +165,8 @@ test('Railway serves the welcome guide and requires Discord for gameplay',async(
  try{
   child=await launch(new URL(base).port,volume,clientId);
   const page=await (await fetch(base)).text();
+  assert.match(page,/id="brandName">Geometry Dash Kingdom<\/strong>/);
+  assert.match(page,/id="brandCredit">Made by Groksnfp<\/small>/);
   assert.match(page,/id="accountGate"/);
   assert.match(page,/class="discord-signin"/);
   assert.match(page,/class="discord-symbol"/);
@@ -157,7 +201,7 @@ test('the HTTP server keeps the wallet and cards across a restart',async()=>{
   const health=await fetch(base+'/health');
   assert.deepEqual(await health.json(),{status:'ok'});
   const page=await fetch(base);
-  assert.match(await page.text(),/<title>GD Kingdom<\/title>/i);
+  assert.match(await page.text(),/<title>Geometry Dash Kingdom<\/title>/i);
   const start=await fetch(base+'/api/game',{headers:{'oai-authenticated-user-id':'fixture'}});
   const account=await start.json();
   assert.equal(account.signedIn,false);

@@ -1,3 +1,5 @@
+import {renderPlayerMenu,setupPlayerMenu} from './account-menu.js';
+
 const updates = typeof window !== 'undefined' && typeof BroadcastChannel === 'function'
  ? new BroadcastChannel('gdlb-online-updates') : null;
 let opening;
@@ -70,7 +72,7 @@ function saveLinks(provider) {
  link.href=target+'?return_to='+encodeURIComponent('/'+(location.hash||'#gacha'));
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile}) {
  const account=document.getElementById('gameAccount');
  const label=document.getElementById('gameSaveMode');
  const logout=document.getElementById('gameSignOut');
@@ -91,6 +93,7 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet}) {
   saveLinks(accountProvider);
  }
  if(logout)logout.hidden=accountProvider!=='discord'||!signedIn;
+ renderPlayerMenu(accountProvider==='discord'&&signedIn,playerProfile);
  if(!transfer||!wallet)return;
  const receipt=wallet.legacyTransfer;
  if(receipt)transfer.hidden=true;
@@ -107,6 +110,7 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet}) {
 }
 
 if (typeof document !== 'undefined') {
+ setupPlayerMenu({loadStats:()=>gameRead('profile'),sendReport:body=>submit('/api/game/report',body)});
  const url=new URL(location.href);
  const error=url.searchParams.get('discord');
  const status=document.getElementById('gameSaveNotice');

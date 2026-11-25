@@ -10,7 +10,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/package.json ./
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/server/runtime.mjs /app/server/sqlite.mjs /app/server/discord.mjs ./server/
+COPY --from=build /app/server/runtime.mjs /app/server/sqlite.mjs /app/server/discord.mjs /app/server/bug-reports.mjs ./server/
 COPY drizzle ./drizzle
 EXPOSE 8080
 CMD ["node","server/runtime.mjs"]

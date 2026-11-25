@@ -186,16 +186,24 @@ export function gameRoutes(readJson,hasArt){
    const url=new URL(request.url);
    if(!['GET','POST'].includes(request.method))reject('Method not supported.',405);
    const isTransfer=url.pathname==='/api/game/transfer';
-   if(isTransfer&&request.method!=='POST')reject('Method not supported.',405);
+   const isReport=url.pathname==='/api/game/report';
+   if((isTransfer||isReport)&&request.method!=='POST')reject('Method not supported.',405);
    if(request.method==='POST')sameOrigin(request);
    const view=url.searchParams.get('view')||'wallet';
    const initial=request.method==='GET'&&view==='wallet'&&url.pathname==='/api/game';
    const subject=chatgpt?request.headers.get('oai-authenticated-user-id'):null;
    const owner=env.discordUser?'discord:'+env.discordUser:subject?'account:'+subject:null;
    const account={signedIn:Boolean(owner),accountSignIn:Boolean(accountProvider),accountProvider,requiresSignIn};
+   if(env.discordProfile)account.playerProfile=env.discordProfile;
    if(requiresSignIn&&!env.discordUser){
     if(initial)return json(account);
     reject('Sign in with Discord to play.',401);
+   }
+   if(isReport){
+    if(!env.discordUser)reject('Sign in to report a bug.',401);
+    if(!env.submitBugReport)reject('Bug reports are temporarily unavailable.',503);
+    const {body,status}=env.submitBugReport(env.discordUser,env.discordProfile,await readBody(request,16_000));
+    return json(body,status);
    }
    const session=await identity(request,db,initial,owner);
    if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt);
@@ -205,6 +213,13 @@ export function gameRoutes(readJson,hasArt){
    if(!record)reject('Open the game to start your save.',401);
    if(view==='wallet')return json({wallet:visibleWallet(normalizeWallet(JSON.parse(record.wallet))),...account},200,session.cookie);
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
+   if(view==='profile'){
+    const wallet=normalizeWallet(JSON.parse(record.wallet));
+    const {unique,copies}=await one(db,`SELECT COUNT(*) AS "unique",COALESCE(SUM(json_extract(card,'$.copies')),0) AS copies
+     FROM game_cards WHERE player_id=? AND json_extract(card,'$.copies')>0`,record.player_id);
+    return json({profile:{coins:wallet.coins,gems:wallet.gems,unique,copies,
+     campaignClears:Object.values(wallet.campaign||{}).filter(Boolean).length}});
+   }
    reject('Unknown save view.');
   }catch(error){
    if(error instanceof GameRequestError)return json({error:error.message},error.status);

@@ -9,6 +9,7 @@ const sessionSeconds=30*24*60*60;
 const secret=()=>randomBytes(32).toString('hex');
 const hash=(value,encoding='hex')=>createHash('sha256').update(value).digest(encoding);
 const snowflake=value=>typeof value==='string'&&/^\d{17,20}$/.test(value);
+const displayText=value=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,80):'';
 const cookie=(name,value,maxAge)=>name+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+maxAge;
 const destination=value=>typeof value==='string'&&/^\/(?:#[-/\w=&]{1,160})?$/.test(value)?value:'/#gacha';
 
@@ -71,8 +72,13 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
    const profile=await send(issuer+'/api/v10/users/@me',{headers:{Authorization:'Bearer '+access_token},
     redirect:'error',signal:AbortSignal.timeout(8000)});
    if(!profile.ok)return failed('failed');
-   const {id}=await profile.json();
+   const {id,username,global_name,avatar}=await profile.json();
    if(!snowflake(id))return failed('failed');
+   const handle=displayText(username);
+   sqlite.prepare(`INSERT INTO game_discord_profiles(discord_id,username,display_name,avatar_hash)
+    VALUES(?,?,?,?) ON CONFLICT(discord_id) DO UPDATE SET
+    username=excluded.username,display_name=excluded.display_name,avatar_hash=excluded.avatar_hash`)
+    .run(id,handle,displayText(global_name)||handle,typeof avatar==='string'&&/^(?:a_)?[a-f0-9]{32}$/.test(avatar)?avatar:null);
    const session=secret(),now=Date.now();
    sqlite.prepare('DELETE FROM game_discord_sessions WHERE expires_at<=?').run(now);
    sqlite.prepare('INSERT INTO game_discord_sessions VALUES(?,?,?)').run(hash(session),id,now+sessionSeconds*1000);
@@ -83,13 +89,20 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
   }
  }
 
+ function account(request){
+  const token=accountToken(request);
+  if(!token)return null;
+  const row=sqlite.prepare(`SELECT s.discord_id,p.username,p.display_name,p.avatar_hash FROM game_discord_sessions s
+   LEFT JOIN game_discord_profiles p ON p.discord_id=s.discord_id WHERE s.token_hash=? AND s.expires_at>?`)
+   .get(hash(token),Date.now());
+  if(!row)return null;
+  const avatarUrl=row.avatar_hash?`https://cdn.discordapp.com/avatars/${row.discord_id}/${row.avatar_hash}.webp?size=128`:null;
+  return {id:row.discord_id,profile:{name:row.display_name||'Discord player',username:row.username||null,avatarUrl}};
+ }
+
  return {
-  user(request){
-   const token=accountToken(request);
-   if(!token)return null;
-   return sqlite.prepare('SELECT discord_id FROM game_discord_sessions WHERE token_hash=? AND expires_at>?')
-    .get(hash(token),Date.now())?.discord_id??null;
-  },
+  account,
+  user:request=>account(request)?.id??null,
   handle(request,url){
    if(url.pathname==='/signin-with-discord'&&request.method==='GET')return begin(request,url);
    if(url.pathname===callback&&request.method==='GET')return finish(request,url);
