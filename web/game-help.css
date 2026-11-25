@@ -37,12 +37,15 @@
 @media(max-height:480px) and (orientation:landscape){:is(.runner-bar,.drill-rail) .minigame-help{min-height:34px}}
 
 body:not([data-account="ready"]) :is(.headwrap nav,.head-tools,.save-status,footer){display:none}
-.headwrap .brand img.brand-wordmark{
- width:clamp(132px,14vw,188px);
- max-width:100%;
+.headwrap .brand img.brand-emblem{
+ width:58px;
+ height:58px;
+ object-fit:contain;
+}
+.live-arena .arena-home img.brand-emblem{
+ width:clamp(35px,5.5vh,48px);
  height:auto;
 }
-.live-arena .arena-home img.brand-wordmark{width:clamp(76px,12vw,143px);height:auto}
 body:not([data-account="ready"])>header{position:relative;z-index:1;background:#0d1221dd}
 .account-gate{
  position:relative;
@@ -128,8 +131,9 @@ body:not([data-account="ready"])>header{position:relative;z-index:1;background:#
 .account-copy h1{margin:0}
 .account-copy h1 img{
  display:block;
- width:100%;
+ width:min(100%,clamp(180px,34svh,300px));
  height:auto;
+ margin-inline:auto;
  filter:drop-shadow(0 3px 22px #21d6fc48);
 }
 .account-copy>p{margin:18px 0 0;color:#d0dbf0;font-size:16px;max-width:42ch}
