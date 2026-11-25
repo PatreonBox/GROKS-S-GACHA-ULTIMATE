@@ -1,10 +1,12 @@
 import {renderPlayerMenu,setupPlayerMenu} from './account-menu.js';
+import {setupAdminTools} from './admin-tools.js';
 
 const updates = typeof window !== 'undefined' && typeof BroadcastChannel === 'function'
  ? new BroadcastChannel('gdlb-online-updates') : null;
 let opening;
 let legacy;
 let discordRequired=false;
+let canAdmin=false;
 let ordered = Promise.resolve();
 
 async function exchange(url, options) {
@@ -85,7 +87,7 @@ function refreshDiscordProfile(automatic=false) {
  form.submit();
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin}) {
  const account=document.getElementById('gameAccount');
  const label=document.getElementById('gameSaveMode');
  const logout=document.getElementById('gameSignOut');
@@ -93,6 +95,7 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  const status=document.getElementById('gameSaveNotice');
  const locked=requiresSignIn&&!signedIn;
  discordRequired=Boolean(requiresSignIn);
+ canAdmin=Boolean(signedIn&&admin);
  document.body.dataset.account=locked?'locked':'ready';
  document.getElementById('accountGate').hidden=!locked;
  document.getElementById('gameMain').hidden=locked;
@@ -124,6 +127,11 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
 
 if (typeof document !== 'undefined') {
  setupPlayerMenu({loadStats:()=>gameRead('profile'),sendReport:body=>submit('/api/game/report',body)});
+ setupAdminTools({canOpen:()=>canAdmin,loadWallet:()=>gameRead('wallet'),run:async(action,args)=>{
+  const data=await gameCommand(action,args);
+  if(action==='admin.adjust')document.dispatchEvent(new CustomEvent('gdlb-admin-wallet',{detail:data.wallet}));
+  return data;
+ }});
  document.getElementById('playerProfileRefresh')?.addEventListener('submit',event=>{
   event.preventDefault();
   refreshDiscordProfile();

@@ -13,7 +13,7 @@
 .campaign-focus-body{padding:clamp(16px,2.6vw,29px);width:100%}
 .campaign-tier{display:inline-flex;align-items:center;gap:6px;border:1px solid #97eeea67;border-radius:6px;background:#122432d9;color:var(--chapter);padding:4px 7px;font-weight:750;font-size:.85rem}
 .campaign-tier img{width:19px;height:19px;object-fit:contain}
-.campaign-focus h3{font:800 clamp(36px,5vw,61px)/.91 Cond,sans-serif;text-transform:uppercase;margin:11px 0 6px}
+.campaign-focus h3{font:800 clamp(36px,5vw,61px)/.91 Cond,sans-serif;margin:11px 0 6px}
 .campaign-captain{color:#d0c8db;margin:0 0 9px}.campaign-captain b{color:#fff}
 .campaign-rules,.campaign-goals{list-style:none;padding:0}
 .campaign-rules{margin:0 0 10px;color:#b8ffe5;font-size:.9rem;display:flex;gap:4px 15px;flex-wrap:wrap}

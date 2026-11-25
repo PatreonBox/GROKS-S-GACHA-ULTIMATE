@@ -20,14 +20,15 @@ export function revealSpacing(tier,rank,odds,id){
  return Math.max(280,Math.round((length+(remix?memeCues[remix.cue][1]+.06:0)+.04)*1000));
 }
 const asset='/assets/audio/arcade-v3.mp3';
-const gameSamples={arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3'};
+const gameSamples={arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3',ui:'/assets/audio/soft-ui-tap.mp3'};
 const gameCues={
  jump:[[.05,.26],'sweep','gameMove'],
  orb:[[.55,.36],'charged','gameMove'],
  portal:[[1.05,.76],'miniPortal','gamePortal'],
  forge:[[2.05,.42],'forge','gameMove'],
  mintTap:[[.025,.198],'mine','coin','mint'],
- mintUnlock:[[.445,.46],'extraAccent','coin','mint']
+ mintUnlock:[[.445,.46],'extraAccent','coin','mint'],
+ uiTap:[[0,.13],'select','ui','ui']
 };
 const slideRates=[.94,.99,1.04,1.10,1.16,1.23];
 
@@ -40,13 +41,13 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,coin:2,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,coin:2,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
- const gameBuffers=new Map(),gameLoading=new Set();
+ const gameBuffers=new Map(),gameLoading=new Map();
  let stopRare=null;
- let mineCount=0,generation=0,lastMine=-Infinity,lastMint=-Infinity,failedAt=-Infinity;
+ let mineCount=0,generation=0,lastMine=-Infinity,lastMint=-Infinity,failedAt=-Infinity,cueSerial=0;
  const synths=new Set(),voices=new Set(),waiting=new Map(),accents=new Set();
  try{enabled=localStorage.getItem('gdlb.packSound')!=='off'}catch{}
 
@@ -114,12 +115,16 @@ export function createPackSound(){
  function emit(name,rate,pan,level){emitClip(buffer,cues[name],channels[name],rate,pan,level)}
  function prepareGame(bank='arcade'){
   unlock();
-  if(!enabled||!ctx||gameBuffers.has(bank)||gameLoading.has(bank))return;
-  gameLoading.add(bank);
-  fetch(gameSamples[bank]).then(response=>{
-   if(!response.ok)throw Error('Extra audio unavailable');
-   return response.arrayBuffer();
-  }).then(data=>ctx.decodeAudioData(data)).then(decoded=>{gameBuffers.set(bank,decoded)}).catch(()=>{}).finally(()=>{gameLoading.delete(bank)});
+  if(!enabled||!ctx||gameBuffers.has(bank))return;
+  if(!gameLoading.has(bank)){
+   const loading=fetch(gameSamples[bank]).then(response=>{
+    if(!response.ok)throw Error('Extra audio unavailable');
+    return response.arrayBuffer();
+   }).then(data=>ctx.decodeAudioData(data)).then(decoded=>{gameBuffers.set(bank,decoded)})
+    .catch(()=>{}).finally(()=>{gameLoading.delete(bank)});
+   gameLoading.set(bank,loading);
+  }
+  return gameLoading.get(bank);
  }
  function playGame(name,{rate=1,pan=0,level=1}={}){
   if(!enabled||!ctx||document.hidden||!Object.hasOwn(gameCues,name))return;
@@ -130,11 +135,12 @@ export function createPackSound(){
    if(now-lastMint<57)return;
    lastMint=now;rate*=.97+Math.random()*.12;
   }
-  if(gameBuffer&&ctx.state==='running')emitClip(gameBuffer,clip,lane,rate,pan,level);
+  if(gameBuffer&&ctx.state==='running'){cueSerial++;emitClip(gameBuffer,clip,lane,rate,pan,level);}
   else play(fallback,{rate,pan,level});
  }
  function play(name,{rate=1,pan=0,level=1,seed=0}={}){
   if(!enabled||!ctx||document.hidden)return;
+  cueSerial++;
   if(!Object.hasOwn(cues,name)){
    if(synths.size>=8){const first=synths.values().next().value;first.stop();synths.delete(first)}
    const voice=synthCue(ctx,master,name,{rate,pan,level,seed,onended:()=>synths.delete(voice)});
@@ -180,7 +186,22 @@ export function createPackSound(){
   try{localStorage.setItem('gdlb.packSound',enabled?'on':'off')}catch{}
   if(enabled){unlock();play('select')}else silence();
  }
+ function listenForUiTaps(){
+  const controls='button:not(:disabled),a[href],summary,select:not(:disabled),input[type=checkbox]:not(:disabled),input[type=radio]:not(:disabled)';
+  const uiControl=target=>target.closest?.(controls)&&!target.closest('#mineHit,.turn-handle,[data-tear]');
+  document.addEventListener('pointerdown',event=>{
+   if(event.button===0&&uiControl(event.target))prepareGame('ui');
+  },true);
+  document.addEventListener('click',event=>{
+   if(!enabled||!uiControl(event.target))return;
+   const at=performance.now(),serial=cueSerial,loading=prepareGame('ui');
+   window.setTimeout(async()=>{
+    if(loading)await loading;
+    if(serial===cueSerial&&performance.now()-at<180)playGame('uiTap',{level:.46});
+   },0);
+  },true);
+ }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
  window.addEventListener('pagehide',stop);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,sweep,land,score,stopScore};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,listenForUiTaps,sweep,land,score,stopScore};
 }

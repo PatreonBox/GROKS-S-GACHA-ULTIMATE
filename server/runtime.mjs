@@ -44,6 +44,7 @@ const server=http.createServer(async(req,res)=>{
   const account=discord?.account(request);
   const response=await discord?.handle(request,url)??await worker.fetch(request,{
    DB,guestOnly:true,discordEnabled:Boolean(discord),discordUser:account?.id,discordProfile:account?.profile,
+   adminDiscordId:process.env.GAME_ADMIN_DISCORD_ID,
    submitBugReport:reports.submit
   });
   const outputHeaders=Object.fromEntries(response.headers);

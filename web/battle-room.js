@@ -28,6 +28,10 @@ const short=n=>Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigi
 const clock=ms=>{const s=Math.max(0,Math.ceil(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
 const coin='<img src="/assets/packs/coin.png" class="battle-coin" alt="coins">';
 const colors=['#88d9c8','#68d4ff','#a9e981','#ffcb65','#ff9166','#ff87ad','#b29bff','#f98fce','#ff8264','#f9669c','#ffb149'];
+const arenaArt=[
+ '/assets/arena/easy.webp','/assets/arena/normal.webp','/assets/arena/hard.webp','/assets/arena/harder.webp','/assets/arena/insane.webp',
+ ...[13519,118509879,4284013,4706930,10565740].map(id=>'/assets/shots/'+id+'.webp')
+];
 const face=d=>d===impossibleCategory?'/assets/impossible/mark.webp':'/assets/faces/'+(d.includes(' Demon')?'demon-'+d.split(' ')[0].toLowerCase():d.toLowerCase())+'.webp';
 const payoutRange=t=>arenas[t-1].map(short).join('–');
 const nameplate=t=>'<img class="bt-face" src="'+face(difficulties[t])+'" alt="">'+difficulties[t];
@@ -42,7 +46,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
  let gym=false,arcadePage=false,trainee=0,trainQuery='',trainingGame=null,relay=null,seqSeen=-1;
  let visible=false,wallet=null,owned=[],loaded=false,loadId=0,tier=1,target=0,knownBattle='',draft=[],picker=false,search='',page=0;
  let collectionError=false,busy=false,feedback='',loop=null,lastInjured=0,clockVersion='';
- let mode='campaign',campaignTier=0,selection=null,runner=null,inspection=null,playback=null,stopPlayback=null;
+ let mode='regular',campaignTier=0,selection=null,runner=null,inspection=null,playback=null,stopPlayback=null;
  const bountyTickets=new Map(),camera={flat:true};
  let clearTicket=null,arenaViewport;
  const mutedBtn=()=>'<button data-bsound aria-label="Battle sounds" aria-pressed="'+sound.enabled+'" class="iconbtn">'+ico(sound.enabled?'volume':'muted')+'</button>';
@@ -109,6 +113,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   if(visible===on&&changed){trainingGame?.close();inspection?.close();runner?.close();if(playback)finishPlayback();feedback='';render()}
   if(visible===on)return;visible=on;root.hidden=!on;clearInterval(loop);if(!on){trainingGame?.close();runner?.close();inspection?.close();if(playback)finishPlayback()}
   if(!on){arenaViewport?.detach();root.querySelector('.orders-sheet[open]')?.close();picker=false;feedback='';return}
+  if(!gym&&!arcadePage&&!wallet?.battle){mode='regular';tier=1;}
   picker=false;draft=[...(wallet?.squad||[])];loaded=false;collectionError=false;clockVersion='';lastInjured=Object.values(wallet?.injuries||{}).filter(n=>n>Date.now()).length;
   sound.preload();render();refreshCollection();loop=setInterval(timer,1000);
  }
@@ -232,14 +237,14 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const tabs='<div class="battle-tabs" role="group" aria-label="Battle mode">'+
    [['campaign','Campaign'],['regular','Standard arenas'],['remix','Meme levels']].map(([key,label])=>
     '<button data-mode="'+key+'" aria-pressed="'+(activeMode===key)+'">'+label+(key==='remix'?newBadge(newAreas.remix):'')+'</button>').join('')+'</div>';
-  const poster='<section class="arena-poster" style="--arena:'+colors[tier]+'"><div class="arena-copy"><div class="battle-eyebrow">'+ico('battle')+' FOUR VS FOUR</div><h2>'+difficulties[tier]+' arena</h2>'+selector+'<div class="bounty">'+coin+'<b>'+payoutRange(tier)+'</b> coins per enemy</div></div><div class="arena-medal"><img src="'+face(difficulties[tier])+'" alt=""></div></section>';
+  const poster='<section class="arena-poster'+(tier>=6?' demon-poster':'')+'" style="--arena:'+colors[tier]+'"><div class="arena-copy"><div class="battle-eyebrow">'+ico('battle')+' FOUR VS FOUR</div><h2>'+difficulties[tier]+' arena</h2>'+selector+'<div class="bounty">'+coin+'<b>'+payoutRange(tier)+'</b> coins per enemy</div></div><div class="arena-medal"><img src="'+face(difficulties[tier])+'" alt=""></div><img class="arena-banner-art" src="'+arenaArt[tier-1]+'" alt=""></section>';
   const action=owned.length<4?'<a href="#gacha" class="bt-primary">Open packs</a>':ready?
    '<button class="bt-primary" data-start '+(busy?'disabled':'')+'>'+(campaign?'Enter stage':'Enter battle')+'</button>':
    '<button class="bt-primary" data-edit>Choose squad</button>';
   const activeStage=campaignTier||Math.min(campaignStages.length,1+campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length);
   if(campaign)campaignTier=activeStage;
   const front=campaign?campaignView(wallet,activeStage,{action,coverSource,face,enc,colors}):remix?remixPicker(selection):poster;
-  const squadStatus=ready?'4 / 4 ready':owned.length<4?'Collect four different levels to enter.':'Equip four healthy level cards.';
+  const squadStatus=ready?'4 / 4 ready':owned.length<4?'Collect four different levels to enter.':'Equip healthy cards lol';
   return tabs+front+'<section class="bt-panel"><div class="bt-title"><div><small>LOADOUT</small><h2>Your squad</h2></div>'+
    (owned.length?'<button class="outline" data-edit>Edit squad</button>':'')+'</div><div class="squad-grid">'+
    Array.from({length:4},(_,i)=>slot(byId(team[i]),i)).join('')+'</div><div class="bt-commit"><span>'+squadStatus+'</span>'+

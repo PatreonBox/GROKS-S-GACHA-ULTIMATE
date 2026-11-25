@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import {test} from 'node:test';
 import worker from '../dist/server/index.js';
 import {createGameDatabase} from './game-preview-db.mjs';
-import {createCardPool,difficulties} from '../web/pack-engine.js';
+import {createCardPool,difficulties,oddsFor,packs,rollPacks,packOddsVersion} from '../web/pack-engine.js';
 import {armyFrame,makeArmyBattle,stepArmy} from '../web/army-battle.js';
 import {armySignatureVersion,beginArmyRun} from '../web/army-trilogy.js';
 import {makeBattle,playTurn} from '../web/battle-engine.js';
@@ -77,6 +77,28 @@ test('pack purchase commits the debit, cards, and receipt together',async()=>{
  assert.equal((await f.command(session,'pack.buy',{packId:'common',quantity:1})).status,400);
  assert.equal((await f.command(session,'pack.advance',{id:pulls[0].id,opened:1})).status,200);
  assert.equal((await f.wallet(session)).pending,null);
+});
+
+test('Gacha activity reports fresh cards, unclaimed gems, and eligible merges',async()=>{
+ const f=fixture(),session=await f.open();
+ const row=(await pool('Easy')).at(-1);
+ f.addCards(session.id,[row]);
+ const at=Date.now()-10;
+ f.sqlite.prepare("UPDATE game_cards SET card=json_set(card,'$.last',?) WHERE player_id=?").run(at,session.id);
+ const activity=async()=>{
+  const response=await f.call('/api/game?view=gacha-activity',session);
+  assert.equal(response.status,200);
+  return (await response.json()).activity;
+ };
+ assert.deepEqual(await activity(),{unclaimed:1,latest:at,mergeReady:true});
+ const seen=await f.command(session,'collection.seen',{through:at});
+ assert.equal((await seen.json()).wallet.collectionSeenThrough,at);
+ assert.equal((await f.command(session,'collection.seen',{through:Date.now()+100000})).status,400);
+ f.store(session.id,wallet=>{wallet.injuries={[row[0]]:Date.now()+100000};});
+ assert.deepEqual(await activity(),{unclaimed:1,latest:at,mergeReady:false});
+ const claim=await f.command(session,'card.claim',{tier:1,ids:[row[0]]});
+ assert.equal(claim.status,200);
+ assert.deepEqual(await activity(),{unclaimed:0,latest:at,mergeReady:false});
 });
 
 test('browser transfer keeps existing progress and commits once across retries',async()=>{
@@ -208,7 +230,8 @@ test('Army rewards are replayed from a server-issued deployment and paid once',a
 });
 
 test('the renamed campaign stages use four opponents from their own difficulty',async()=>{
- const names=['RETRY','Fire in the Hole','Air Detected','Rock on the Ground','Insane Classics'];
+ const names=['RETRY','Fire in the Hole','Area confirmed','Rock on the Ground','Insane Classics',
+  'REVIVE MOON','C','eight circles','Water Bound','Tie in a chess'];
  for(let i=0;i<names.length;i++){
   const stage=stageFor(i+1),ids=new Set((await pool(difficulties[i+1])).map(row=>row[0]));
   assert.equal(stage.name,names[i]);
@@ -216,6 +239,21 @@ test('the renamed campaign stages use four opponents from their own difficulty',
   for(const id of stage.team)assert.ok(ids.has(id),stage.name+' · '+id);
  }
  for(const [,id,name] of classicCampaignMoves)assert.equal(skillsFor({id,name}).signatureName,name);
+});
+
+test('Mythic rolls mostly Insane Demons and caps Extreme Demon odds with luck',async()=>{
+ const mythic=packs.find(pack=>pack.id==='mythic');
+ assert.deepEqual(oddsFor(mythic).slice(8).map(tier=>tier.percent),[2,88,10]);
+ assert.deepEqual(oddsFor(mythic,0,{version:2}).slice(8).map(tier=>tier.percent),[0,40,60]);
+ for(let luck=0;luck<=500;luck++){
+  const odds=oddsFor(mythic,luck);
+  assert.equal(odds.reduce((sum,tier)=>sum+tier.weight,0),1_000_000);
+  assert.ok(odds[10].percent<=15&&odds[9].percent>80&&odds[8].weight>0);
+ }
+ const pools=await Promise.all(difficulties.map(pool));
+ const run=rollPacks(mythic,1,{luck:500,bonus:0},pools,n=>n===1_000_000?849_999:0);
+ assert.equal(run.packOddsVersion,packOddsVersion);
+ assert.ok(run.rows.every(row=>row[6]==='Insane Demon'));
 });
 
 test('named signature moves cast in both engines and draw finite 3D geometry',async()=>{
@@ -285,7 +323,7 @@ test('campaign first clears and replays award different bounties once',async()=>
  assert.equal(second.battle.earned,second.base*2);
  assert.equal(second.battle.campaignReceipt.clearPrize,0);
 });
-test('The Last Gate pays its 300 billion first-clear prize only once',()=>{
+test('the final campaign stage pays its 300 billion first-clear prize only once',()=>{
  const w={coins:2000};
  const battle={campaign:10,seq:15,earned:2000,enemies:[{hp:0,bounty:1000}]};
  settleCampaignClear(w,battle,2);

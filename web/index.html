@@ -147,4 +147,38 @@
   <div class="player-dialog-actions"><button type="button" class="primary" id="dismissBugReceipt" data-close-player-dialog>OK</button></div>
  </section>
 </dialog>
+<dialog class="player-dialog admin-dialog" id="adminTools" aria-labelledby="adminToolsTitle">
+ <div class="player-dialog-head">
+  <h2 id="adminToolsTitle">Admin tools</h2>
+  <button type="button" class="iconbtn" data-close-admin aria-label="Close admin tools">×</button>
+ </div>
+ <div class="player-dialog-body">
+  <dl class="admin-balances">
+   <div><dt>Luck</dt><dd data-admin-balance="luck">—</dd></div>
+   <div><dt>Coins</dt><dd data-admin-balance="coins">—</dd></div>
+   <div><dt>Gems</dt><dd data-admin-balance="gems">—</dd></div>
+  </dl>
+  <form id="adminAdjustment" class="admin-form">
+   <label>Action
+    <select name="adjustment">
+     <option value="luck:set">Set luck</option>
+     <option value="luck:add">Add luck</option>
+     <option value="coins:add">Give coins</option>
+     <option value="gems:set">Set gems</option>
+    </select>
+   </label>
+   <label>Amount <input name="amount" type="number" inputmode="numeric" min="0" max="500" step="1" required></label>
+   <button class="primary" type="submit">Apply</button>
+  </form>
+  <details class="admin-reset">
+   <summary>Reset my game save</summary>
+   <p>Your cards, balances, upgrades, and campaign progress will be cleared.</p>
+   <form id="adminReset" class="admin-form">
+    <label>Type RESET to confirm <input name="confirmation" required pattern="RESET" autocomplete="off"></label>
+    <button class="outline admin-danger" type="submit">Reset my save</button>
+   </form>
+  </details>
+  <p id="adminToolsStatus" class="player-form-status" role="status"></p>
+ </div>
+</dialog>
 <script type="module" src="/app.js"></script></body></html>

@@ -36,8 +36,9 @@
  .arc-nav-tools{width:100%;display:block}
  .arc-nav-tools #packSound{position:absolute;top:1px;right:0;width:42px;height:42px}
  .arc-nav{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin:0;gap:2px;padding:3px;width:100%}
- .arc-nav a{min-width:0;display:grid;place-items:center;align-content:center;gap:3px;min-height:43px;padding:2px 0;font-size:clamp(9px,2.55vw,12px);white-space:nowrap}
- .arc-nav a svg{display:block;width:14px;height:14px}
+ .arc-nav a{min-width:0;display:grid;place-items:center;align-content:center;gap:4px;min-height:52px;padding:3px 0;font-size:clamp(11px,2.7vw,14px);white-space:nowrap}
+ .arc-nav a svg{display:block;width:17px;height:17px}
+ .gacha-tab-alert{position:absolute;top:3px;right:3px;width:7px;height:7px;padding:0;border-radius:50%;font-size:0}
 
  .pack-choice{min-width:0;min-height:62px;padding-inline:2px}
  .pack-choice strong{font-size:clamp(10px,2.9vw,14px);line-height:1.1}
@@ -132,6 +133,12 @@
  }
  :is(.runner-touch,.drill-touch button):active{background:color-mix(in srgb,var(--drill,var(--remix)) 46%,#202238)}
  .runner-buttons button,.drill-actions button,.runner-bar button,.drill-rail button{min-height:42px}
+}
+@media(max-width:480px){
+ .shop-display{grid-template-columns:1fr}
+ .shop-display .foil-stage{min-height:258px}
+ .shop-display .package-float .foil-pack{width:134px;height:179px}
+ .shop-display .pack-info{border-left:0;border-top:1px solid #37313e}
 }
 @media(max-width:440px){
  .headwrap .infoBtn{display:none}

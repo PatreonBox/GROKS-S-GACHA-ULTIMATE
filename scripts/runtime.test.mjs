@@ -192,6 +192,51 @@ test('bug reports require sign-in and valid details and deliver once to the conf
   assert.equal((await send(spam)).status,202);
  }finally{sqlite.close();}
 });
+
+test('owner admin tools are self-only, idempotent, and private on player rankings',async()=>{
+ const {DB,sqlite}=openGameDatabase(':memory:');
+ const adminId='1580000000000000001',memberId='1580000000000000002';
+ const call=(id,path='/api/game',body=null,adminDiscordId=adminId)=>worker.fetch(new Request(publicOrigin+path,{
+  method:body?'POST':'GET',headers:body?{Origin:publicOrigin,'Content-Type':'application/json'}:undefined,
+  body:body?JSON.stringify(body):undefined
+ }),{DB,discordEnabled:true,guestOnly:true,discordUser:id,adminDiscordId});
+ const command=(id,action,args,requestId=crypto.randomUUID())=>call(id,'/api/game',{action,args,requestId});
+ try{
+  const admin=await (await call(adminId)).json(),member=await (await call(memberId)).json();
+  assert.equal(admin.admin,true);
+  assert.equal(member.admin,undefined);
+  const player=sqlite.prepare('SELECT player_id FROM game_profiles WHERE owner=?');
+  const owner=player.get('discord:'+adminId).player_id,other=player.get('discord:'+memberId).player_id;
+  const score=sqlite.prepare('INSERT INTO game_scores(player_id,alias,tier,survivors,turns,score,posted_at) VALUES(?,?,?,?,?,?,?)');
+  score.run(owner,'Fixture owner',10,4,3,100,1);
+  score.run(other,'Fixture member',2,4,1,25,2);
+  assert.deepEqual((await (await call(memberId,'/api/players')).json()).rows.map(row=>[row.place,row.alias]),[[1,'Fixture member']]);
+  assert.equal((await call(adminId,'/api/players',{alias:'Owner'})).status,403);
+  assert.equal((await command(memberId,'admin.adjust',{field:'coins',mode:'add',amount:70})).status,403);
+  assert.equal((await command(memberId,'admin.reset',{confirmation:'RESET'})).status,403);
+  assert.equal((await command(adminId,'admin.adjust',{field:'luck',mode:'set',amount:501})).status,400);
+  assert.equal((await command(adminId,'admin.adjust',{field:'gems',mode:'set',amount:12.55})).status,400);
+  const requestId=crypto.randomUUID(),args={field:'coins',mode:'add',amount:700};
+  for(const result of await Promise.all([command(adminId,'admin.adjust',args,requestId),command(adminId,'admin.adjust',args,requestId)])){
+   assert.equal(result.status,200);
+   assert.equal((await result.json()).wallet.coins,2200);
+  }
+  for(const [field,mode,amount,value] of [['luck','set',120,120],['luck','add',35,155],['gems','set',20.5,20.5]]){
+   const response=await command(adminId,'admin.adjust',{field,mode,amount});
+   assert.equal(response.status,200);
+   assert.equal((await response.json()).wallet[field],value);
+  }
+  assert.deepEqual((await (await call(memberId,'/api/players',null,'')).json()).rows.map(row=>row.alias),['Fixture member']);
+  assert.equal((await command(adminId,'pack.buy',{packId:'common',quantity:1})).status,200);
+  assert.equal((await command(adminId,'admin.reset',{confirmation:'reset'})).status,400);
+  const reset=await command(adminId,'admin.reset',{confirmation:'RESET'});
+  assert.equal(reset.status,200);
+  assert.equal((await reset.json()).wallet.coins,1500);
+  assert.deepEqual((await (await call(adminId,'/api/game?view=cards')).json()).cards,[]);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM game_scores WHERE player_id=?').get(owner).count,0);
+  assert.equal((await (await call(memberId)).json()).wallet.coins,1500);
+ }finally{sqlite.close();}
+});
 async function unusedPort(){
  const probe=net.createServer().listen(0,'127.0.0.1');
  await once(probe,'listening');

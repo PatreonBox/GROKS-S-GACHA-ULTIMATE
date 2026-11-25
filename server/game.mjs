@@ -1,7 +1,8 @@
-import {cardCategories,createCardPool,normalizeWallet} from '../web/pack-engine.js';
+import {cardCategories,difficulties,createCardPool,mergeBlocked,normalizeWallet,upgrades} from '../web/pack-engine.js';
 import {newWallet,prepareGameAction} from '../web/game-rules.js';
 import {campaignStages,stageCleared} from '../web/campaign.js';
-import {mineEarnings} from '../web/mine-economy.js';
+import {mineEarnings,settleMine} from '../web/mine-economy.js';
+import {createMergePlanner,gemTenths} from '../web/card-economy.js';
 import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
 
 const guestCookie='__Host-gdlb-save';
@@ -78,11 +79,11 @@ async function identity(request,db,initial,owner){
 }
 
 async function profile(db,owner,create){
- let record=await one(db,'SELECT player_id, revision, wallet FROM game_profiles WHERE owner=?',owner);
+ let record=await one(db,'SELECT player_id, revision, wallet, leaderboard_excluded FROM game_profiles WHERE owner=?',owner);
  if(record||!create)return record;
  await db.prepare('INSERT OR IGNORE INTO game_profiles(player_id,owner,wallet,updated_at) VALUES(?,?,?,?)')
   .bind(crypto.randomUUID(),owner,JSON.stringify(newWallet()),Date.now()).run();
- record=await one(db,'SELECT player_id, revision, wallet FROM game_profiles WHERE owner=?',owner);
+ record=await one(db,'SELECT player_id, revision, wallet, leaderboard_excluded FROM game_profiles WHERE owner=?',owner);
  return record;
 }
 
@@ -109,16 +110,22 @@ async function profileStats(db,record,collectibleIds){
   campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(wallet,i+1)),0)};
 }
 
-async function commit(db,{owner,record,wallet,changes,requestId,result,now,transferId}){
+async function commit(db,{owner,record,wallet,changes,requestId,result,now,transferId,admin=false,reset=false}){
  const id=record.player_id,version=record.revision+1;
  // Concurrent retries share a request ID. Only the winning write may update cards.
  const writeId=crypto.randomUUID();
  const guard='EXISTS(SELECT 1 FROM game_profiles WHERE player_id=? AND revision=? AND last_request=?)';
  const transferGuard=transferId?` AND NOT EXISTS(
   SELECT 1 FROM game_profiles WHERE json_extract(wallet,'$.legacyTransfer.id')=?)`:'';
- const statements=[db.prepare(`UPDATE game_profiles SET wallet=?, revision=?, last_request=?,updated_at=?
+ if(changes.size||reset)wallet.cardsRevision=version;
+ const statements=[db.prepare(`UPDATE game_profiles SET wallet=?, revision=?, last_request=?,updated_at=?,
+  leaderboard_excluded=MAX(leaderboard_excluded,?)
   WHERE player_id=? AND owner=? AND revision=?`+transferGuard)
-  .bind(JSON.stringify(wallet),version,writeId,now,id,owner,record.revision,...(transferId?[transferId]:[]))];
+  .bind(JSON.stringify(wallet),version,writeId,now,Number(admin),id,owner,record.revision,...(transferId?[transferId]:[]))];
+ if(reset)statements.push(
+  db.prepare('DELETE FROM game_cards WHERE player_id=? AND '+guard).bind(id,id,version,writeId),
+  db.prepare('DELETE FROM game_scores WHERE player_id=? AND '+guard).bind(id,id,version,writeId)
+ );
  const cards=[...changes.values()];
  for(let i=0;i<cards.length;i+=250){
   const chunk=JSON.stringify(cards.slice(i,i+250));
@@ -135,28 +142,59 @@ async function commit(db,{owner,record,wallet,changes,requestId,result,now,trans
  return Number(change.meta.changes)===1;
 }
 
-async function play(db,session,{action,args,requestId},getPool,hasArt){
+function adjustAdminWallet(wallet,args){
+ const {field,mode,amount}=args||{};
+ if(!Number.isFinite(amount)||amount<0)reject('Enter a valid amount.');
+ if(field==='luck'&&(mode==='set'||mode==='add')){
+  const next=(mode==='add'?(wallet.luck||0):0)+amount;
+  if(!Number.isInteger(amount)||next>upgrades.luck.max)reject('Luck must stay between 0 and '+upgrades.luck.max+'%.');
+  wallet.luck=next;
+ }else if(field==='coins'&&mode==='add'){
+  if(!Number.isSafeInteger(amount)||amount===0||amount>Number.MAX_SAFE_INTEGER-wallet.coins)reject('Enter a whole coin amount within the wallet limit.');
+  wallet.coins+=amount;
+ }else if(field==='gems'&&mode==='set'){
+  if(!Number.isSafeInteger(gemTenths(amount))||gemTenths(amount)/10!==amount)reject('Use at most one decimal place, within the gem balance limit.');
+  wallet.gems=amount;
+ }else reject('Choose a valid admin adjustment.');
+ return {field,value:wallet[field]};
+}
+
+async function play(db,session,{action,args,requestId},getPool,hasArt,administrator){
+ const admin=action==='admin.adjust'||action==='admin.reset';
+ const reset=action==='admin.reset';
+ if(admin&&!administrator)reject('Admin tools are unavailable for this account.',403);
+ if(reset&&args?.confirmation!=='RESET')reject('Type RESET to confirm this save reset.');
  if(!uuid.test(typeof requestId==='string'?requestId:''))reject('Invalid game request.');
  let prepared;
  for(let attempt=0;attempt<4;attempt++){
   const record=await profile(db,session.owner,false);
   if(!record)reject('Reload the page to reconnect to your save.',401);
   const previous=await one(db,'SELECT result FROM game_requests WHERE player_id=? AND request_id=?',record.player_id,requestId);
-  const wallet=normalizeWallet(JSON.parse(record.wallet));
+  let wallet=normalizeWallet(JSON.parse(record.wallet));
   if(previous){
    // The receipt may have committed after the profile read.
    const current=await profile(db,session.owner,false);
    if(!current)reject('Reload the page to reconnect to your save.',401);
    return {wallet:visibleWallet(JSON.parse(current.wallet)),result:JSON.parse(previous.result)};
   }
-  try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
-  catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
-  const records=prepared.cards?await inventory(db,record.player_id):[];
   const changes=new Map(),now=Date.now();
   let result;
-  try{result=prepared.apply(wallet,records,changes,now,true);}
-  catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
-  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId,result,now})){
+  if(reset){
+   const legacyTransfer=wallet.legacyTransfer;
+   wallet=newWallet();
+   if(legacyTransfer)wallet.legacyTransfer=legacyTransfer;
+   result={reset:true};
+  }else if(admin){
+   settleMine(wallet,now);
+   result=adjustAdminWallet(wallet,args);
+  }else{
+   try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
+   catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
+   const records=prepared.cards?await inventory(db,record.player_id):[];
+   try{result=prepared.apply(wallet,records,changes,now,true);}
+   catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
+  }
+  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId,result,now,admin,reset})){
    return {wallet:visibleWallet(wallet),result};
   }
  }
@@ -192,7 +230,7 @@ async function transferSave(db,session,body,getPool){
 
 export function gameRoutes(readJson,hasArt){
  const getPool=createCardPool(readJson);
- let collectibleIds;
+ let collectibleIds,mergePlanner;
  function getCollectibleIds(){
   collectibleIds??=Promise.all(cardCategories.map(getPool)).then(pools=>{
    const ids=new Set();
@@ -200,6 +238,22 @@ export function gameRoutes(readJson,hasArt){
    return ids;
   }).catch(error=>{collectibleIds=undefined;throw error;});
   return collectibleIds;
+ }
+ async function gachaActivity(db,record){
+  const wallet=JSON.parse(record.wallet);
+  const cards=await inventory(db,record.player_id);
+  if(!cards.length)return {unclaimed:0,latest:0,mergeReady:false};
+  const collectible=await getCollectibleIds();
+  const unclaimed=cards.filter(card=>card.row[6]!=='Auto'&&card.indexReward===undefined&&collectible.has(card.id)).length;
+  const latest=cards.reduce((date,card)=>card.copies>0?Math.max(date,card.last||0):date,0);
+  const candidates=cards.filter(card=>card.copies>=2&&!mergeBlocked(card,wallet));
+  if(candidates.length){
+   mergePlanner??=Promise.all(difficulties.map(getPool)).then(pools=>createMergePlanner(pools,difficulties))
+    .catch(error=>{mergePlanner=undefined;throw error;});
+   const plan=await mergePlanner;
+   return {unclaimed,latest,mergeReady:candidates.some(card=>plan(card.row).near.length>0)};
+  }
+  return {unclaimed,latest,mergeReady:false};
  }
  return async function handleGame(request,env){
   const db=env?.DB;
@@ -218,7 +272,10 @@ export function gameRoutes(readJson,hasArt){
    const initial=request.method==='GET'&&view==='wallet'&&url.pathname==='/api/game';
    const subject=chatgpt?request.headers.get('oai-authenticated-user-id'):null;
    const owner=env.discordUser?'discord:'+env.discordUser:subject?'account:'+subject:null;
+   const adminOwner=/^\d{17,20}$/.test(env.adminDiscordId||'')?'discord:'+env.adminDiscordId:'';
+   const admin=Boolean(adminOwner&&owner===adminOwner);
    const account={signedIn:Boolean(owner),accountSignIn:Boolean(accountProvider),accountProvider,requiresSignIn};
+   if(admin)account.admin=true;
    if(env.discordProfile)account.playerProfile=env.discordProfile;
    if(requiresSignIn&&!env.discordUser){
     if(initial)return json(account);
@@ -231,13 +288,14 @@ export function gameRoutes(readJson,hasArt){
     return json(body,status);
    }
    const session=await identity(request,db,initial,owner);
-   if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt);
+   if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt,adminOwner);
    if(isTransfer)return json({...await transferSave(db,session,await readBody(request,maxTransferBody),getPool),...account});
-   if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt),...account});
+   if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt,admin),...account});
    const record=await profile(db,session.owner,initial);
    if(!record)reject('Open the game to start your save.',401);
    if(view==='wallet')return json({wallet:visibleWallet(normalizeWallet(JSON.parse(record.wallet))),...account},200,session.cookie);
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
+   if(view==='gacha-activity')return json({activity:await gachaActivity(db,record)});
    if(view==='profile')return json({profile:await profileStats(db,record,await getCollectibleIds())});
    reject('Unknown save view.');
   }catch(error){
@@ -248,12 +306,14 @@ export function gameRoutes(readJson,hasArt){
  };
 }
 
-async function standings(request,db,session,accountSignIn){
+async function standings(request,db,session,accountSignIn,adminOwner){
  const record=await profile(db,session.owner,false);
  const wallet=record&&JSON.parse(record.wallet);
  const legacyProgress=Boolean(wallet?.legacyTransfer);
- const canPost=Boolean(record&&!legacyProgress&&(session.signedIn||!accountSignIn));
+ const privateProfile=Boolean(record?.leaderboard_excluded||(adminOwner&&session.owner===adminOwner));
+ const canPost=Boolean(record&&!privateProfile&&!legacyProgress&&(session.signedIn||!accountSignIn));
  if(request.method==='POST'){
+  if(privateProfile)reject('This profile is excluded from public player rankings.',403);
   if(legacyProgress)reject('Transferred browser progress is playable online. Public rankings use progress earned online.',403);
   if(!canPost)reject(accountSignIn?'Sign in to post a score.':'Open the game to start your save.',401);
   const {alias}=await readBody(request);
@@ -266,9 +326,10 @@ async function standings(request,db,session,accountSignIn){
    score=excluded.score,posted_at=CASE WHEN excluded.score>game_scores.score THEN excluded.posted_at ELSE game_scores.posted_at END
    WHERE excluded.score>=game_scores.score`).bind(record.player_id,alias.trim(),best.tier,best.survivors,best.turns,best.score,Date.now()).run();
  }
- const {results}=await db.prepare(`WITH ranked AS (SELECT player_id,alias,tier,survivors,turns,
-  ROW_NUMBER() OVER (ORDER BY score DESC,turns,posted_at,player_id) AS place FROM game_scores)
+ const {results}=await db.prepare(`WITH ranked AS (SELECT s.player_id,s.alias,s.tier,s.survivors,s.turns,
+  ROW_NUMBER() OVER (ORDER BY s.score DESC,s.turns,s.posted_at,s.player_id) AS place FROM game_scores s
+  JOIN game_profiles p ON p.player_id=s.player_id WHERE p.leaderboard_excluded=0 AND p.owner<>?)
   SELECT place,alias,tier,survivors,turns,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place`)
-  .bind(record?.player_id||'',record?.player_id||'').all();
- return json({rows:results,signedIn:session.signedIn,canPost,legacyProgress});
+  .bind(adminOwner,record?.player_id||'',record?.player_id||'').all();
+ return json({rows:results,signedIn:session.signedIn,canPost,legacyProgress,privateProfile});
 }

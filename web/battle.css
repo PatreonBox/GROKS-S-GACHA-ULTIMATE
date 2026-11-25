@@ -24,7 +24,11 @@ dialog.pack-reveal{inset:0;margin:0;padding:clamp(15px,4vw,52px);width:100%;heig
 #battleRoom{--teal:#94f3db;--bt-bg:#161923}.bt-heading,.bt-title,.bt-commit,.command-title,.retreat-row{justify-content:space-between;gap:10px}
 .bt-heading{margin-bottom:12px}.bt-heading h1{font-size:clamp(30px,4vw,48px)}.bt-muted,.bt-commit>span,.retreat-row>small,.command-title p,.outcome p{color:#c0b9cc}
 .arena-poster,.battlefield{position:relative;isolation:isolate;background:#111824;border:1px solid #3c4956;border-radius:14px;overflow:hidden}
-.arena-poster{display:grid;grid-template-columns:1fr minmax(220px,36%);align-items:center;min-height:233px;padding:clamp(19px,3vw,39px);background:linear-gradient(94deg,#121820 15%,#182437d9 58%,#171c3373),url('/assets/shots/hero-119550490.avif') center 48% / cover}
+.arena-poster{display:grid;grid-template-columns:1fr minmax(220px,36%);align-items:center;min-height:233px;padding:clamp(19px,3vw,39px);background:color-mix(in srgb,var(--arena) 26%,#101722)}
+.arena-banner-art{position:absolute;inset:0;z-index:-3;width:100%;height:100%;object-fit:cover;object-position:center 50%}
+.arena-banner-art[src$="/insane.webp"]{filter:hue-rotate(-33deg)}
+.arena-poster.demon-poster .arena-banner-art{object-position:center 45%}
+.arena-poster:before{content:"";position:absolute;inset:0;z-index:-2;pointer-events:none;background:linear-gradient(93deg,#101522ed 0%,#111725cf 36%,#12192758 70%,#10152323),linear-gradient(0deg,#10152380,transparent 44%)}
 .arena-poster:after,.battlefield:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:repeating-linear-gradient(135deg,transparent 0 22px,#9df3f80b 22px 23px);mask-image:linear-gradient(90deg,transparent,#000)}
 .battle-eyebrow,.bt-title small,.command-title small,.bt-panel h3{color:var(--teal);font-size:12px;font-weight:750;letter-spacing:.12em}.battle-eyebrow{gap:8px}.battle-eyebrow svg{width:17px;height:17px}
 .arena-copy h2,.bt-title h2,.command-title h2,.outcome h2{font:800 clamp(33px,5.8vw,73px)/1 Cond,sans-serif;letter-spacing:-.015em;text-transform:uppercase;margin:5px 0 13px}

@@ -96,6 +96,10 @@ function armyPlayers(wallet,records,ids,starterRows,now) {
 }
 
 const rules={
+ 'collection.seen':{run:({w,now,args:{through}})=>{
+  requireRule(within(through,0,now),'Collection timestamp is invalid.');
+  w.collectionSeenThrough=Math.max(w.collectionSeenThrough||0,through);
+ }},
  'guide.seen':{run:({w,args:{id}})=>{
   requireRule(typeof id==='string'&&/^[a-z0-9-]{1,80}$/.test(id),'Choose a guide.');
   const seen=w.guideSeen??=[];

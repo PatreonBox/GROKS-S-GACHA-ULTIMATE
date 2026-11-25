@@ -4,6 +4,7 @@ import {statsFor} from './battle-engine.js';
 import {stat as cardNum} from './card-economy.js';
 import {ico,ratingLabel,ratingIcon} from './icons.js';
 import {createPackRoom} from './pack-room.js';
+import {createPackSound} from './pack-sound.js';
 import {tierNames, starTiers, readRoute, loadTier, browseTier} from './demon-tiers.js';
 import {gameSession,gameCommand} from './game-client.js';
 import {createSectionGuides} from './game-introduction.js';
@@ -27,6 +28,8 @@ let section='leaderboard',layout=stored('gdlb.view','list'),page=0,focusSlide=0,
 let seed,localImages=new Set(),initialRows=[],rankRows=new Map(),demonRecords=[],demonLoading=null,liveDemonTime=0,current=[],currentDetails=null,statusMode='archive';
 const pageSize=20, rowMap=new Map(),sourceDate='22 Nov 2026';
 let arcade,guides;
+const sound=createPackSound();
+sound.listenForUiTaps();
 document.querySelectorAll('[data-icon]').forEach(i=>i.innerHTML=ico(i.dataset.icon));
 function storeRows(rows){for(const r of rows)if(!r[15])rowMap.set(r[0],r)}
 function announce(s){const t=document.querySelector('.toast');t.textContent=s;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),1600)}
@@ -279,6 +282,7 @@ async function start(){
   setGuideProgress(session.wallet.guideSeen,id=>gameCommand('guide.seen',{id},null).catch(()=>{}));
   guides=createSectionGuides($('gameGuide'));
   arcade=createPackRoom({
+   sound,
    localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
    openLevel:row=>{storeRows([row]);showDetails(row[0])},
    announce,onGuide:guides.select,

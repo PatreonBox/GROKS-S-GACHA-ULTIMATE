@@ -22,12 +22,14 @@ export const packs=[
  {id:'legendary',name:'Legendary',price:10000000,color:'#b3ecff',dark:'#504389',
   base:[0,0,0,0,0,0,.5,5.5,63,30.95,.05]},
  {id:'mythic',name:'Mythic',price:200000000,color:'#ff97bc',dark:'#842954',
-  base:[0,0,0,0,0,0,0,0,0,40,60]},
+  base:[0,0,0,0,0,0,0,0,2,88,10]},
  {id:'godly',name:'Godly',price:3000000000,color:'#ffedaa',dark:'#8a652e',
   base:[0,0,0,0,0,0,0,0,0,0,100]},
 ];
 
-export const packOddsVersion=2;
+export const packOddsVersion=3;
+export const mythicExtremeCap=15;
+const priorMythicBase=[0,0,0,0,0,0,0,0,0,40,60];
 // Older openings can still reconstruct odds if they predate stored per-card probabilities.
 const legacyPackBases={
  'common':[40,30,18,8,3,.76,.18,.05,.008,.0018,.0002],
@@ -77,7 +79,7 @@ export function bonusChance(level){
 // Quantize the cumulative probabilities, keeping a ticket for each eligible difficulty.
 // The UI and sampler use the same integer table, including at maximum luck.
 export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion}={}){
- const base=version===1?legacyPackBases[pack.id]:pack.base;
+ const base=version===1?legacyPackBases[pack.id]:version===2&&pack.id==='mythic'?priorMythicBase:pack.base;
  const extra=Math.max(0,Math.min(upgrades.luck.max,Number(luckLevel)||0))/100;
  const whole=Math.floor(extra),fraction=extra-whole;
  let baseCdf=0,prior=0,remaining=base.filter(pct=>pct>0).length;
@@ -93,6 +95,11 @@ export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion}=
   prior=threshold;
   return {category,weight,percent:weight/10000};
  });
+ if(version>=3&&pack.id==='mythic'){
+  const insane=odds[9],extreme=odds[10],overflow=Math.max(0,extreme.weight-mythicExtremeCap*10000);
+  insane.weight+=overflow;insane.percent=insane.weight/10000;
+  extreme.weight-=overflow;extreme.percent=extreme.weight/10000;
+ }
  if(secrets&&pack.id==='godly'){
   const tickets=Math.round(impossiblePercent*TICKETS/100),extreme=odds[10];
   extreme.weight-=tickets;extreme.percent=extreme.weight/10000;
@@ -102,6 +109,7 @@ export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion}=
 }
 
 export function godlyExtremeTickets(luck=0,options){return oddsFor(packs.at(-1),luck,options)[10].weight}
+export const mostLikelyDifficulty=odds=>odds.reduce((best,tier)=>tier.weight>best.weight?tier:best);
 // Probability of one exact level and finish, expressed as a percentage per dealt card.
 export function cardDrawPercent(row,levels,tierPercent,{
  holo=false,finish=holo?'holo':'standard',hasFinishRoll=true,finishOddsVersion=finishVersion,version=rankOddsVersion,reference=godlyExtremeTickets()

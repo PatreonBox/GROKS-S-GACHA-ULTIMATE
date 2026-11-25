@@ -128,6 +128,23 @@
 .bug-receipt-fields dt{color:#adbed5;font-size:13px;font-weight:700}
 .bug-receipt-fields dd{margin:3px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .bug-receipt .player-dialog-actions{justify-content:flex-end}
+.admin-balances{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 17px}
+.admin-balances>div{padding:10px;border:1px solid #405470;border-radius:8px;background:#111927}
+.admin-balances dt{color:#aad3df;font-size:13px}
+.admin-balances dd{margin:2px 0 0;color:#f5faff;font-weight:800;overflow-wrap:anywhere}
+.admin-form{display:grid;grid-template-columns:1fr minmax(0,1fr) auto;align-items:end;gap:8px}
+.admin-form label{display:grid;gap:5px;color:#dceafa;font-size:14px}
+.admin-form :is(input,select){
+ width:100%;min-width:0;height:42px;padding:8px;border:1px solid #526786;border-radius:7px;
+ background:#0e1523;color:#f0f7ff;font:inherit;font-size:16px;color-scheme:dark;
+}
+.admin-form button{min-height:42px}
+.admin-reset{border:1px solid #66434e;border-radius:8px;margin-top:18px;padding:10px;background:#261b27}
+.admin-reset summary{font-weight:750;color:#ffb5b8;cursor:pointer}
+.admin-reset p{color:#e5b8bd}
+.admin-reset .admin-form{grid-template-columns:minmax(0,1fr) auto}
+.admin-danger{color:#ffc1c3;border-color:#a45a68}
+@media(max-width:420px){.admin-form{grid-template-columns:1fr}.admin-reset .admin-form{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:no-preference){
  .bug-receipt:not([hidden]){animation:report-received .22s ease-out}
 }
