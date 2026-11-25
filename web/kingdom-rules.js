@@ -1,5 +1,6 @@
 export const housePrice=50_000;
 export const houseSize={width:3.15,depth:2.72};
+export const houseHeight=3.26;
 export const plotBounds={left:-12,right:12,back:-11,front:12};
 export const towerPlot={x:-2.65,z:0};
 export const trailCorners=[
@@ -7,17 +8,37 @@ export const trailCorners=[
  [2.7,-4.3],[-3.4,-4.4],[-6.4,-1.2],[-6.1,1.3]
 ];
 const trailClearance=.86;
-export const kingdomVisitors=[
- {id:'gamer-vibes',name:'Gamer Vibes',channel:'Gamer_vibes-p1r',audience:'215',rarity:'Common',stars:.3,cube:'06'},
- {id:'jfrozy',name:'JFrozy Creator [GD]',channel:'JFrozyGD0',audience:'230',rarity:'Common',stars:.6,cube:'56'},
- {id:'unbreakable',name:'Unbreakable',channel:'unbreakable5205',audience:'983',rarity:'Uncommon',stars:1.5,cube:'39'},
- {id:'trqp-kun',name:'Trqp_kun',channel:'trqp_kun',audience:'1K',rarity:'Uncommon',stars:2.7,cube:'22'},
- {id:'wootdog',name:'Wootdog23',channel:'Wootdog23',audience:'4.7K',rarity:'Rare',stars:4.2,cube:'199'}
+export const visitorSlots=[
+ ['Common',.3],['Common',.6],['Uncommon',.9],['Uncommon',1.2],['Uncommon',1.5],
+ ['Rare',1.8],['Rare',2.4],['Epic',3],['Epic',3.6],['Legendary',4.5]
+].map(([rarity,stars],slot)=>({slot,rarity,stars}));
+const towerTiers=[
+ {limit:2,price:0},{limit:6,price:200_000},{limit:9,price:1_500_000},
+ {limit:13,price:10_000_000},{limit:17,price:75_000_000}
 ];
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
-export function kingdomStats(houses){
+export function towerPlan(wallet){
+ const saved=wallet?.kingdom?.towerLevel;
+ const level=Number.isInteger(saved)&&saved>=1&&saved<=towerTiers.length?saved:1;
+ return {level,limit:towerTiers[level-1].limit,next:towerTiers[level]};
+}
+export function kingdomStats(wallet){
+ const houses=kingdomHouses(wallet),tower=towerPlan(wallet);
  const stars=Math.min(50,houses.length*3)/10;
- return {stars,value:houses.length*housePrice,visitors:kingdomVisitors.filter(guest=>stars>=guest.stars)};
+ const value=houses.reduce((sum,house)=>sum+(house.price??housePrice),0)+
+  towerTiers.slice(0,tower.level).reduce((sum,tier)=>sum+tier.price,0);
+ return {houses,tower,stars,value,houseCost:housePrice*2**houses.length};
+}
+
+export function upgradeTower(wallet,expectedLevel){
+ const houses=kingdomHouses(wallet),{level,limit,next}=towerPlan(wallet);
+ if(level!==expectedLevel)throw Error('Your tower level changed. Check its new upgrade.');
+ if(!next)throw Error('Your tower is at its highest level.');
+ if(houses.length<limit)throw Error('Fill the current house lots before upgrading.');
+ if(wallet.coins<next.price)throw Error('You need '+next.price.toLocaleString('en-US')+' coins to upgrade.');
+ wallet.coins-=next.price;
+ wallet.kingdom={...wallet.kingdom,towerLevel:level+1};
+ return {level:level+1,limit:next.limit,price:next.price};
 }
 
 export function houseFootprint({x,z,rotation},margin=0){
@@ -49,14 +70,17 @@ export function housePlacementError(houses,proposal){
  return '';
 }
 
-export function buildHouse(wallet,{x,z,rotation}){
+export function buildHouse(wallet,{x,z,rotation,expectedPrice=housePrice}){
  if(!Number.isFinite(x)||!Number.isFinite(z))throw Error('Choose a position on your plot.');
  const spot={x:Math.round(x*100)/100,z:Math.round(z*100)/100,rotation};
- const houses=kingdomHouses(wallet),problem=housePlacementError(houses,spot);
+ const {houses,tower,houseCost}=kingdomStats(wallet);
+ if(houses.length>=tower.limit)throw Error(tower.next?'Upgrade your tower to open more house lots.':'All your house lots are full.');
+ if(expectedPrice!==houseCost)throw Error('The house price changed. Check its new cost.');
+ const problem=housePlacementError(houses,spot);
  if(problem)throw Error(problem);
- if(wallet.coins<housePrice)throw Error('You need 50,000 coins to build a GD House.');
- const house={id:crypto.randomUUID(),...spot};
- wallet.kingdom={houses:[...houses,house]};
- wallet.coins-=housePrice;
+ if(wallet.coins<houseCost)throw Error('You need '+houseCost.toLocaleString('en-US')+' coins to build a GD House.');
+ const house={id:crypto.randomUUID(),...spot,price:houseCost};
+ wallet.kingdom={...wallet.kingdom,houses:[...houses,house]};
+ wallet.coins-=houseCost;
  return house;
 }

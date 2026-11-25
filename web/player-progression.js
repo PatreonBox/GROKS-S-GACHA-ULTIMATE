@@ -1,4 +1,4 @@
-const perPack={common:12,uncommon:19,rare:29,'super-rare':43,epic:62,legendary:88,mythic:121,godly:166};
+const perPack={common:7,uncommon:12,rare:12,'super-rare':22,epic:31,legendary:44,mythic:61,godly:83};
 export const packPlayerXp=id=>perPack[id]||0;
 
 const levelStart=level=>120*level+17*level*(level-1)+level*(level-1)*(2*level-1)/3;

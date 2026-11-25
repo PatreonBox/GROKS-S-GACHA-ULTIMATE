@@ -18,7 +18,9 @@ import {createCubeShop} from './cube-shop.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {createCoinMine} from './coin-mine.js';
 import {createKingdom} from './kingdom.js';
-import {packPlayerXp} from './player-progression.js';
+import {packPlayerXp,playerProgress} from './player-progression.js';
+import {featureLevel,features,packLevels} from './level-access.js';
+import {lockAttributes,lockBadge,lockedPage,setLevelLock} from './level-lock.js';
 import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,skillOwned} from './mine-economy.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
@@ -47,10 +49,11 @@ const plural=n=>n===1?'pack':'packs';
 const visiblePackLimit=10;
 const mineCheckpointMs=20000;
 
-export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
+export function createPackRoom({localCover,openLevel,announce,onGuide,sound,initialWallet}){
  const rewards=createRewardFlight(sound,headerAmount);
  const root=byId('arcade'),reveal=byId('packReveal'),code=byId('coinCode');
  let view=null,wallet=null,selected=packs[0],quantity=1,busy=false,version=0,upgrading=false;
+ let playerLevel=0,routeLocked=false,routePack;
  let cards=[],filter='',category='all',collectionPage=0,collectionSort='recent';
  let rarityPack='all',rankedPool=null,rarityLoading=null,rarityFailure=false;
  let run=null,packIndex=0,stage='closed',timers=[],animationId=0,activeRare=null;
@@ -84,25 +87,36 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  const cubes=createCubeShop({root:cubeRoot,applyWallet,sound,announce});
  const kingdom=createKingdom(byId('kingdomRoom'),sound,applyWallet);
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
+ const locked=id=>playerLevel<featureLevel(id);
+ const kingdomTab=byId('kingdomNew').parentElement;
+ kingdomTab.insertAdjacentHTML('beforeend',lockBadge(featureLevel('kingdom'),false));
  const markKingdomNav=()=>{
-  const badge=byId('kingdomNew'),visited=seenGuide(newAreas.kingdom);
+  const badge=byId('kingdomNew'),visited=seenGuide(newAreas.kingdom)||locked('kingdom');
   badge.hidden=visited;
+  setLevelLock(kingdomTab,featureLevel('kingdom'),playerLevel);
   if(visited)badge.parentElement.removeAttribute('aria-describedby');
   else badge.parentElement.setAttribute('aria-describedby',badge.id);
  };
- markKingdomNav();
  const failure=e=>announce(e?.message||'Could not save this change. Please try again.');
  function applyWallet(w,{pans=[],credited=0}={}){
-  const first=!wallet,oldLuck=wallet?.luck;wallet=w;walletError='';refreshId++;
+  const first=!wallet,oldLuck=wallet?.luck,previousLevel=playerLevel;
+  wallet=w;walletError='';refreshId++;
+  playerLevel=playerProgress(w.playerXp).level;
+  if(first||previousLevel!==playerLevel){
+   markKingdomNav();
+   setLevelLock(byId('walletLink'),featureLevel('mine'),playerLevel);
+   setLevelLock(byId('gemLink'),featureLevel('upgrades'),playerLevel);
+   if(view&&routeLocked!==locked(view))page(view,routePack);
+  }
   cubes.setWallet(w);
   kingdom.setWallet(w);
   if(view==='collection'&&collectionSort==='rarity'&&oldLuck!==w.luck&&byId('binderResults'))binder();
-  if(first&&['merge','index','vault'].includes(view))stations.show(view,w);battle.setWallet(w);army.setWallet(w);
+  if(first&&!routeLocked&&['merge','index','vault'].includes(view))stations.show(view,w);battle.setWallet(w);army.setWallet(w);
   coinMine.setWallet(w);
   refreshCoins(true,pans,credited);
-  byId('gemLink').title=number(w.gems)+' gems';
-  byId('gemLink').setAttribute('aria-label',number(w.gems)+' gems. Open upgrades');
-  if(view==='upgrades')renderUpgrades();
+  byId('gemLink').title=number(w.gems)+' gems'+(locked('upgrades')?' · Upgrades at Level '+featureLevel('upgrades'):'');
+  byId('gemLink').setAttribute('aria-label',byId('gemLink').title+(locked('upgrades')?'':'. Open upgrades'));
+  if(view==='upgrades'&&!routeLocked)renderUpgrades();
   if(view==='results')resultsPage();
   refreshActivity();
  }
@@ -114,14 +128,16 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   const gain=coins-previous;
   displayedCoins=coins;
   rewards.balance({coins,gems:wallet.gems});
-  byId('walletLink').title=number(coins)+' coins';
-  byId('walletLink').setAttribute('aria-label',number(coins)+' coins. Open the coin mine');
+  byId('walletLink').title=number(coins)+' coins'+(locked('mine')?' · Coin mine at Level '+featureLevel('mine'):'');
+  byId('walletLink').setAttribute('aria-label',byId('walletLink').title+(locked('mine')?'':'. Open the coin mine'));
   coinMine.setCoins(coins,force?0:gain);
   kingdom.setCoins(coins);
   if(gain>0&&gain>previous*.5)sound.coinReward(true);
   else if(pans.length)sound.coinReward(false,pans);
   else if(gain>0&&view==='mine'&&(!force||credited))sound.coinReward(false);
   if(view==='shop')updatePurchase();
+  const mergeLink=root.querySelector('[data-merge-link]');
+  if(mergeLink)setLevelLock(mergeLink,featureLevel('merge'),playerLevel);
   updateSectionAlerts();
  }
  async function sync(){
@@ -149,7 +165,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   sync();
   if(event.data==='mine')return;
   if(view==='collection')loadCollection();
-  if(['merge','index','vault'].includes(view))readWallet().then(w=>stations.show(view,w));
+  if(!routeLocked&&['merge','index','vault'].includes(view))readWallet().then(w=>{
+   if(!routeLocked&&['merge','index','vault'].includes(view))stations.show(view,w);
+  }).catch(()=>{});
   if(['battle','training','arcade'].includes(view))battle.refreshCollection();
   if(view==='army')army.refreshCollection();
  });
@@ -162,7 +180,6 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   refreshActivity();
   if(wallet?.mine?.collectedAt&&Date.now()-wallet.mine.collectedAt>=mineCheckpointMs)checkpointMine();
  },1000);
- if(document.hidden)sync();else checkpointMine(true);
  function sectionAlerts(){
   if(!wallet)return {};
   const canBuyMachine=mineMachines.some(machine=>!machineOwned(wallet.mine,machine.id)&&
@@ -185,21 +202,23 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   const alerts=sectionAlerts();
   for(const link of links){
    const key=link.dataset.gachaTab,unvisited=!seenGuide(tabVisit(key));
+   const required=featureLevel(key),lockedTab=locked(key);
+   setLevelLock(link,required,playerLevel);
    const notice=unvisited?'New':alerts[key];
    const badge=link.querySelector('.gacha-tab-alert');
-   const hidden=!notice||link.hasAttribute('aria-current');
+   const hidden=lockedTab||!notice||link.hasAttribute('aria-current');
    const nextTitle=hidden?'':notice;
-   if(badge.title===nextTitle&&link.hasAttribute('aria-label'))continue;
+   const label=link.querySelector('.nav-label').textContent;
+   link.setAttribute('aria-label',lockedTab?label+' · Level '+required+' required':hidden?label:label+' · '+notice);
+   if(badge.title===nextTitle)continue;
    badge.hidden=hidden;
    badge.dataset.new=String(unvisited);
    badge.title=badge.hidden?'':notice;
    badge.textContent=badge.hidden?'':unvisited?'New':'Ready';
-   const label=link.querySelector('.nav-label').textContent;
-   link.setAttribute('aria-label',badge.hidden?label:label+' · '+notice);
   }
  }
  function refreshActivity(){
-  if(!wallet||root.hidden||Date.now()<activityRetryAt||!root.querySelector('.arc-nav'))return;
+  if(!wallet||root.hidden||routeLocked||Date.now()<activityRetryAt||!root.querySelector('.arc-nav'))return;
   const battle=wallet.battle;
   const injured=Object.entries(wallet.injuries||{}).filter(([,until])=>until>Date.now()).map(([id])=>id);
   const key=[wallet.cardsRevision||0,battle?.status==='active'?battle.id:'',...injured].join('/');
@@ -212,16 +231,27 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   }).catch(()=>{if(request===activityRequest){activityKey='';activityRetryAt=Date.now()+15000;}});
  }
  function sectionNav(){
-  return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short,icon])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'?'aria-current="page"':'')+' href="#gacha'+(key==='shop'?'':'/'+key)+'">'+ico(icon)+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small></a>').join('')+'</nav>';
+  return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short,icon])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'?'aria-current="page"':'')+' href="#gacha'+(key==='shop'?'':'/'+key)+'">'+ico(icon)+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small>'+
+   (featureLevel(key)?lockBadge(featureLevel(key),locked(key)):'')+'</a>').join('')+'</nav>';
  }
- function page(next){
+ function page(next,packId){
   if(view!==next){stopTimers();rewards.clear()}
-  stations.leave();coinMine.leave();version++;view=next;const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army';
-  const home=next==='kingdom';
-  root.hidden=!view||combat||home;battle.show(classic,next==='training',next==='arcade');army.show(next==='army');
-  cubes.show(false);kingdom.show(home);
-  if(home){markGuide(newAreas.kingdom);markKingdomNav()}
+  stations.leave();coinMine.leave();version++;view=next;routePack=packId;
+  routeLocked=locked(next);
+  const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom';
+  root.hidden=!view||!routeLocked&&(combat||home);
+  battle.show(classic&&!routeLocked,next==='training'&&!routeLocked,next==='arcade'&&!routeLocked);
+  army.show(next==='army'&&!routeLocked);
+  cubes.show(false);kingdom.show(home&&!routeLocked);
+  if(home&&!routeLocked){markGuide(newAreas.kingdom);markKingdomNav()}
   if(reveal.open)reveal.close();
+  if(routeLocked){
+   const heading=combat?'Battle mode':home?'Kingdom':'Gacha';
+   root.innerHTML='<div class="arc-heading"><h1>'+heading+'</h1>'+(!combat&&!home?'<div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div>':'')+
+    '</div>'+lockedPage(features[next],playerLevel,combat?'#battle':'#gacha');
+   updateSectionAlerts();
+   return true;
+  }
   if(!view||combat||home)return;
   sound.preload();
   const destination=next==='vault'?'index':next;
@@ -229,12 +259,15 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   root.innerHTML='<div class="arc-heading"><h1>Gacha</h1><div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div></div><div id="arcBody"></div>';
   if(['index','merge','vault'].includes(view))stations.show(view,wallet);
   if(view==='results'){root.innerHTML='<div id="arcBody"></div>';resultsPage();window.scrollTo(0,0);bestSound()}
-  if(view==='shop')shop();
+  if(view==='shop'){
+   if(packId)selected=packs.find(item=>item.id===packId)||selected;
+   shop();
+  }
   if(view==='mine'){coinMine.show(byId('arcBody'),wallet);if(wallet)coinMine.setCoins(displayedCoins)}
   if(view==='cubes'){byId('arcBody').append(cubeRoot);cubes.show(true)}
   if(view==='upgrades')renderUpgrades();
   if(view==='collection'){
-   byId('arcBody').innerHTML='<div class="collection-head"><h2>My cards</h2><a class="outline" href="#gacha/merge">Merge duplicates</a><span id="ownedTotal"></span></div><div class="collection-tools"><input id="cardSearch" type="search" placeholder="Search your cards" aria-label="Search your cards" maxlength="80"><select id="cardCategory" aria-label="Card difficulty"><option value="all">All difficulties</option>'+cardCategories.map(d=>'<option>'+d+'</option>').join('')+'</select><select id="cardSort" aria-label="Sort your cards"><option value="recent">Recently pulled</option><option value="difficulty">Difficulty · hardest first</option><option value="rarity">Rarest first</option><option value="copies">Most copies</option></select><select id="rarityPack" aria-label="Pack used for rarity" hidden><option value="all">All packs equally</option>'+packs.map(p=>'<option value="'+p.id+'">'+p.name+' pack</option>').join('')+'</select></div><p id="rarityHint" class="rarity-hint" hidden>Odds use your current luck and rarest owned finish. All packs equally averages the odds across packs.</p><div id="binderResults"></div>';
+   byId('arcBody').innerHTML='<div class="collection-head"><h2>My cards</h2><a class="outline" href="#gacha/merge" data-merge-link'+lockAttributes(featureLevel('merge'),playerLevel)+'>Merge duplicates '+lockBadge(featureLevel('merge'),locked('merge'))+'</a><span id="ownedTotal"></span></div><div class="collection-tools"><input id="cardSearch" type="search" placeholder="Search your cards" aria-label="Search your cards" maxlength="80"><select id="cardCategory" aria-label="Card difficulty"><option value="all">All difficulties</option>'+cardCategories.map(d=>'<option>'+d+'</option>').join('')+'</select><select id="cardSort" aria-label="Sort your cards"><option value="recent">Recently pulled</option><option value="difficulty">Difficulty · hardest first</option><option value="rarity">Rarest first</option><option value="copies">Most copies</option></select><select id="rarityPack" aria-label="Pack used for rarity" hidden><option value="all">All packs equally</option>'+packs.map(p=>'<option value="'+p.id+'">'+p.name+' pack</option>').join('')+'</select></div><p id="rarityHint" class="rarity-hint" hidden>Odds use your current luck and rarest owned finish. All packs equally averages the odds across packs.</p><div id="binderResults"></div>';
    byId('cardSearch').value=filter;byId('cardCategory').value=category;byId('cardSort').value=collectionSort;
    byId('rarityPack').value=rarityPack;
    byId('rarityPack').onchange=e=>{rarityPack=e.target.value;collectionPage=0;binder()};
@@ -248,10 +281,17 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  }
  function shop(){
   const pack=selected;
-  const shelf=packs.map(p=>'<button class="pack-choice" data-choose="'+p.id+'" aria-pressed="'+(p===pack)+'" style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small></span></button>').join('');
+  const shelf=packs.map(p=>{
+   const needed=packLevels[p.id];
+   return '<button class="pack-choice" data-choose="'+p.id+'" aria-pressed="'+(p===pack)+'"'+lockAttributes(needed,playerLevel)+
+    ' style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small></span>'+
+    (needed?lockBadge(needed,playerLevel<needed):'')+'</button>';
+  }).join('');
+  const quantityButtons=packQuantities.map(q=>'<button data-qty="'+q+'">'+q+' '+plural(q)+' <small data-pack-size="'+q+'">'+5*q+' cards</small>'+
+   (q===50?lockBadge(featureLevel('bulk'),locked('bulk')):'')+'</button>').join('');
   byId('arcBody').innerHTML='<div class="pack-shelf" role="group" aria-label="Choose a gacha pack">'+shelf+'</div>'+
    '<div class="shop-display" style="'+colors(pack)+'"><div class="foil-stage" id="foilStage"><div class="pack-scene-caption" id="packSceneCaption" hidden></div><div class="package-float" id="previewPile"></div><div class="turn-handle" role="group" tabindex="0"></div><div class="turn-tools"><span>Drag to rotate</span><button data-reset-view aria-label="Reset pack rotation">Reset view</button></div></div>'+
-   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+packQuantities.map(q=>'<button data-qty="'+q+'">'+q+' '+plural(q)+' <small data-pack-size="'+q+'">'+5*q+' cards</small></button>').join('')+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per opened pack</div><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
+   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+quantityButtons+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per opened pack</div><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
    '<section class="odds-panel" style="'+colors(pack)+'"><div class="odds-heading"><h3>Difficulty odds</h3>'+(pack.id==='godly'?'<span>Includes an exclusive ??? slot.</span>':pack.id==='mythic'?'<span>Extreme Demon chance caps at '+mythicExtremeCap+'%.</span>':'')+'<a id="luckStatus" class="luck-link" href="#gacha/upgrades"></a></div><p class="pull-odds-note">Each card rolls a difficulty, then a level and a finish.</p><div class="odds-groups" id="oddsTable"></div><details class="rank-odds"><summary>Extreme Demon rank odds per card</summary><div id="rankOdds"></div></details></section>';
   updatePurchase();bindTurntable(byId('foilStage'));
  }
@@ -326,6 +366,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
  }
  function updatePurchase(){
   const buy=byId('buyPack');if(!buy)return;
+  if(quantity===50&&locked('bulk'))quantity=1;
+  for(const el of root.querySelectorAll('[data-choose]'))setLevelLock(el,packLevels[el.dataset.choose],playerLevel);
+  setLevelLock(byId('luckStatus'),featureLevel('upgrades'),playerLevel);
   renderOdds();
   const bonus=bonusChance(wallet?.bonus||0)>0;
   for(const label of root.querySelectorAll('[data-pack-size]')){
@@ -340,14 +383,23 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
    const visible=Math.min(quantity,visiblePackLimit);
    preview.innerHTML=Array.from({length:visible},(_,i)=>'<span class="preview-layer" style="--i:'+i+';z-index:'+(visible-i)+'">'+wrapper(selected,5,peak)+'</span>').reverse().join('');
   }
-  root.querySelectorAll('[data-qty]').forEach(el=>el.setAttribute('aria-pressed',String(Number(el.dataset.qty)===quantity)));
-  buy.disabled=busy||!wallet||(!pending&&cost>displayedCoins);
-  buy.innerHTML=busy?'Preparing cards…':pending?'Resume opening':('Pull '+quantity+' '+plural(quantity)+'<span>'+coin+number(cost)+'</span>');
-  byId('buyHint').innerHTML=walletError?enc(walletError):!wallet?'Loading wallet…':pending?'Your purchased cards are saved.':cost>displayedCoins?'You need '+number(cost-displayedCoins)+' more coins. <a href="#gacha/mine">Visit the mine</a>':'';
+  for(const el of root.querySelectorAll('[data-qty]')){
+   const count=Number(el.dataset.qty);
+   el.setAttribute('aria-pressed',String(count===quantity));
+   if(count===50)setLevelLock(el,featureLevel('bulk'),playerLevel);
+  }
+  const requirement=packLevels[selected.id],lockedPack=playerLevel<requirement;
+  buy.disabled=busy||!wallet||(!pending&&(lockedPack||cost>displayedCoins));
+  buy.innerHTML=busy?'Preparing cards…':pending?'Resume opening':lockedPack?ico('lock')+' Unlocks at Level '+requirement:
+   'Pull '+quantity+' '+plural(quantity)+'<span>'+coin+number(cost)+'</span>';
+  byId('buyHint').innerHTML=walletError?enc(walletError):!wallet?'Loading wallet…':pending?'Your purchased cards are saved.':
+   lockedPack?'Reach Level '+requirement+' for '+selected.name+' packs.':cost>displayedCoins?'You need '+number(cost-displayedCoins)+' more coins. '+
+    (locked('mine')?'Earn coins in Battle mode.':'<a href="#gacha/mine">Visit the mine</a>'):'';
  }
  async function purchase(){
   if(busy||!wallet)return;
   if(wallet.pending){begin(wallet.pending);sound.play('stack');return}
+  if(playerLevel<packLevels[selected.id]||quantity===50&&locked('bulk'))return;
   busy=true;updatePurchase();
   try{const w=await buyPack(selected,quantity);applyWallet(w);if(view==='shop'){begin(w.pending);sound.play('buy')}}
   catch(e){failure(e);await sync()}
@@ -667,5 +719,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound}){
   if(b.dataset.binder){sound.play('select');collectionPage+=Number(b.dataset.binder);binder();return}
   if(b.dataset.card&&view!=='vault'){const id=Number(b.dataset.card),row=view==='results'?wallet?.lastPull?.rows.find(r=>r[0]===id):cards.find(c=>c.id===id)?.row;if(row){sound.play('inspect');openLevel(row)}}
  });
+ if(initialWallet)applyWallet(initialWallet);
+ if(document.hidden)sync();else checkpointMine(true);
  return {page};
 }

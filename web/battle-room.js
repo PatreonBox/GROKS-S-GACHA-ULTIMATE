@@ -22,6 +22,9 @@ import {openDrill} from './training-games.js';
 import {equippedCube} from './cube-catalog.js';
 import {markGuide,newAreas,newBadge} from './guide-progress.js';
 import {drillGuideId,remixGuideId} from './minigame-guide.js';
+import {playerProgress} from './player-progression.js';
+import {featureLevel} from './level-access.js';
+import {lockAttributes,lockBadge} from './level-lock.js';
 
 const fmt=n=>n.toLocaleString('en-US');
 const short=n=>Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(n);
@@ -36,10 +39,14 @@ const face=d=>d===impossibleCategory?'/assets/impossible/mark.webp':'/assets/fac
 const payoutRange=t=>arenas[t-1].map(short).join('–');
 const nameplate=t=>'<img class="bt-face" src="'+face(difficulties[t])+'" alt="">'+difficulties[t];
 const battleShortcuts={training:{name:'Training zone',route:'training',style:'training',icon:'spark'},
- remix:{name:'Meme levels',route:'arcade',style:'arcade',icon:'flame'}};
-function battleShortcut(key,inArena=false){
+ remix:{name:'Meme levels',route:'arcade',style:'arcade',icon:'flame'},
+ army:{name:'Army mode',route:'army',style:'army',icon:'battle'}};
+function battleShortcut(key,level,inArena=false){
  const {name,route,style,icon}=battleShortcuts[key];
- return '<a class="outline feature-shortcut '+style+'-shortcut'+(inArena?' arena-activity':'')+'" href="#battle/'+route+'" aria-label="'+name+'" title="'+name+'">'+ico(icon)+'<span class="feature-label">'+name+'</span>'+newBadge(newAreas[key])+'</a>';
+ const required=featureLevel(route),locked=level<required,label=locked?name+' · Level '+required+' required':name;
+ return '<a class="outline feature-shortcut '+style+'-shortcut'+(inArena?' arena-activity':'')+'" href="#battle/'+route+'"'+
+  lockAttributes(required,level)+' aria-label="'+label+'" title="'+label+'">'+ico(icon)+'<span class="feature-label">'+name+'</span>'+
+  (locked?lockBadge(required):newAreas[key]?newBadge(newAreas[key]):'')+'</a>';
 }
 
 export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet,announce,onGuide}){
@@ -47,6 +54,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
  let visible=false,wallet=null,owned=[],loaded=false,loadId=0,tier=1,target=0,knownBattle='',draft=[],picker=false,search='',page=0;
  let collectionError=false,busy=false,feedback='',loop=null,lastInjured=0,clockVersion='';
  let mode='regular',campaignTier=0,selection=null,runner=null,inspection=null,playback=null,stopPlayback=null;
+ let playerLevel=0;
  const bountyTickets=new Map(),camera={flat:true};
  let clearTicket=null,arenaViewport;
  const mutedBtn=()=>'<button data-bsound aria-label="Battle sounds" aria-pressed="'+sound.enabled+'" class="iconbtn">'+ico(sound.enabled?'volume':'muted')+'</button>';
@@ -79,6 +87,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
  }
  function setWallet(w){
   wallet=w;
+  playerLevel=playerProgress(w.playerXp).level;
   if(!visible)return;
   if(playback&&(w.battle?.id!==playback.id||w.battle?.seq!==playback.seq+1))finishPlayback();
   if(w.battle?.seq!==seqSeen){seqSeen=w.battle?.seq;relay=null}
@@ -90,7 +99,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
    else if(w.battle?.remix){mode='remix';selection=findRemix(w.battle.remix)}
    else if(w.battle){mode='regular';tier=w.battle.tier}
   }
-  const stamp=[w.battle?.id,w.battle?.seq,w.battle?.status,JSON.stringify(w.battle?.techniques||{}),...(w.squad||[]),JSON.stringify(w.injuries||{}),w.trainingRevision||0].join('|');
+  const stamp=[w.battle?.id,w.battle?.seq,w.battle?.status,JSON.stringify(w.battle?.techniques||{}),...(w.squad||[]),JSON.stringify(w.injuries||{}),w.trainingRevision||0,playerLevel].join('|');
   if(stamp!==clockVersion){clockVersion=stamp;if(!playback)render()}
  }
  async function refreshCollection(){
@@ -235,8 +244,11 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const selector='<label class="arena-label" for="arenaChoice">Arena difficulty</label><select id="arenaChoice" aria-label="Arena difficulty">'+difficulties.slice(1).map((d,i)=>'<option value="'+(i+1)+'" '+(tier===i+1?'selected':'')+'>'+d+'</option>').join('')+'</select>';
   const activeMode=arcadePage?'remix':mode,campaign=activeMode==='campaign',remix=activeMode==='remix';
   const tabs='<div class="battle-tabs" role="group" aria-label="Battle mode">'+
-   [['campaign','Campaign'],['regular','Standard arenas'],['remix','Meme levels']].map(([key,label])=>
-    '<button data-mode="'+key+'" aria-pressed="'+(activeMode===key)+'">'+label+(key==='remix'?newBadge(newAreas.remix):'')+'</button>').join('')+'</div>';
+   [['campaign','Campaign'],['regular','Standard arenas'],['remix','Meme levels']].map(([key,label])=>{
+    const required=key==='remix'?featureLevel('arcade'):0,locked=playerLevel<required;
+    return '<button data-mode="'+key+'" aria-pressed="'+(activeMode===key)+'"'+lockAttributes(required,playerLevel)+'>'+
+     label+(locked?lockBadge(required):key==='remix'?newBadge(newAreas.remix):'')+'</button>';
+   }).join('')+'</div>';
   const poster='<section class="arena-poster'+(tier>=6?' demon-poster':'')+'" style="--arena:'+colors[tier]+'"><div class="arena-copy"><div class="battle-eyebrow">'+ico('battle')+' FOUR VS FOUR</div><h2>'+difficulties[tier]+' arena</h2>'+selector+'<div class="bounty">'+coin+'<b>'+payoutRange(tier)+'</b> coins per enemy</div></div><div class="arena-medal"><img src="'+face(difficulties[tier])+'" alt=""></div><img class="arena-banner-art" src="'+arenaArt[tier-1]+'" alt=""></section>';
   const action=owned.length<4?'<a href="#gacha" class="bt-primary">Open packs</a>':ready?
    '<button class="bt-primary" data-start '+(busy?'disabled':'')+'>'+(campaign?'Enter stage':'Enter battle')+'</button>':
@@ -299,7 +311,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const done=b.status!=='active',actor=activeActor(b),remix=findRemix(b.remix);
   const stage=stageFor(b.campaign);
   const title=stage?.name||remix?.name||difficulties[b.tier]+' arena';
-  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+battleShortcut('training',true)+battleShortcut('remix',true)+'<a class="outline leave-field army-shortcut" href="#battle/army" aria-label="Army mode">'+ico('battle')+'<span>Army mode</span></a><a class="outline leave-field" href="#gacha">Packs</a></div></div>';
+  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+battleShortcut('training',playerLevel,true)+battleShortcut('remix',playerLevel,true)+battleShortcut('army',playerLevel,true)+'<a class="outline leave-field" href="#gacha">Packs</a></div></div>';
   const side=(units,key,title,tip)=>'<div class="battle-side"><h3><span>'+title+'</span><small>'+enc(tip)+'</small></h3><div class="formation">'+units.map((u,i)=>tile(u,i,key,b)).join('')+'</div></div>';
   const relayWait=Math.max(0,(b.relayAt||0)-b.seq);
   const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><i></i><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span><i></i></div>';
@@ -351,8 +363,8 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   }
   const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Meme arcade':'Battle mode')+'</h1><div class="combat-links">'+
    (gym||arcadePage?'<a class="outline" href="#battle">Return to battle</a>':'')+
-   (!gym?battleShortcut('training'):'')+(!arcadePage?battleShortcut('remix'):'')+
-   '<a class="outline" href="#battle/army">Army mode</a>'+mutedBtn()+'</div></div>';
+   (!gym?battleShortcut('training',playerLevel):'')+(!arcadePage?battleShortcut('remix',playerLevel):'')+
+   battleShortcut('army',playerLevel)+mutedBtn()+'</div></div>';
   root.innerHTML=heading+(collectionError&&!loaded?'<p>Your squad could not load. <button class="outline" data-retry-collection>Try again</button></p>':!wallet||!loaded?'<p>Loading your squad…</p>':gym?training():match?arena(match):lobby())+'<div class="bt-feedback" role="status">'+enc(feedback)+'</div>';
   if(live){
    bindArenaCamera(root,camera);

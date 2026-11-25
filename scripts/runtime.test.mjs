@@ -81,7 +81,7 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   insert.run(player_id,6508283,JSON.stringify({copies:0}));
   const stats=request('/api/game?view=profile',sessionCookie);
   assert.deepEqual((await (await worker.fetch(stats,configure(stats))).json()).profile,
-   {coins:1500,gems:10,unique:2,copies:3,level:0,power:0,collectible:catalog.size,campaignClears:0,campaignTotal:10});
+   {coins:1500,gems:10,unique:2,copies:3,level:0,rank:1,privateRank:false,power:0,collectible:catalog.size,campaignClears:0,campaignTotal:10});
   assert.equal((await (await game(sessionCookie)).json()).wallet.coins,1500);
   for(let i=0;i<2;i++){
    const guide=new Request(to('/api/game'),{method:'POST',headers:{Cookie:sessionCookie,
@@ -211,6 +211,9 @@ test('owner admin tools are self-only, idempotent, and private on player ranking
   score.run(owner,'Fixture owner',10,4,3,100,1);
   score.run(other,'Fixture member',2,4,1,25,2);
   assert.deepEqual((await (await call(memberId,'/api/players')).json()).rows.map(row=>[row.place,row.alias]),[[1,'Fixture member']]);
+  const adminStats=(await (await call(adminId,'/api/game?view=profile')).json()).profile;
+  assert.equal(adminStats.rank,null);
+  assert.equal(adminStats.privateRank,true);
   assert.equal((await call(adminId,'/api/players',{alias:'Owner'})).status,403);
   assert.equal((await command(memberId,'admin.adjust',{field:'coins',mode:'add',amount:70})).status,403);
   assert.equal((await command(memberId,'admin.reset',{confirmation:'RESET'})).status,403);

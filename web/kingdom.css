@@ -54,6 +54,7 @@ main:has(#kingdomRoom:not([hidden])){
 .house-emblem svg{width:22px;height:22px}
 .kingdom-build-item b{font-size:15px;display:block}
 .kingdom-build-item small{display:flex;gap:4px;align-items:center;color:#f1cd8b;white-space:nowrap;font-size:.77rem}
+.house-lots{display:block;color:#aebfd4;font-size:.73rem;font-weight:700}
 .kingdom-builder p{margin:0;color:#d2dce9;font-size:13px}
 .kingdom-builder [data-build-status].invalid{color:#ffb0b0}
 .kingdom-build-controls>div{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
@@ -61,6 +62,10 @@ main:has(#kingdomRoom:not([hidden])){
 .kingdom-build-controls button:disabled{opacity:.67}
 .kingdom-build-controls kbd{margin-left:3px;padding:2px 3px;border-radius:3px;color:inherit;background:#0a17272e;font:600 10px/1 system-ui}
 .kingdom-build-controls [data-build="snap"][aria-pressed="true"]{background:#325458;border-color:#8acfc0;color:#ddfff3}
+.tower-upgrade,.tower-upgrade span{display:inline-flex;align-items:center;gap:5px}
+.tower-upgrade{margin-inline-start:4px;border-color:#866b45}
+.tower-upgrade span{color:#ffdb91}
+.tower-upgrade img{width:14px;height:14px}
 .kingdom-dashboard{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.80fr);gap:11px;margin-top:11px}
 .kingdom-inspector,.kingdom-stats{border:1px solid #3c4658;border-radius:11px;background:#161e2c}
 .kingdom-inspector{padding:11px 13px}
@@ -83,19 +88,35 @@ main:has(#kingdomRoom:not([hidden])){
 .kingdom-stats dt img{width:17px;height:17px;object-fit:contain;flex:none}
 .kingdom-stats dd{margin:0;font:800 clamp(18px,2.4vw,32px)/1 Cond,sans-serif;color:#f6f8fb;overflow-wrap:anywhere}
 .kingdom-guest-index{
- width:min(560px,calc(100% - 24px));max-height:min(640px,calc(100dvh - 24px));overflow:auto;padding:16px;
- border:1px solid #566681;border-radius:13px;background:#131d2a;color:#f1f8ff;
+ width:min(650px,calc(100% - 24px));max-height:min(710px,calc(100dvh - 24px));overflow:auto;padding:clamp(12px,2.4vw,22px);
+ border:1px solid #5b6f88;border-radius:13px;background:radial-gradient(at 75% 0,#202a42,#131d2a 55%);color:#f1f8ff;
 }
 .kingdom-guest-index::backdrop{background:#05090dd1}
 .guest-index-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .guest-index-heading h2{margin:0}
 .kingdom-guest-index>p{margin:8px 0 13px;color:#bacdde;font-size:.88rem}
-.visitor-list{display:grid;gap:6px}
+.visitor-collection{display:flex;align-items:center;gap:12px;margin:12px 0 0}
+.visitor-collection b{font-size:.8rem;font-variant-numeric:tabular-nums;color:#cbe3ff;white-space:nowrap}
+.visitor-collection progress{width:100%;height:8px;accent-color:#a4e3ef}
+.visitor-list{display:grid;gap:13px}
+.visitor-tier{display:grid;gap:6px}
+.visitor-tier h3{
+ display:flex;align-items:center;gap:8px;margin:0;color:var(--rarity);
+ font:800 .81rem/1.1 Barlow,sans-serif;letter-spacing:.04em;text-transform:uppercase;
+}
+.visitor-tier h3 small{color:#a6b5ce;letter-spacing:0;font-variant-numeric:tabular-nums}
 .visitor-card{
  display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;
  border:1px solid #4a5971;border-inline-start:3px solid var(--rarity);border-radius:7px;background:#1c2a3d;
 }
 .visitor-skin{width:36px;height:36px;object-fit:contain}
+.visitor-mystery{background:linear-gradient(115deg,#1b283c85,#172234);border-inline-start-color:color-mix(in srgb,#44506a 70%,var(--rarity))}
+.visitor-unknown{
+ display:grid;width:36px;height:36px;place-items:center;border:1px solid #516682;border-radius:7px;
+ color:var(--rarity);background:radial-gradient(at 45% 25%,#3c4d67,#182539);
+ font:800 1.65rem/1 Cond,Barlow,sans-serif;text-shadow:0 0 9px color-mix(in srgb,var(--rarity) 44%,transparent);
+}
+.visitor-mystery .visitor-name strong{letter-spacing:.1em}
 .visitor-name a{display:inline-flex;align-items:center;gap:4px;font-size:.91rem;font-weight:770}
 .visitor-name svg{width:12px;height:12px}
 .visitor-name small{display:block;color:var(--rarity);font-size:.75rem}
@@ -116,6 +137,8 @@ main:has(#kingdomRoom:not([hidden])){
  .kingdom-build-controls{justify-self:end}
  .kingdom-builder.is-building .kingdom-build-controls{grid-column:1/-1;grid-row:3;justify-self:start}
  .kingdom-build-controls button{min-height:41px}
+ .kingdom-build-controls:has(.tower-upgrade:not([hidden])){display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+ .tower-upgrade{margin:0}
  .kingdom-stars{--star-size:16px}
 }
 @media(prefers-reduced-motion:reduce){.kingdom-stars i{transition:none}}

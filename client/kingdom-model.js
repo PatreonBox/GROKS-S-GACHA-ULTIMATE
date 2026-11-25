@@ -140,33 +140,121 @@ function makeTrail(path){
  return trail;
 }
 
-function vegetation(group){
- const random=randomFor(2011),matrix=new THREE.Object3D();
- const trees=[];
- for(let i=0;i<48;i++){
-  const angle=i/48*tau+(random()-.5)*.24,radius=17.4+random()*27;
-  trees.push([Math.cos(angle)*radius,Math.sin(angle)*radius,1.8+random()*3.7,random()]);
+function leafTexture(){
+ return grainMap(128,128,(ctx,w,h)=>{
+  const random=randomFor(7291);
+  ctx.fillStyle='#c2d5a1';ctx.fillRect(0,0,w,h);
+  for(let i=0;i<1220;i++){
+   const x=random()*w,y=random()*h,r=1.3+random()*3.1;
+   ctx.fillStyle=['#667a30','#9eaf58','#e1e9a9','#7c985d','#b8cc86'][i%5];
+   ctx.globalAlpha=.22+random()*.36;
+   ctx.beginPath();ctx.ellipse(x,y,r,r*.5,random()*tau,0,tau);ctx.fill();
+  }
+ });
+}
+
+function irregularCrown(){
+ const geometry=new THREE.SphereGeometry(1,15,11),positions=geometry.getAttribute('position');
+ for(let i=0;i<positions.count;i++){
+  const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i);
+  const r=1+.075*Math.sin(x*9+y*4)*Math.cos(z*7-y*3)+.073*Math.cos(x*7+y*4+z*9);
+  positions.setXYZ(i,x*r,y*r,z*r);
  }
- trees.push([-12.8,-5.1,4.5,.2],[10.0,-11.8,4.0,.84],[-11.1,-11.9,5.4,.09],[13.5,-5.2,3.2,.59],[12.9,5.75,3.15,.35]);
- const trunkGeometry=new THREE.CylinderGeometry(.055,.11,1,6);
- const canopyGeometry=new THREE.IcosahedronGeometry(1,1);
- const trunks=new THREE.InstancedMesh(trunkGeometry,material('#604f41'),trees.length);
- const crowns=new THREE.InstancedMesh(canopyGeometry,material('#ffffff',{flatShading:true}),trees.length*3);
- const greens=['#38654e','#4d7454','#668b53','#57824b','#517966'].map(c=>new THREE.Color(c));
- for(const [i,[x,z,height,shade]] of trees.entries()){
-  const floor=groundHeight(x,z);
-  matrix.position.set(x,floor+height*.27,z);matrix.rotation.set(0,i,0);
-  matrix.scale.set(height*.42,height*.54,height*.42);matrix.updateMatrix();
-  trunks.setMatrixAt(i,matrix.matrix);
-  for(let j=0;j<3;j++){
-   const size=height*(.235-j*.05);
-   matrix.position.set(x+Math.sin(i*2+j)*size*.59,floor+height*(.65+j*.11),z+Math.cos(i+j*4)*size*.59);
-   matrix.scale.set(size,size*1.14,size);matrix.rotation.set(j*.18,i+j,0);matrix.updateMatrix();
-   crowns.setMatrixAt(i*3+j,matrix.matrix);
-   crowns.setColorAt(i*3+j,greens[Math.floor(shade*greens.length)].clone().multiplyScalar(.89+j*.085));
+ geometry.computeVertexNormals();
+ return geometry;
+}
+
+function leafSpray(){
+ const vertices=[],indices=[];
+ for(const [angle,x,y] of [[.73,-.21,.15],[-.65,.36,.23],[.22,.04,.42]]){
+  const base=vertices.length/3;
+  for(const [px,py,pz] of [[0,-.25,0],[-.16,-.025,0],[0,.27,0],[.15,.022,0],[0,.015,.047]]){
+   vertices.push(x+px*Math.cos(angle)-py*Math.sin(angle),y+py*Math.cos(angle)+px*Math.sin(angle),pz);
+  }
+  for(let i=0;i<4;i++)indices.push(base+i,base+(i+1)%4,base+4);
+ }
+ const geometry=new THREE.BufferGeometry();
+ geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geometry.setIndex(indices);
+ geometry.computeVertexNormals();
+ return geometry;
+}
+
+function treeGrove(group){
+ const random=randomFor(2011),matrix=new THREE.Object3D(),up=vertex(0,1,0),out=vertex(0,0,1);
+ const limbParts=[],crownParts=[],leaves=[];
+ const palettes=[
+  ['#365b35','#597737','#9cac4e'],['#2f533b','#457a57','#85ae67'],
+  ['#426b42','#649049','#abc06d'],['#304f43','#457360','#79a47b']
+ ].map(list=>list.map(color=>new THREE.Color(color)));
+ const trees=[];
+ for(let i=0;i<56;i++){
+  const angle=i/56*tau+(random()-.5)*.21,radius=17.6+random()*27;
+  trees.push([Math.cos(angle)*radius,Math.sin(angle)*radius,2.7+random()*3.80,Math.floor(random()*palettes.length)]);
+ }
+ trees.push([-12.8,-5.1,5,0],[10,-11.9,5.3,1],[-11.9,-12.8,5.7,2],[14.2,-4.6,4.3,3],[13.8,6.4,3.9,0],[-14.4,8.8,4.45,1]);
+ function limb(a,b,radius){
+  const delta=b.clone().sub(a);
+  matrix.position.copy(a).lerp(b,.5);
+  matrix.quaternion.setFromUnitVectors(up,delta.clone().normalize());
+  matrix.scale.set(radius,delta.length(),radius);matrix.updateMatrix();
+  limbParts.push(matrix.matrix.clone());
+ }
+ for(const [x,z,h,shade] of trees){
+  const earth=groundHeight(x,z),angle=random()*tau,c=Math.cos(angle),s=Math.sin(angle);
+  const place=(dx,dy,dz)=>vertex(x+h*(dx*c+dz*s),earth+h*dy,z+h*(-dx*s+dz*c));
+  const near=Math.hypot(x,z)<28,fork=place(.022,.34,.010),top=place(-.008,.79,-.027);
+  limb(place(0,-.025,0),fork,h*.072);
+  limb(fork,top,h*.043);
+  if(near)for(let j=0;j<3;j++){
+   const a=angle+j*tau/3;
+   limb(place(0,.045,0),place(Math.cos(a)*.112,-.029,Math.sin(a)*.112),h*.028);
+  }
+  const palette=palettes[shade];
+  const tall=shade===3;
+  const crownCount=near?9:5;
+  for(let j=0;j<crownCount;j++){
+   const a=tau*j/(crownCount-1)+random()*.48;
+   const radius=j===0?0:(.135+random()*.105)*(tall?.77:1);
+   const y=j===0?.89:.61+random()*.27;
+   const center=place(Math.cos(a)*radius,y,Math.sin(a)*radius);
+   if(j>0)limb(fork.clone().lerp(top,.12+random()*.49),center,h*(.013+random()*.012));
+   const size=h*(j===0?.195:.121+random()*.044)*(tall?.85:1),taper=.75+random()*.17;
+   matrix.position.copy(center);matrix.rotation.set((random()-.5)*.27,a,(random()-.5)*.14);
+   matrix.scale.set(size*(1+random()*.20),size*(tall?1.45:.82+random()*.2),size*taper);matrix.updateMatrix();
+   const tint=palette[0].clone().lerp(palette[1],.31+random()*.58).multiplyScalar(.92+.16*y);
+   crownParts.push([matrix.matrix.clone(),tint]);
+   if(!near)continue;
+   for(let k=0;k<9;k++){
+    const a=k*2.4+random()*.63,e=.12+random()*1.35;
+    const direction=vertex(Math.cos(a)*Math.sin(e),Math.cos(e),Math.sin(a)*Math.sin(e));
+    const radiusScale=.91+random()*.18;
+    matrix.position.copy(center).addScaledVector(direction,size*radiusScale);
+    matrix.quaternion.setFromUnitVectors(out,direction);
+    matrix.rotateZ((random()-.5)*2.8);
+    matrix.scale.setScalar(size*(.28+random()*.20));matrix.updateMatrix();
+    const color=palette[1].clone().lerp(palette[2],random()*.61).multiplyScalar(.84+random()*.26);
+    leaves.push([matrix.matrix.clone(),color]);
+   }
   }
  }
- trunks.castShadow=true;crowns.castShadow=true;crowns.receiveShadow=true;group.add(trunks,crowns);
+ const bark=woodGrain(918,'#8e765f','#503a28');
+ bark.center.set(.5,.5);bark.rotation=Math.PI/2;
+ const trunkFinish=material('#ab8a64',{map:bark,bumpMap:bark,bumpScale:.045});
+ const canopyFinish=material('#ffffff',{map:leafTexture(),roughness:.96});
+ const trunks=new THREE.InstancedMesh(new THREE.CylinderGeometry(.44,1,1,8),trunkFinish,limbParts.length);
+ const crowns=new THREE.InstancedMesh(irregularCrown(),canopyFinish,crownParts.length);
+ const sprouts=new THREE.InstancedMesh(leafSpray(),material('#ffffff',{side:THREE.DoubleSide}),leaves.length);
+ limbParts.forEach((transform,i)=>trunks.setMatrixAt(i,transform));
+ crownParts.forEach(([transform,color],i)=>{crowns.setMatrixAt(i,transform);crowns.setColorAt(i,color)});
+ leaves.forEach(([transform,color],i)=>{sprouts.setMatrixAt(i,transform);sprouts.setColorAt(i,color)});
+ trunks.castShadow=true;trunks.receiveShadow=true;
+ crowns.castShadow=true;crowns.receiveShadow=true;
+ group.add(trunks,crowns,sprouts);
+}
+
+function vegetation(group){
+ treeGrove(group);
+ const random=randomFor(2015),matrix=new THREE.Object3D();
  const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),material('#ffffff',{flatShading:true}),39);
  for(let i=0;i<rocks.count;i++){
   const radius=5.9+random()*15,angle=random()*tau,x=Math.cos(angle)*radius,z=Math.sin(angle)*radius,size=.10+random()*.35;
@@ -300,7 +388,7 @@ export function makeTower(){
  const pennant=new THREE.BufferGeometry();
  pennant.setAttribute('position',new THREE.Float32BufferAttribute([0,7.30,0,.62,7.22,.03,.42,7.12,.11,.02,7.03,0],3));
  pennant.setIndex([0,1,2,0,2,3]);pennant.computeVertexNormals();
- meshAt(tower,pennant,material('#7ce5d9',{side:THREE.DoubleSide,flatShading:true}),0,0,0);
+ meshAt(tower,pennant,material('#7ce5d9',{side:THREE.DoubleSide,flatShading:true}),0,0,0).name='pennant';
  opening(tower,trim,pine,iron,glow,.86,1.28,.57,1.10,true);
  for(const angle of [0,Math.PI/2,Math.PI,3*Math.PI/2]){
   const wall=new THREE.Group();
@@ -319,57 +407,124 @@ export function makeTower(){
  return tower;
 }
 
+function woodGrain(seed,light,shadow){
+ const map=grainMap(256,128,(ctx,w,h)=>{
+  const random=randomFor(seed);
+  ctx.fillStyle=light;ctx.fillRect(0,0,w,h);
+  for(let i=0;i<230;i++){
+   const x=random()*w,y=random()*h,length=8+random()*w*.72;
+   ctx.strokeStyle=shadow;ctx.globalAlpha=.12+random()*.38;ctx.lineWidth=.6+random()*1.9;
+   ctx.beginPath();ctx.moveTo(x,y);ctx.bezierCurveTo(x+length*.22,y+2,x+length*.58,y-2,x+length,y+random()*2-1);ctx.stroke();
+  }
+  ctx.globalAlpha=.7;
+  for(let i=0;i<6;i++){
+   const x=random()*w,y=random()*h;
+   for(let ring=1;ring<=4;ring++){
+    ctx.beginPath();ctx.ellipse(x,y,2+ring*3,1+ring,random()*.22,0,tau);ctx.stroke();
+   }
+  }
+ });
+ map.anisotropy=4;
+ return map;
+}
+
 export function makeHouse(){
  const house=new THREE.Group(),positions=new Map();
- const slate=material('#1d2e4e',{roughness:.75}),steel=material('#3b648f',{metalness:.24});
- const wall=material('#42698a',{roughness:.73}),plinth=material('#456358');
- const trim=material('#aadde1',{roughness:.7}),lime=material('#d9ee83',{emissive:'#45582e',emissiveIntensity:.24});
- const glow=material('#7beaef',{emissive:'#34c6db',emissiveIntensity:.80,roughness:.4});
- function block(finish,x,y,z,w,h,d){
-  const piece=new THREE.BoxGeometry(w,h,d);
-  piece.translate(x,y,z);
+ const boards=woodGrain(851,'#dfb187','#83573d'),beams=woodGrain(817,'#bd8963','#64412a');
+ const timber=material('#a0724c',{map:beams,bumpMap:beams,bumpScale:.018});
+ const warm=material('#d3a16c',{map:boards,bumpMap:boards,bumpScale:.012});
+ const pale=material('#fae5b9',{map:boards});
+ const stepStone=material('#9c9687',{flatShading:true}),mortar=material('#b4a894');
+ const dark=material('#43352e'),iron=material('#4f4b43',{metalness:.28});
+ const roof=['#73472f','#9c6340','#af7647','#835d41'].map(color=>material(color,{map:boards,bumpMap:boards,bumpScale:.025}));
+ const lit=material('#ffcf80',{emissive:'#dc7431',emissiveIntensity:.38});
+ const glass=material('#ffdf9f',{emissive:'#de974c',emissiveIntensity:.18});
+ const sash=material('#65452f');
+ const copper=material('#e1b662',{metalness:.44,roughness:.46});
+ function add(finish,shape,x,y,z,angle=0){
+  if(angle)shape.rotateZ(angle);
+  shape.translate(x,y,z);
   if(!positions.has(finish))positions.set(finish,[]);
-  positions.get(finish).push(piece);
+  positions.get(finish).push(shape);
  }
+ const block=(finish,x,y,z,w,h,d,angle)=>add(finish,new THREE.BoxGeometry(w,h,d),x,y,z,angle);
  const {width,depth}=houseSize;
- block(plinth,0,-.06,0,width,.26,depth);
- block(trim,0,.08,0,width-.08,.12,depth-.08);
- block(slate,0,.19,0,2.96,.22,2.52);
- block(wall,0,1.03,-.04,2.8,1.55,2.31);
- for(const x of [-1.28,1.28])for(const z of [-1.13,1.07]){
-  block(steel,x,1.04,z,.24,1.67,.22);
-  block(lime,x,.4,z,.27,.11,.25);
-  block(trim,x,1.65,z,.24,.12,.23);
+ block(stepStone,0,-.10,0,width,.35,depth);
+ block(mortar,0,.068,0,3.06,.079,2.63);
+ block(stepStone,0,.129,0,2.94,.07,2.53);
+ block(warm,0,.97,-.04,2.77,1.58,2.36);
+ for(let i=0;i<8;i++){
+  const y=.26+i*.185,finish=i%3===1?pale:warm;
+  for(const z of [1.163,-1.226])block(finish,0,y,z,2.71,.170,.034);
+  for(const x of [-1.397,1.397])block(finish,x,y,-.032,.044,.168,2.38);
  }
- block(slate,0,1.93,-.05,3.14,.24,2.63);
- block(trim,0,2.045,-.05,3.12,.045,2.59);
- block(steel,0,2.18,-.08,2.85,.25,2.33);
- block(slate,0,2.34,-.1,2.14,.15,1.78);
- block(steel,0,2.49,-.12,1.32,.17,1.03);
- block(lime,0,2.59,-.14,1.16,.05,.85);
- for(const x of [-1.09,-.57,.57,1.09])block(glow,x,1.92,1.275,.31,.077,.016);
- block(plinth,.02,.18,1.19,1.22,.13,.33);
- block(slate,.02,.827,1.134,1.04,1.29,.10);
- block(trim,.02,.86,1.195,.86,1.20,.062);
- block(steel,.02,.82,1.235,.68,1.11,.024);
- block(glow,.02,.82,1.256,.43,.83,.014);
- block(slate,.02,.82,1.268,.29,.69,.017);
- block(lime,.20,.71,1.284,.055,.073,.022);
- for(const x of [-.95,.92]){
-  block(slate,x,1.15,1.145,.51,.57,.090);
-  block(trim,x,1.15,1.198,.42,.47,.037);
-  block(glow,x,1.15,1.224,.32,.35,.02);
-  block(slate,x,1.15,1.238,.032,.36,.012);
+ for(const z of [-1.212,1.14]){
+  for(const x of [-1.30,1.30]){
+   block(timber,x,.971,z,.20,1.68,.22);
+   block(copper,x,1.43,z+(z>0?.12:-.12),.064,.067,.021);
+  }
+  for(const y of [.26,1.65])block(timber,0,y,z,2.79,.14,.15);
  }
+ for(const x of [-1.387,1.387]){
+  for(const y of [.26,1.65])block(timber,x,y,-.035,.145,.14,2.45);
+  block(timber,x,.96,-.039,.13,1.51,.16);
+ }
+ function gable(z,back){
+  const vertices=[-1.33,0,0,1.33,0,0,0,1.09,0];
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+  geo.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,1,0,.5,1],2));
+  geo.setIndex(back?[0,2,1]:[0,1,2]);geo.computeVertexNormals();
+  add(pale,geo,0,1.68,z);
+ }
+ gable(1.151,false);gable(-1.217,true);
+ block(timber,0,2.12,1.181,.113,.84,.113);
+ block(timber,0,2.12,-1.241,.113,.84,.113);
+ const slope=Math.atan(.75),span=Math.hypot(1.53,1.53*.75);
+ const random=randomFor(884);
  for(const side of [-1,1]){
-  block(steel,side*1.407,1.08,-.44,.073,.66,1.21);
-  block(slate,side*1.449,1.08,-.44,.024,.56,1.10);
-  for(const z of [-.76,-.44,-.12])block(glow,side*1.467,1.08,z,.012,.29,.22);
-  for(const z of [.49,.67,.85])block(lime,side*1.425,.51,z,.03,.14,.11);
+  const angle=-side*slope;
+  block(dark,side*.765,2.80-.765*.75,0,span,.115,2.68,angle);
+  for(const z of [-1.286,1.286])block(timber,side*.765,2.81-.765*.75,z,span+.05,.175,.12,angle);
+  for(let row=0;row<8;row++){
+   const x=(row+.52)*.189,y=2.88-x*.75;
+   for(let tile=0;tile<9;tile++){
+    const z=(tile-4)*.292+(row%2?.055:-.027);
+    block(roof[Math.floor(random()*roof.length)],side*x,y,z,.232,.061+random()*.018,.27,angle);
+   }
+  }
  }
- block(steel,-1.01,2.29,-.72,.48,.46,.44);
- block(slate,-1.01,2.54,-.72,.55,.09,.51);
- block(lime,-1.01,2.60,-.72,.30,.03,.31);
+ block(timber,0,2.91,0,.16,.12,2.65);
+ block(stepStone,-.89,2.52,-.62,.47,1.12,.48);
+ for(const y of [2.53,2.73,2.93])block(mortar,-.89,y,-.62,.48,.026,.49);
+ block(stepStone,-.89,3.102,-.62,.55,.13,.56);
+ block(dark,-.89,3.17,-.62,.32,.018,.32);
+ block(timber,.02,.83,1.180,.91,1.31,.10);
+ block(warm,.02,.82,1.235,.76,1.21,.04);
+ for(const x of [-.24,-.07,.10,.27])block(timber,x,.814,1.267,.024,1.14,.013);
+ for(const y of [.52,1.11])block(iron,.02,y,1.272,.72,.07,.048);
+ block(copper,.23,.83,1.309,.09,.092,.033);
+ block(stepStone,.04,.162,1.20,.99,.12,.30);
+ for(const x of [-.88,.89]){
+  block(timber,x,1.09,1.208,.51,.57,.112);
+  block(glass,x,1.09,1.274,.394,.43,.026);
+  block(sash,x,1.09,1.291,.041,.431,.02);
+  block(sash,x,1.09,1.291,.397,.042,.02);
+  block(timber,x,.83,1.278,.57,.066,.11);
+  block(timber,x,.572,1.201,.72,.102,.105,x<0?.56:-.56);
+ }
+ block(timber,0,2.179,1.204,.42,.42,.082,Math.PI/4);
+ block(lit,0,2.18,1.253,.29,.29,.020,Math.PI/4);
+ block(timber,0,2.18,1.271,.085,.085,.015,Math.PI/4);
+ for(const side of [-1,1]){
+  block(timber,side*1.424,1.12,-.52,.097,.56,.61);
+  block(glass,side*1.475,1.12,-.52,.019,.416,.458);
+  block(sash,side*1.49,1.12,-.52,.018,.421,.039);
+  block(timber,side*1.462,.845,-.52,.131,.069,.68);
+ }
+ block(iron,1.17,1.501,1.251,.11,.27,.13);
+ block(lit,1.17,1.50,1.32,.10,.141,.062);
+ block(iron,1.17,1.61,1.316,.16,.07,.085);
  for(const [finish,pieces] of positions){
   meshAt(house,mergeGeometries(pieces),finish,0,0,0);
   pieces.forEach(piece=>piece.dispose());

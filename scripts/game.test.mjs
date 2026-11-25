@@ -18,10 +18,12 @@ import {stageFor,settleCampaignClear} from '../web/campaign.js';
 import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/card-economy.js';
 import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
 import {playerProgress,packPlayerXp} from '../web/player-progression.js';
-import {kingdomStats} from '../web/kingdom-rules.js';
+import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
+import {housePlacementError,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
 
 const origin='https://game.example';
 const pool=createCardPool(path=>JSON.parse(fs.readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
+const playerXpAt=level=>Array.from({length:level},(_,i)=>120+34*i+2*i*i).reduce((sum,xp)=>sum+xp,0);
 
 function fixture() {
  const {DB,sqlite}=createGameDatabase();
@@ -64,6 +66,7 @@ test('guest profiles stay isolated and actions require the game origin',async()=
  assert.equal((await f.call('/api/game',{...a,from:'https://elsewhere.example',
   body:{action:'mine.tap',args:{},requestId:crypto.randomUUID()}})).status,403);
  assert.equal((await f.command(a,'wallet.set',{coins:9000000})).status,400);
+ f.store(a.id,w=>{w.playerXp=playerXpAt(3)});
  assert.equal((await f.command(a,'mine.code',{code:'john'})).status,200);
  assert.equal((await f.wallet(a)).coins,11500);
  assert.equal((await f.wallet(b)).coins,1500);
@@ -139,6 +142,7 @@ test('browser transfer keeps existing progress and commits once across retries',
 
 test('server-clock mine earnings and idempotent credits',async()=>{
  const f=fixture(),session=await f.open();
+ f.store(session.id,w=>{w.playerXp=playerXpAt(3)});
  const id=crypto.randomUUID();
  for(const response of await Promise.all([f.command(session,'mine.tap',{count:18},id),f.command(session,'mine.tap',{count:18},id)])){
   assert.equal(response.status,200);
@@ -186,9 +190,9 @@ test('player level starts at zero and pack experience credits each opening once'
  const id=bought.wallet.pending.id;
  for(const opened of [1,1,3,2,10,10])assert.equal((await f.command(player,'pack.advance',{id,opened})).status,200);
  const wallet=await f.wallet(player);
- assert.equal(wallet.playerXp,120);
- assert.equal(wallet.lastPull.playerXpEarned,120);
- assert.ok(packs.every((pack,i)=>!i||packPlayerXp(pack.id)>packPlayerXp(packs[i-1].id)));
+ assert.equal(wallet.playerXp,70);
+ assert.equal(wallet.lastPull.playerXpEarned,70);
+ assert.deepEqual(packs.map(pack=>packPlayerXp(pack.id)),[7,12,12,22,31,44,61,83]);
 });
 
 test('power rankings backfill distinct owned cards and sort by trained card stats',async()=>{
@@ -203,6 +207,9 @@ test('power rankings backfill distinct owned cards and sort by trained card stat
  assert.equal(rows[0].level,1);
  assert.equal(rows[0].mine,true);
  assert.equal(rows[1].power,score(statsFor(alpha)));
+ const privateStats=await f.call('/api/game?view=profile',weak).then(r=>r.json());
+ assert.equal(privateStats.profile.rank,2);
+ assert.equal(privateStats.profile.privateRank,false);
 });
 
 test('Extreme bands outrank the prior trained band and the highest pulls are rarer',async()=>{
@@ -227,7 +234,8 @@ test('house placement validates the plot and spends coins only once per request'
  const f=fixture(),player=await f.open();
  const args={x:-7.54,z:7.22,rotation:1};
  assert.equal((await f.command(player,'kingdom.house',args)).status,400);
- f.store(player.id,w=>{w.coins=150_000});
+ assert.deepEqual((await f.wallet(player)).discoveredVisitors,[]);
+ f.store(player.id,w=>{w.coins=550_000;w.playerXp=playerXpAt(8)});
  for(const invalid of [{x:-2.65,z:0,rotation:0},{x:6.5,z:2.1,rotation:0},{x:30,z:7,rotation:0},{x:0,z:0,rotation:4}]){
   assert.equal((await f.command(player,'kingdom.house',invalid)).status,400);
  }
@@ -239,9 +247,61 @@ test('house placement validates the plot and spends coins only once per request'
  const buildings=wallet.kingdom.houses;
  assert.equal(buildings.length,1);
  assert.equal(buildings[0].rotation,1);
- assert.equal(wallet.coins,100_000);
- assert.equal(wallet.playerXp,55);
- assert.deepEqual([kingdomStats(buildings).stars,kingdomStats(buildings).value,kingdomStats(buildings).visitors.length],[.3,50_000,1]);
+ assert.equal(wallet.coins,500_000);
+ assert.equal(wallet.playerXp,playerXpAt(8)+55);
+ assert.deepEqual([kingdomStats(wallet).stars,kingdomStats(wallet).value,wallet.discoveredVisitors.length],[.3,50_000,1]);
+ assert.equal(wallet.discoveredVisitors[0].slot,0);
+ const second={x:7.54,z:7.22,rotation:0,expectedPrice:100_000};
+ assert.equal((await f.command(player,'kingdom.house',{...second,expectedPrice:50_000})).status,400);
+ assert.equal((await f.command(player,'kingdom.tower',{level:1})).status,400);
+ assert.equal((await f.command(player,'kingdom.house',second)).status,200);
+ assert.equal((await f.command(player,'kingdom.house',{x:-8,z:-7,rotation:0,expectedPrice:200_000})).status,400);
+ const full=await f.wallet(player);
+ assert.equal(full.coins,400_000);
+ assert.equal(kingdomStats(full).value,150_000);
+ assert.deepEqual(full.discoveredVisitors.map(guest=>guest.slot),[0,1]);
+ const upgraded=await f.command(player,'kingdom.tower',{level:1}).then(r=>r.json());
+ assert.equal(upgraded.wallet.kingdom.towerLevel,2);
+ assert.equal(upgraded.wallet.coins,200_000);
+ assert.equal(kingdomStats(upgraded.wallet).tower.limit,6);
+ assert.equal((await f.command(player,'kingdom.house',{x:-8,z:-7,rotation:0,expectedPrice:200_000})).status,200);
+});
+
+test('visitor ratings have ten anonymous slots and the lot geometry can reach five stars',()=>{
+ const houses=[];
+ for(let z=-9;z<=10;z++)for(let x=-10;x<=10;x++){
+  const spot={x,z,rotation:0};
+  if(!housePlacementError(houses,spot))houses.push(spot);
+ }
+ assert.deepEqual(visitorSlots.map(slot=>slot.rarity),['Common','Common','Uncommon','Uncommon','Uncommon','Rare','Rare','Epic','Epic','Legendary']);
+ assert.deepEqual(visitorSlots.filter(slot=>slot.rarity==='Rare').map(slot=>slot.stars),[1.8,2.4]);
+ assert(kingdomStats({kingdom:{houses:houses.slice(0,17),towerLevel:5}}).stars===5);
+});
+
+test('feature and pack gates derive from player XP and cannot be opened early',async()=>{
+ const f=fixture(),player=await f.open();
+ const command=(action,args)=>f.command(player,action,args);
+ for(const [action,args,level] of [['mine.tap',{},3],['drill.begin',{id:1,kind:'saw'},3],
+  ['remix.begin',{id:13519},4],['card.merge',{},5],['cube.equip',{id:'02'},8],['kingdom.house',{x:8,z:7,rotation:0},8],
+  ['army.begin',{map:'harbor',chapter:0,tier:1,ids:[1]},8],['upgrade.buy',{key:'luck',expectedLevel:0},11]]){
+  const resp=await command(action,args);
+  assert.equal(resp.status,400);
+  assert.match((await resp.json()).error,new RegExp('Level '+level));
+ }
+ for(const pack of packs.filter(pack=>packLevels[pack.id]>0)){
+  const response=await command('pack.buy',{packId:pack.id,quantity:1});
+  assert.equal(response.status,400);
+  assert.match((await response.json()).error,new RegExp('Level '+packLevels[pack.id]));
+ }
+ assert.equal((await command('pack.buy',{packId:'common',quantity:50})).status,400);
+ f.store(player.id,w=>{w.coins=20000;w.playerXp=playerXpAt(2)});
+ assert.equal((await command('pack.buy',{packId:'rare',quantity:1})).status,200);
+ const ready=await f.wallet(player);
+ assert.equal((await command('pack.advance',{id:ready.pending.id,opened:1})).status,200);
+ assert.deepEqual([2,4,5,7,8,11,14,20,30],[packLevels.rare,featureLevel('arcade'),featureLevel('merge'),featureLevel('bulk'),featureLevel('kingdom'),featureLevel('upgrades'),packLevels.legendary,packLevels.mythic,packLevels.godly]);
+ assert.deepEqual(unlockedBetween(7,8).map(item=>item.name),['Kingdom','Army mode','Cube shop','Epic pack']);
+ assert.deepEqual([levelCue(1,2),levelCue(1,3),levelCue(4,5),levelCue(3,6),levelCue(9,11)],
+  ['levelSingle','levelMulti','levelMilestone','levelMilestone','levelMilestone']);
 });
 
 test('sign-in claims a verified guest save and preserves its cards',async()=>{
@@ -288,6 +348,7 @@ test('arena scores use server-owned turns and reject client-only records',async(
 
 test('minigame rewards are derived by replaying legal controls',async()=>{
  const f=fixture(),player=await f.open();
+ f.store(player.id,w=>{w.playerXp=playerXpAt(4)});
  const row=(await pool('Easy'))[0];
  f.addCards(player.id,[row]);
  const drill=await f.command(player,'drill.begin',{id:row[0],kind:'saw'}).then(res=>res.json()).then(data=>data.result);
@@ -316,6 +377,7 @@ test('minigame rewards are derived by replaying legal controls',async()=>{
 
 test('Army rewards are replayed from a server-issued deployment and paid once',async()=>{
  const f=fixture(),player=await f.open();
+ f.store(player.id,w=>{w.playerXp=playerXpAt(8)});
  const rows=(await pool('Extreme Demon')).slice(0,4);
  f.addCards(player.id,rows);
  const request=await f.command(player,'army.begin',{map:'harbor',chapter:0,tier:1,ids:rows.map(row=>row[0])});

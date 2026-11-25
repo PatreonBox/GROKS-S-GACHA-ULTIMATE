@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,residentPath} from './kingdom-model.js';
-import {houseSize,plotBounds} from '../web/kingdom-rules.js';
+import {houseHeight,houseSize,plotBounds,visitorSlots} from '../web/kingdom-rules.js';
 
 const clamp=THREE.MathUtils.clamp;
 const frameColor='#c3e5e8';
@@ -97,7 +97,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  hoverRing.material.color.set('#fff0be');hoverRing.material.opacity=.60;
  scene.add(selectRing,hoverRing);
 
- function setPlot(buildings,visitors){
+ function setPlot(buildings,visitors,towerLevel){
+  tower.getObjectByName('pennant').material.color.set(['#7ce5d9','#eeb852','#f17e57','#bb81eb','#ffe398'][towerLevel-1]);
   const buildingIds=new Set(buildings.map(house=>house.id));
   const visitorIds=new Set(visitors.map(guest=>guest.id));
   for(const [id,model] of houses)if(!buildingIds.has(id)){
@@ -108,19 +109,20 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
    const model=houseModel.clone(),height=groundHeight(house.x,house.z);
    model.position.set(house.x,height,house.z);model.rotation.y=house.rotation*Math.PI/2;
    scene.add(model);houses.set(house.id,model);
-   const hit=hitBox('house:'+house.id,houseSize.width,2.7,houseSize.depth,1.94);
-   hit.position.copy(model.position);hit.position.y+=1.27;hit.rotation.y=model.rotation.y;
+   const hit=hitBox('house:'+house.id,houseSize.width,houseHeight,houseSize.depth,1.94);
+   hit.position.copy(model.position);hit.position.y+=houseHeight/2;hit.rotation.y=model.rotation.y;
   }
   for(const [id,walker] of guests)if(!visitorIds.has(id)){
    walker.resident.removeFromParent();release(walker.resident);
    removePicker('visitor:'+id);guests.delete(id);
   }
-  for(const [i,visitor] of visitors.entries()){
+  for(const visitor of visitors){
    if(guests.has(visitor.id))continue;
    const walker=makeResident(loader);
    walker.resident.scale.setScalar(.81);walker.setCube(visitor.skin);
    walker.hit=hitBox('visitor:'+visitor.id,1.25,1.25,1.25,.86);
-   walker.phase=(i+1)/6;scene.add(walker.resident);guests.set(visitor.id,walker);
+   walker.phase=(visitor.slot+1)/(visitorSlots.length+1);
+   scene.add(walker.resident);guests.set(visitor.id,walker);
   }
  }
 

@@ -23,12 +23,19 @@ export function createSectionGuides(trigger){
  function offer(){
   cancelAnimationFrame(frame);
   frame=requestAnimationFrame(()=>{
-   if(document.body.dataset.account==='ready'&&current&&!seenGuide(current))show();
+   if(document.body.dataset.account==='ready'&&!document.documentElement.dataset.levelUpPending&&current&&!seenGuide(current))show();
   });
  }
  function select(id){
+  if(id===false){
+   current=null;
+   trigger.disabled=true;
+   if(dialog.open)dialog.close();
+   return;
+  }
   if(!sectionGuides[id]||id===current)return;
   current=id;
+  trigger.disabled=false;
   const label='Help for '+sectionGuides[id].title;
   trigger.setAttribute('aria-label',label);
   trigger.title=label;

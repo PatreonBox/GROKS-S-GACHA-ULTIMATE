@@ -1,3 +1,5 @@
+import {packLevels} from './level-access.js';
+
 // Both catalogues use GDHistory rows. Demon rows also carry community scores and placements.
 export const tierNames = {
   easy: 'Easy', medium: 'Medium', hard: 'Hard', insane: 'Insane', extreme: 'Extreme',
@@ -19,6 +21,7 @@ export function readRoute(hash) {
   if (page === 'battle') return {section:'battle',tier:['training','army','arcade'].includes(slug)?slug:'easy'};
   if (page === 'kingdom') return {section:'kingdom',tier:'kingdom'};
   if (page === 'cubes') return {section:'gacha',tier:'cubes'};
+  if (page==='gacha'&&Object.hasOwn(packLevels,slug))return {section:'gacha',tier:'shop',pack:slug};
   if (page === 'gacha') return {section: 'gacha', tier: ['mine','collection','upgrades','results','index','merge','vault','cubes'].includes(slug) ? slug : 'shop'};
   if (page === 'stars') return {section: 'stars', tier: Object.hasOwn(starTiers, slug) ? slug : 'auto'};
   const section = ['demons', 'leaderboard', 'saved'].includes(page) ? page : 'leaderboard';

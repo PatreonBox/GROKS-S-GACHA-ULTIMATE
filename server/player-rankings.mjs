@@ -38,9 +38,7 @@ function avatar(row){
  return 'https://cdn.discordapp.com/embed/avatars/'+(row.default_avatar_index??Number((BigInt(row.discord_id)>>22n)%6n))+'.png';
 }
 
-export async function playerStandings(db,{adminOwner,discordOnly,playerId,inventory}){
- await fillPlayerPower(db,adminOwner,discordOnly,inventory);
- const {results}=await db.prepare(`WITH ranked AS (
+const rankingsQuery=`WITH ranked AS (
   SELECT p.player_id,p.collection_power AS power,p.ranking_xp AS xp,
    COALESCE(NULLIF(d.display_name,''),NULLIF(d.username,''),s.alias,'Player ' || substr(p.player_id,-4)) AS alias,
    d.discord_id,d.avatar_hash,d.default_avatar_index,
@@ -50,8 +48,18 @@ export async function playerStandings(db,{adminOwner,discordOnly,playerId,invent
   LEFT JOIN game_scores s ON p.player_id=s.player_id
   WHERE ${visibility} AND p.power_version=?
     AND (p.collection_power>0 OR p.ranking_xp>0 OR s.alias IS NOT NULL OR d.discord_id IS NOT NULL)
- )
- SELECT *,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place`)
+ )`;
+
+export async function playerRank(db,{adminOwner,discordOnly,playerId,inventory}){
+ await fillPlayerPower(db,adminOwner,discordOnly,inventory);
+ const {results}=await db.prepare(rankingsQuery+' SELECT place FROM ranked WHERE player_id=?')
+  .bind(adminOwner,discordOnly,rankingVersion,playerId).all();
+ return results[0]?.place??null;
+}
+
+export async function playerStandings(db,{adminOwner,discordOnly,playerId,inventory}){
+ await fillPlayerPower(db,adminOwner,discordOnly,inventory);
+ const {results}=await db.prepare(rankingsQuery+' SELECT *,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place')
   .bind(adminOwner,discordOnly,rankingVersion,playerId,playerId).all();
  return results.map(row=>({place:row.place,alias:row.alias,level:playerProgress(row.xp).level,power:row.power,
   avatar:avatar(row),mine:Boolean(row.mine)}));

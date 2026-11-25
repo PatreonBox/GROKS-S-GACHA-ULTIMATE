@@ -153,3 +153,9 @@
  .bug-report-row{grid-template-columns:1fr}
  .player-dialog-head,.player-dialog-body{padding-inline:12px}
 }
+.player-profile-heading .profile-rank{
+ display:grid;justify-items:end;flex:none;margin-inline-start:auto;padding:5px 10px;border:1px solid #6e6349;
+ border-radius:8px;background:#25243a;color:#ffdda1;
+}
+.player-profile-heading .profile-rank small{color:#d5c29e;font-size:.71rem;white-space:nowrap}
+.profile-rank b{font:800 1.25rem/1.2 Cond,Barlow,sans-serif}

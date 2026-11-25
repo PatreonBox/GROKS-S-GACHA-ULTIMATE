@@ -1,0 +1,104 @@
+.level-lock{
+ display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;padding:3px 6px;
+ border:1px solid #74618a;border-radius:5px;background:#241d38;color:#efdbff;font:760 .67rem/1.1 Barlow,sans-serif;white-space:nowrap;
+}
+.level-lock svg,.arc-nav a .level-lock svg,.combat-links .feature-shortcut .level-lock svg{display:block;width:11px;height:11px;flex:none;color:inherit}
+[data-level-locked]{cursor:not-allowed}
+.arc-nav a[data-level-locked],.pack-choice[data-level-locked],.qty-options button[data-level-locked],.tab[data-level-locked],
+.combat-links a[data-level-locked],.battle-tabs button[data-level-locked],.arena-mast a[data-level-locked],.wallet-link[data-level-locked],.outline[data-level-locked]{
+ color:#b2a8c0;border-color:#52435f;background:#1a1722;
+}
+.pack-choice[data-level-locked]>img,.tab[data-level-locked]>i,.combat-links a[data-level-locked]>svg{filter:saturate(.25) brightness(.63)}
+.pack-choice[data-level-locked]{position:relative;box-shadow:none}
+.pack-choice .level-lock{margin-inline-start:auto}
+.pack-choice[data-level-locked]:hover{transform:none;border-color:#6a5978;background:#201b29}
+.wallet-link[data-level-locked]{border-style:dashed}
+.level-gate{
+ display:flex;align-items:flex-start;gap:15px;max-width:700px;margin:10px 0;padding:clamp(15px,3vw,29px);
+ border:1px solid #5c4a7a;border-radius:12px;background:linear-gradient(130deg,#241e37,#191821 72%);
+}
+.level-gate h2{margin:0}
+.level-gate p{color:#cbc0d9;margin:6px 0 13px}
+.level-gate-icon{
+ display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:10px;
+ background:#3b2f55;border:1px solid #8b72ba;color:#e2cbff;
+}
+.level-gate-icon svg{width:25px;height:25px}
+.level-gate a{display:inline-flex}
+.arc-nav [data-level-locked] .level-lock{margin-inline-start:3px}
+@media(max-width:1120px) and (min-width:681px){
+ .arc-nav a[data-level-locked]{padding-inline:8px;gap:4px}
+ .arc-nav [data-level-locked] .level-lock{margin-inline-start:0}
+}
+@media(max-width:680px){
+ .arc-nav a[data-level-locked],.tab[data-level-locked]{grid-template-rows:auto auto auto;min-height:62px;padding-inline:1px}
+ .tab[data-level-locked] .level-lock,.arc-nav a[data-level-locked] .level-lock{margin:0;font-size:.57rem;padding:2px 3px}
+ .tab[data-level-locked] .level-lock svg,.arc-nav a .level-lock svg{width:8px;height:8px}
+ .pack-shelf .pack-choice[data-level-locked]{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;gap:3px 4px;padding:5px}
+ .pack-choice[data-level-locked] .level-lock{grid-column:1/-1;margin:0 auto;padding:2px 5px;font-size:.61rem}
+ .qty-options .level-lock{font-size:.59rem;padding:2px 4px}
+}
+.level-up{
+ --level-ink:#87eeff;--level-glow:#3769cf;
+ width:min(600px,calc(100% - 24px));max-height:calc(100dvh - 26px);text-align:center;
+ border:1px solid color-mix(in srgb,var(--level-ink) 56%,#272040);
+ border-radius:18px;background:#11172a;color:#f1f7ff;overflow:auto;
+ box-shadow:0 20px 100px #02030cdc,0 0 50px color-mix(in srgb,var(--level-glow) 38%,transparent);
+}
+.level-up[open]{animation:level-appear .36s cubic-bezier(.2,.74,.22,1) both}
+.level-up[data-multi="true"]{--level-ink:#e7c6ff;--level-glow:#8c4bd1}
+.level-up[data-milestone="true"]{--level-ink:#ffe895;--level-glow:#b97522}
+.level-up::backdrop{background:#050918db;backdrop-filter:blur(5px)}
+.level-up-panel{
+ position:relative;isolation:isolate;overflow:hidden;padding:24px clamp(13px,4vw,34px) 19px;
+ background:radial-gradient(ellipse at 50% 4%,color-mix(in srgb,var(--level-glow) 55%,#15192b),transparent 57%),
+ linear-gradient(155deg,#161f33,#121326 74%);
+}
+.level-light{
+ position:absolute;z-index:-2;inset:-60% -35%;opacity:.22;pointer-events:none;
+ background:repeating-conic-gradient(from 3deg at 50% 38%,color-mix(in srgb,var(--level-ink) 59%,transparent) 0 4deg,transparent 4deg 24deg);
+ mask-image:radial-gradient(ellipse at 50% 40%,black,transparent 54%);animation:level-rays 9s linear infinite;
+}
+.level-wing{position:absolute;z-index:-1;top:56px;width:104px;height:104px;border:1px solid var(--level-ink);opacity:.32;rotate:45deg}
+.level-wing-left{left:11%;animation:level-slant .69s ease-out both}
+.level-wing-right{right:11%;animation:level-slant .69s ease-out both}
+.level-up-emblem{
+ margin:0 auto 8px;width:65px;height:65px;display:grid;place-items:center;border:1px solid var(--level-ink);
+ border-radius:14px;background:#142337;box-shadow:inset 0 0 12px #b6eefe42,0 0 28px var(--level-glow);rotate:8deg;
+ animation:level-medal .59s cubic-bezier(.2,.7,.25,1.25) both;
+}
+.level-up-emblem img{width:48px;height:48px;object-fit:contain;rotate:-8deg}
+.level-up h2{margin:0;color:#f8fbff;font:800 clamp(21px,4vw,29px)/1 Cond,Barlow,sans-serif;text-transform:uppercase;letter-spacing:.09em}
+.level-up-number{
+ display:block;font:800 clamp(64px,13vw,111px)/.92 Cond,Barlow,sans-serif;color:var(--level-ink);
+ text-shadow:0 4px 0 #192a4d,0 0 30px var(--level-glow);letter-spacing:.04em;margin:6px 0 12px;font-variant-numeric:tabular-nums;
+}
+.level-up h3{margin:14px 0 8px;font-size:.88rem;color:#cdbfde;text-transform:uppercase;letter-spacing:.06em}
+.level-rewards{display:grid;gap:6px}
+.level-reward{
+ display:grid;width:100%;grid-template-columns:29px minmax(0,1fr) 13px;align-items:center;gap:10px;padding:7px 9px;
+ border:1px solid #536383;border-radius:7px;text-align:left;color:#f2f7ff;background:#1c2a41;
+ animation:level-reward-in .45s .13s ease-out both;
+}
+.level-reward:nth-child(2){animation-delay:.20s}
+.level-reward:nth-child(3){animation-delay:.27s}
+.level-reward:nth-child(n+4){animation-delay:.34s}
+.level-reward:hover,.level-reward:focus-visible{border-color:var(--level-ink);background:#26354e}
+.level-reward img,.level-reward>svg{width:25px;height:25px;object-fit:contain;color:var(--level-ink)}
+.level-reward>svg:last-child{width:13px;height:13px}
+.level-reward b,.level-reward small{display:block}
+.level-reward small{font-size:.75rem;color:#bbcbe4;margin-top:1px}
+.level-up-continue{
+ min-height:39px;padding:6px 13px;margin-top:10px;border:0;border-radius:7px;
+ background:#ffffff08;color:#e5efff;font-weight:790;letter-spacing:.02em;
+}
+.level-up-continue:hover{background:#d0ebff15}
+.level-up-continue:focus-visible{outline:1px solid var(--level-ink)}
+@keyframes level-appear{from{opacity:0;translate:0 16px;scale:.94}to{opacity:1;translate:0 0;scale:1}}
+@keyframes level-rays{to{rotate:180deg}}
+@keyframes level-slant{from{scale:.18;opacity:0}to{scale:1;opacity:.32}}
+@keyframes level-medal{from{scale:.24;rotate:-38deg;opacity:0}to{scale:1;rotate:8deg;opacity:1}}
+@keyframes level-reward-in{from{opacity:0;translate:0 10px}to{opacity:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){
+ .level-up[open],.level-light,.level-wing,.level-up-emblem,.level-reward{animation:none}
+}

@@ -11,6 +11,7 @@ import {createSectionGuides} from './game-introduction.js';
 import {setGuideProgress} from './guide-progress.js';
 import {playerBoard} from './player-board.js';
 import {sectionGuideId} from './section-guides.js';
+import {setupLevelUps} from './level-up.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=n=>n==null?'—':Number(n).toLocaleString('en-US');
@@ -33,6 +34,7 @@ let arcade,guides;
 const ranks=playerBoard($('podrows'),$('playersPage'));
 const sound=createPackSound();
 sound.listenForUiTaps();
+setupLevelUps($('levelUp'),sound);
 document.querySelectorAll('[data-icon]').forEach(i=>i.innerHTML=ico(i.dataset.icon));
 function storeRows(rows){for(const r of rows)if(!r[15])rowMap.set(r[0],r)}
 function announce(s){const t=document.querySelector('.toast');t.textContent=s;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),1600)}
@@ -79,8 +81,8 @@ function setSection(route){
  ranks.show(section==='leaderboard'?(playerRanks()?'full':'spotlight'):null);
  const inArcade=['gacha','battle','kingdom'].includes(section);
  document.querySelector('.board').hidden=inArcade||playerRanks();
- arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null);
- guides.select(sectionGuideId(section,activeTier));
+ const blocked=arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null,selected.pack);
+ guides.select(blocked?false:sectionGuideId(section,activeTier));
  if(inArcade||playerRanks()){serial++;queryAbort?.abort();return}
  $('sectiontag').textContent=isStarList()?'STAR LEVELS':section==='demons'?'DEMON LISTS':section==='saved'?'YOUR COLLECTION':'GEOMETRY DASH';
  $('boardTitle').textContent=isStarList()?starTiers[activeTier].name+' levels':section==='demons'?tierNames[activeTier]+' Demons':section==='saved'?'Saved levels':'Level leaderboard';
@@ -248,6 +250,12 @@ function showSecretDetails(row){
 }
 function about(){currentDetails=null;$('detail').innerHTML='<div class="modalbody aboutbody"><h2 id="modalTitle">About the rankings</h2><h3>Level leaderboard</h3><p>The live board searches GDHistory’s archive across all difficulties. Deleted entries are filtered out. A rank is the position in your current sort and filters. Downloads and likes are counts observed by the archive.</p><h3>Star levels</h3><p>Each of the six lists holds 600 classic rated levels. The default order uses play-tested tiers from the <a class="sourcelink" href="'+esc(seed.starSources.tiers)+'" target="_blank" rel="noopener">Underrated Non-Demons List</a>. Higher tiers come first. Levels in the same tier share a rank and appear alphabetically. Unranked levels follow. The selection prioritizes documented levels and includes popular levels at each star value. Hard through Insane each include 300 levels per star value.</p><p>The <a class="sourcelink" href="'+esc(seed.starSources.harder)+'" target="_blank" rel="noopener">Hardest Harders</a> and <a class="sourcelink" href="'+esc(seed.starSources.insane)+'" target="_blank" rel="noopener">Hardest Insanes</a> sorts show published positions for matching versions. Checked on '+seed.starDate+'.</p><h3>Demon lists</h3><p>Easy, Medium, Hard and Insane each have a full catalogue, including classic and platformer levels. The GDDL difficulty sort uses community average tiers, highest first. Entries awaiting a score follow the scored levels. Choose a community list under the sort menu for its top 150. A level’s in-game difficulty can differ from the list that ranks it. The four catalogues were checked on '+seed.demonTierDate+'.</p><h3>Extreme Demons</h3><p>AREDL ranks rated Extreme Demons by difficulty. Main-list ranks are preserved when filtering. Two-player variants have separate list entries.</p><h3>Thumbnails and availability</h3><p>Images come from the Level Thumbnails community, AREDL, and linked verification videos. A level without a submitted image shows “No thumbnail.”</p><h3>Gacha</h3><p>Each card rolls its difficulty first and draws a level within it. Higher-ranked Extreme Demons have lower individual odds. All eight packs can draw any difficulty. The odds in the shop include your luck upgrade. At maximum luck each card gets the better of two difficulty rolls. The card index and merge station award gems. Every drawn card has an independent 2% holo chance. Online saves keep your coins, gems, upgrades and cards on the server. A browser with an older local save offers a one-time transfer. The pack room uses edited paper, coin and arcade recordings from <a class="sourcelink" href="https://mixkit.co/free-sound-effects/" target="_blank" rel="noopener">Mixkit</a> under its <a class="sourcelink" href="https://mixkit.co/license/modal/sfxFree/" target="_blank" rel="noopener">Sound Effects Free License</a>. Pack icons, the gem and the gold secret coin use Geometry Dash artwork from <a class="sourcelink" href="https://github.com/tzt345/GDBrowser" target="_blank" rel="noopener">GDBrowser</a>.</p><h3>Backup index</h3><p>If the archive is unavailable, you can browse '+num(seed.indexed)+' indexed levels. This collection combines 2024–2026 releases with records refreshed on '+sourceDate+'. Saved levels stay in this browser.</p><p><a class="sourcelink" target="_blank" rel="noopener" href="https://history.geometrydash.eu/">GDHistory</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://aredl.net/">AREDL</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://gdladder.com/">GD Demon Ladder</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://levelthumbs.prevter.me/">Level Thumbnails</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://huggingface.co/datasets/yusp48/geometry-dash-levels">Level dataset</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://github.com/jozsefsallai/GDBrowser">Difficulty icons</a></p></div>';openModal()}
 $('close').onclick=()=>dlg.close();dlg.addEventListener('click',e=>{if(e.target===dlg){const r=dlg.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dlg.close()}});
+document.addEventListener('click',e=>{
+ const locked=e.target.closest('[data-level-locked]');
+ if(!locked)return;
+ e.preventDefault();e.stopPropagation();
+ announce('Available at Level '+locked.dataset.levelLocked+'.');
+},true);
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!seed)return;if(b.dataset.save){toggle(Number(b.dataset.save));return}if(b.dataset.open){showDetails(Number(b.dataset.open),b.dataset.uuid);return}if(b.dataset.tab)navigate(b.dataset.tab)});
 $('sources').onclick=$('footerSources').onclick=()=>seed&&about();$('featureOpen').onclick=()=>showDetails(Number($('featureOpen').dataset.id));
 $('prevFeature').onclick=()=>featured(-1);$('nextFeature').onclick=()=>featured(1);
@@ -285,7 +293,7 @@ async function start(){
   setGuideProgress(session.wallet.guideSeen,id=>gameCommand('guide.seen',{id},null).catch(()=>{}));
   guides=createSectionGuides($('gameGuide'));
   arcade=createPackRoom({
-   sound,
+   sound,initialWallet:session.wallet,
    localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
    openLevel:row=>{storeRows([row]);showDetails(row[0])},
    announce,onGuide:guides.select,

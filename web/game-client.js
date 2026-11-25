@@ -1,6 +1,6 @@
 import {renderPlayerMenu,setupPlayerMenu} from './account-menu.js';
 import {setupAdminTools} from './admin-tools.js';
-import {playerProgress} from './player-progression.js';
+import {renderPlayerProgress} from './player-progress-view.js';
 
 const updates = typeof window !== 'undefined' && typeof BroadcastChannel === 'function'
  ? new BroadcastChannel('gdlb-online-updates') : null;
@@ -88,7 +88,7 @@ function refreshDiscordProfile(automatic=false) {
  form.submit();
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision}) {
  const account=document.getElementById('gameAccount');
  const logout=document.getElementById('gameSignOut');
  const transfer=document.getElementById('gameTransfer');
@@ -102,18 +102,7 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  document.getElementById('gameGateLoading').hidden=true;
  document.getElementById('gameAuthRetry').hidden=true;
  if(locked)for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
- if(wallet){
-  const {level,xp,goal,ratio}=playerProgress(wallet.playerXp);
-  const track=document.getElementById('playerXpTrack');
-  const progress=xp.toLocaleString('en-US')+' / '+goal.toLocaleString('en-US')+' XP to Level '+(level+1);
-  document.getElementById('playerLevel').textContent='Level '+level;
-  document.getElementById('playerXpPercent').textContent=Math.floor(ratio*100)+'%';
-  track.style.setProperty('--xp-fill',ratio*100+'%');
-  track.setAttribute('aria-valuemax',String(goal));
-  track.setAttribute('aria-valuenow',String(xp));
-  track.setAttribute('aria-valuetext',progress);
-  track.title=progress;
- }
+ renderPlayerProgress(locked?null:wallet,saveRevision);
  if(account){
   account.hidden=!locked;
   account.dataset.provider=accountProvider||'';

@@ -25,6 +25,7 @@ export function setupPlayerMenu({loadStats, sendReport}) {
  const profile=document.getElementById('playerProfile');
  const stats=document.getElementById('playerStats');
  const collectionProgress=document.getElementById('playerCollectionProgress');
+ const globalRank=document.getElementById('playerGlobalRank');
  const statsStatus=document.getElementById('playerStatsStatus');
  const report=document.getElementById('bugReport');
  const form=document.getElementById('bugReportForm');
@@ -53,10 +54,12 @@ export function setupPlayerMenu({loadStats, sendReport}) {
   }
   dialog.addEventListener('close',()=>{if(!menu.hidden)summary.focus();});
  }
+ globalRank.addEventListener('click',()=>profile.close());
 
  document.getElementById('openPlayerProfile').addEventListener('click',async()=>{
   menu.open=false;
   stats.hidden=true;
+  globalRank.hidden=true;
   statsStatus.textContent='Loading your stats…';
   profile.showModal();
   const request=++statsRequest;
@@ -70,6 +73,8 @@ export function setupPlayerMenu({loadStats, sendReport}) {
    }
    collectionProgress.max=values.collectible||1;
    collectionProgress.value=values.unique;
+   globalRank.querySelector('b').textContent=values.rank?'#'+numberFormat.format(values.rank):values.privateRank?'Private':'Unranked';
+   globalRank.hidden=false;
    stats.hidden=false;
    statsStatus.textContent='';
   }catch(error){if(request===statsRequest)statsStatus.textContent=error.message;}

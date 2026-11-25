@@ -10,8 +10,9 @@ import {findRemix} from './remixes.js';
 import {armyMaps,armyLimit} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix} from './game-replay.js';
-import {awardPlayerXp,minePlayerXp,packPlayerXp} from './player-progression.js';
-import {buildHouse} from './kingdom-rules.js';
+import {awardPlayerXp,minePlayerXp,packPlayerXp,playerProgress} from './player-progression.js';
+import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
+import {buildHouse,towerPlan,upgradeTower} from './kingdom-rules.js';
 
 export function newWallet() {
  return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
@@ -20,6 +21,15 @@ const levelId = value => Number.isSafeInteger(value)&&value>0;
 const key = value => typeof value==='string'&&value.length>0&&value.length<=80;
 const within = (value,min,max) => Number.isSafeInteger(value)&&value>=min&&value<=max;
 function requireRule(valid,message) {if(!valid)throw Error(message);}
+function requireLevel(wallet,level,name){
+ requireRule(level===0||playerProgress(wallet.playerXp).level>=level,'Reach Level '+level+' to unlock '+name+'.');
+}
+const gatedActions={
+ 'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
+ 'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom',
+ 'upgrade.buy':'upgrades','card.feed':'training','drill.begin':'training',
+ 'card.merge':'merge','remix.begin':'arcade','army.begin':'army'
+};
 const randomUnit = () => randomBelow(0x100000000)/0x100000000;
 async function allPools(getPool,categories) {
  const rows = await Promise.all(categories.map(getPool));
@@ -39,6 +49,8 @@ function readySquad(wallet,ids,now) {
 }
 function awardPack(wallet,records,changes,pack,quantity,pools,now) {
  requireRule(!wallet.pending,'Finish your current opening first.');
+ requireLevel(wallet,packLevels[pack.id],pack.name+' packs');
+ if(quantity===50)requireLevel(wallet,featureLevel('bulk'),'50-pack pulls');
  const price=quantity*pack.price;
  requireRule(wallet.coins>=price,'You need more coins for this pull.');
  const pull=rollPacks(pack,quantity,wallet,pools),owned=new Map(records.map(c=>[c.id,c]));
@@ -146,6 +158,13 @@ const rules={
   awardPlayerXp(w,55);
   return {house};
  }},
+ 'kingdom.tower':{run:({w,args})=>{
+  const plan=towerPlan(w);
+  if(plan.next)requireLevel(w,towerPlayerLevel(plan.level+1),'Tower Level '+(plan.level+1));
+  const tower=upgradeTower(w,args.level);
+  awardPlayerXp(w,30+20*tower.level);
+  return {tower};
+ }},
  'pack.buy':{cards:true,prepare:async ({packId,quantity},getPool)=>{
   const pack=packs.find(item=>item.id===packId);
   requireRule(pack&&packQuantities.includes(quantity),'Choose a valid pack and quantity.');
@@ -206,6 +225,7 @@ const rules={
  }},
  'arena.squad':{cards:true,run:({w,records,args:{ids},now})=>{ownedRows(records,ids);readySquad(w,ids,now);w.squad=[...ids];}},
  'arena.begin':{cards:true,prepare:arenaSetup,run:({w,records,args:{ids,tier,campaign},prepared:{enemies,remix},now})=>{
+  if(remix)requireLevel(w,featureLevel('arcade'),features.arcade.name);
   const allies=ownedRows(records,ids);
   readySquad(w,ids,now);
   requireRule(!campaign||stageUnlocked(w,tier),'Clear the previous campaign stage first.');
@@ -304,6 +324,8 @@ export async function prepareGameAction(name,args,getPool,hasArt=()=>true){
  const rule=rules[name];
  const prepared=await rule.prepare?.(args,getPool,hasArt);
  return {cards:rule.cards,apply(w,records,changes,now,online){
+  const feature=Object.hasOwn(gatedActions,name)?features[gatedActions[name]]:null;
+  if(feature)requireLevel(w,feature.level,feature.name);
   const income=settleMine(w,now);
   return rule.run({w,records,changes,args,prepared,now,online,income})??null;
  }};
