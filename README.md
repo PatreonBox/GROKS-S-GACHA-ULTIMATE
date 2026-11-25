@@ -1,4 +1,4 @@
-# GD Lvl Battles
+# GD Kingdom
 
 Open packs, collect level cards, train fighters, and play the campaign or Army mode. The server rolls packs, saves progress, and verifies battle rewards and leaderboard entries.
 

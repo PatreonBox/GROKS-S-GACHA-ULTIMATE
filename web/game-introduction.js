@@ -15,7 +15,7 @@ const pages=[
 
 export function createIntroduction(trigger){
  const dialog=document.createElement('dialog');let step=0;
- dialog.className='help-sheet game-intro';dialog.setAttribute('aria-label','GD Lvl Battles beginner guide');
+ dialog.className='help-sheet game-intro';dialog.setAttribute('aria-label','GD Kingdom beginner guide');
  document.body.append(dialog);
  function display(){
   const page=pages[step],last=step===pages.length-1;

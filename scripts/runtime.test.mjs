@@ -48,7 +48,7 @@ test('the production HTTP server keeps the wallet and cards across a restart',as
   const health=await fetch(base+'/health');
   assert.deepEqual(await health.json(),{status:'ok'});
   const page=await fetch(base);
-  assert.match(await page.text(),/<title>GD Lvl battles<\/title>/i);
+  assert.match(await page.text(),/<title>GD Kingdom<\/title>/i);
   const start=await fetch(base+'/api/game',{headers:{'oai-authenticated-user-id':'fixture'}});
   const account=await start.json();
   assert.equal(account.signedIn,false);
