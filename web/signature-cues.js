@@ -1,5 +1,31 @@
 export function signatureCues(tone, air) {
   return {
+    whaleCall: [
+      tone(.02,.82,73,129,'hollow',.52),
+      tone(.17,.94,146,251,'hollow',.30),
+      tone(.52,.65,131,76,'glass',.22),
+      air(.71,.54,116,2090,.48)
+    ],
+    mawGrowl: [
+      tone(0,.77,110,49,'edge',.42),
+      air(.16,.56,120,1300,.48),
+      tone(.58,.29,235,404,'metal',.28)
+    ],
+    mawSnap: [
+      tone(0,.12,420,109,'metal',.64),
+      tone(.008,.26,158,51,'thump',.73),
+      air(.018,.23,330,4920,.39)
+    ],
+    paperShuffle: [
+      air(.04,.16,830,3700,.36),
+      air(.28,.19,230,2900,.44),
+      tone(.48,.29,477,352,'hollow',.24)
+    ],
+    chalkPop: [
+      tone(0,.10,310,137,'metal',.72),
+      air(.022,.30,1320,7800,.53),
+      tone(.17,.22,510,610,'glass',.26)
+    ],
     battleWind: [
       tone(0, .45, 58, 86, 'hollow', .31),
       air(.04, .40, 140, 1230, .31),

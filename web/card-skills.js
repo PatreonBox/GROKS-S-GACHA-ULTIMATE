@@ -117,7 +117,7 @@ function withLevelSignature(kit,native){
 }
 
 function hash(id){let n=Number(id)>>>0;n=Math.imul(n^(n>>>16),0x21f0aaad);n=Math.imul(n^(n>>>15),0x735a2d97);return (n^(n>>>15))>>>0}
-export function skillsFor(u,choice=0){
+export function skillsFor(u,choice=0,signatures=levelSignatures){
  const id=Number(u.id??u[0]),level=u.name??u[1],h=hash(id),authored=levelMoves.get(id);
  const art=authored?.[1];
  const named=editions.get(id)||(authored&&[...authored[0].slice(0,2),...artKits[art]]);
@@ -130,7 +130,7 @@ export function skillsFor(u,choice=0){
   basicArt:art||schoolArt[basic],signatureArt:art||schoolArt[signature],
   power:tuning+(cost===2?1.46:1.11)+((h>>>21)%25)/100,
   detail:detail||(riders[rider]||artDetails[rider])+(trigger?' +20% damage '+triggers[trigger]+'.':''),seed:h};
- if(!choice||!validTechnique(u,choice))return withLevelSignature(kit,levelSignatures.get(id));
+ if(!choice||!validTechnique(u,choice))return withLevelSignature(kit,signatures.get(id));
  if(choice>=bonusStart)return {...withLevelSignature(kit,bonusSignatures[choice-bonusStart]),group:'Bonus moves'};
  if(choice===1){
   const [school,extra]=alternateEditions.get(id)||[second,riderKeys[(h>>>24)%8]];
@@ -155,7 +155,7 @@ export function techniquesFor(u){
 
 export function mirroredSkill(kit,target){
  if(!kit.native?.copy||!target)return null;
- const other=skillsFor(target);
+ const other=target.kit||skillsFor(target);
  return other.native?.copy?null:other;
 }
 

@@ -126,7 +126,8 @@ test('Railway serves the welcome guide and requires Discord for gameplay',async(
   assert.match(page,/id="accountGate"/);
   assert.match(page,/class="discord-signin"/);
   assert.match(page,/class="discord-symbol"/);
-  assert.match(page,/<summary>How to play<\/summary>/);
+  assert.match(page,/<summary>How to log in with Discord<\/summary>/);
+  assert.match(page,/\/assets\/gd-kingdom-wordmark.png/);
   assert.match(page,/<main id="gameMain" hidden>/);
   const start=await fetch(base+'/api/game');
   assert.equal(start.headers.get('set-cookie'),null);

@@ -1,6 +1,6 @@
 import {statsFor} from './battle-engine.js';
 import {execution,hasOpening,mirroredSkill,skillsFor,technique} from './card-skills.js';
-import {allyEffects,castConditions,effectTargets} from './signature-rules.js';
+import {allyEffects,castConditions,effectTargets,previousLevelSignatures} from './signature-rules.js';
 import {impossibleCategory} from './impossible-cards.js';
 import {attackTiming} from './combat-scene.js';
 
@@ -40,8 +40,8 @@ export function armyStats(row,training,kit=skillsFor(row)){
   attack:Math.round(18*(stats.attack/134)**.48*(1+.25*seed))};
 }
 
-function fighter(card,side,index,map,count,random){
- const {row,training}=card,kit=skillsFor(row),stats=armyStats(row,training,kit),melee=stats.style==='Melee';
+function fighter(card,side,index,map,count,random,signatures){
+ const {row,training}=card,kit=skillsFor(row,0,signatures),stats=armyStats(row,training,kit),melee=stats.style==='Melee';
  const rowSize=count>5?Math.ceil(count/2):count;
  const rank=Math.floor(index/rowSize);
  const offset=index%rowSize-(Math.min(count-rank*rowSize,rowSize)-1)/2;
@@ -75,11 +75,12 @@ export function mixedSquad(cards,count){
  });
 }
 
-export function makeArmyBattle(players,rivals,key,tier,random=Math.random,{preview=false}={}){
+export function makeArmyBattle(players,rivals,key,tier,random=Math.random,{preview=false,previousMoves=false}={}){
  if((!players.length&&!preview)||!rivals.length||players.length>armyLimit||rivals.length>armyLimit)throw Error('Deploy between one and ten fighters per side.');
  const map=armyMaps[key]||armyMaps.harbor;
+ const signatures=previousMoves?previousLevelSignatures:undefined;
  return {map,tier,time:0,status:'fighting',teams:[players,rivals].map((team,side)=>
-  team.map((card,index)=>fighter(card,side,index,map,team.length,random))),random};
+  team.map((card,index)=>fighter(card,side,index,map,team.length,random,signatures))),random};
 }
 
 function chooseTarget(unit,enemies,tier){
@@ -173,8 +174,9 @@ function restore(unit,amount,shield,battle,events){
 function hit(unit,target,raw,pierce,battle,events,art,{impact='splash',cue,force=0}={}){
  if(!target.hp||raw<=0)return 0;
  if(target.evade&&openings.has(impact)){
-  raw*=1-target.evade;force*=.55;delete target.evade;
-  events.push({kind:'tactic',unit:target,name:'Dodge',cue:'armyEvade'});
+  const blocked=target.evade===1;
+  raw*=1-target.evade;force*=blocked?0:.55;delete target.evade;
+  events.push({kind:'tactic',unit:target,name:blocked?'Damage nullified':'Dodge',cue:blocked?'ward':'armyEvade'});
  }
  const shield=Math.min(target.shield,Math.round(raw*(1-pierce)));
  target.shield-=shield;
@@ -236,7 +238,11 @@ function resolve(cast,battle,events){
      case 'mend':heal(victim,victim.maxHp*amount/pressure);break;
      case 'drain':heal(victim,dealt*amount/pressure);break;
      case 'shield':shield(victim,care*amount);break;
-     case 'evade':victim.evade=Math.max(victim.evade||0,amount);tag(victim,'Dodge ready','armyEvade');break;
+     case 'evade':{
+      victim.evade=Math.max(victim.evade||0,amount);
+      tag(victim,victim.evade===1?'Nullify ready':'Dodge ready',victim.evade===1?'ward':'armyEvade');
+      break;
+     }
      case 'fury':victim.fury=Math.max(victim.fury||0,amount);tag(victim,'Attack up','charged');break;
      case 'haste':{
       const before=victim.ready;recharge(victim,amount);

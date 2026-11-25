@@ -1,4 +1,4 @@
-import {mainListMoves,extraLevelMoves,bonusMoves} from './main-list-moves.js';
+import {mainListMoves,extraLevelMoves,bonusMoves,classicCampaignMoves,previousBossMoves} from './main-list-moves.js';
 
 const enemyLabels={
  target:'the target',allOthers:'all other enemies',allEnemies:'every enemy',neighbors:'enemies beside the target',
@@ -30,7 +30,7 @@ function effectText([kind,target,amount,condition]){
   drain:'Heals '+ally+' for '+p+' of the opening HP damage',
   shield:'Shields '+ally+' for '+p+' ATK',
   steal:'Steals up to '+p+' of the remaining shield from '+enemy,
-  evade:'Reduces the next direct hit on '+ally+' by '+p,
+  evade:amount===1?'Nullifies the next direct hit on '+ally:'Reduces the next direct hit on '+ally+' by '+p,
   fury:'Gives '+ally+' +'+p+' damage on their next attack',
   haste:'Shortens the signature cooldown of '+ally+' by '+amount+(amount===1?' turn':' turns'),
   stagger:'Staggers '+enemy+' for '+amount+' turns. Their next basic attack is skipped',
@@ -50,6 +50,9 @@ function profile([rank,id,name,art,pose,power,effects,opts={}]) {
  return {rank,id,name,art,pose,power,effects,detail,...opts};
 }
 export const levelSignatures=new Map([...mainListMoves,...extraLevelMoves].map(row=>[row[1],profile(row)]));
+export const previousLevelSignatures=new Map(levelSignatures);
+for(const [,id] of classicCampaignMoves)previousLevelSignatures.delete(id);
+for(const row of previousBossMoves)previousLevelSignatures.set(row[1],profile(row));
 export const bonusSignatures=bonusMoves.map(profile);
 
 function leading(list,metric){

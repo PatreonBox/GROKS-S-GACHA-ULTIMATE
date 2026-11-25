@@ -3,9 +3,13 @@ import fs from 'node:fs';
 import {test} from 'node:test';
 import worker from '../dist/server/index.js';
 import {createGameDatabase} from './game-preview-db.mjs';
-import {createCardPool} from '../web/pack-engine.js';
-import {armyFrame,stepArmy} from '../web/army-battle.js';
-import {beginArmyRun} from '../web/army-trilogy.js';
+import {createCardPool,difficulties} from '../web/pack-engine.js';
+import {armyFrame,makeArmyBattle,stepArmy} from '../web/army-battle.js';
+import {armySignatureVersion,beginArmyRun} from '../web/army-trilogy.js';
+import {makeBattle,playTurn} from '../web/battle-engine.js';
+import {attackTiming,paintArmyCast} from '../web/combat-scene.js';
+import {classicCampaignMoves,previousBossMoves} from '../web/main-list-moves.js';
+import {skillsFor} from '../web/card-skills.js';
 import {drillStep,activeDrillGate,makeDrill,stepDrill} from '../web/drill-physics.js';
 import {seededRandom,drillInput} from '../web/game-replay.js';
 import {findRemix} from '../web/remixes.js';
@@ -201,6 +205,59 @@ test('Army rewards are replayed from a server-issued deployment and paid once',a
  const replay=await f.command(player,'army.finish',{id:run.id,frames:battle.frames,withdrawn:false}).then(r=>r.json());
  assert.equal(replay.wallet.coins,wallet.coins);
  assert.equal(replay.wallet.gems,wallet.gems);
+});
+
+test('the renamed campaign stages use four opponents from their own difficulty',async()=>{
+ const names=['RETRY','Fire in the Hole','Air Detected','Rock on the Ground','Insane Classics'];
+ for(let i=0;i<names.length;i++){
+  const stage=stageFor(i+1),ids=new Set((await pool(difficulties[i+1])).map(row=>row[0]));
+  assert.equal(stage.name,names[i]);
+  assert.equal(new Set(stage.team).size,4);
+  for(const id of stage.team)assert.ok(ids.has(id),stage.name+' · '+id);
+ }
+ for(const [,id,name] of classicCampaignMoves)assert.equal(skillsFor({id,name}).signatureName,name);
+});
+
+test('named signature moves cast in both engines and draw finite 3D geometry',async()=>{
+ const profiles=[
+  [135661111,'Leviathan Breach','leviathan'],[89496627,'Inferno Breath','infernoBreath'],
+  [73667628,'Obsidian Chomp','obsidianChomp'],[27690100,'Blood Ward','bloodWard'],
+  [90477539,'Courtroom Chalk','courtroomChalk']
+ ];
+ const extreme=new Map((await pool('Extreme Demon')).map(row=>[row[0],row]));
+ const rivals=(await pool('Easy')).slice(0,4);
+ const rotation={depth:[0,0,1],right:[1,0,0],down:[0,1,0]},random=()=>.5;
+ for(const [id,name,visual] of profiles){
+  const row=extreme.get(id),battle=makeBattle([row,...rivals.slice(1)],rivals,10,random);
+  battle.seq=1;battle.charge=3;
+  battle.allies[0].hp=Math.round(battle.allies[0].maxHp*.42);
+  for(const foe of battle.enemies)foe.hp=foe.maxHp=5_000_000;
+  battle.enemies[0].shield=1_000_000;
+  playTurn({battle,coins:0},battle.id,battle.seq,'pulse',0,0,random);
+  assert.ok(battle.events.some(e=>e.kind==='pulse'&&e.visual===visual&&e.name===name),name);
+  if(visual==='bloodWard'){
+   assert.ok(battle.events.some(e=>e.name==='Damage nullified'&&e.side==='allies'));
+   assert.ok(battle.events.some(e=>e.kind==='retaliate'&&e.side==='allies'&&e.amount===0));
+  }
+  if(visual==='obsidianChomp')assert.equal(battle.enemies[0].shield,0);
+
+  const army=makeArmyBattle([{row}],[{row:rivals[0]}],'harbor',10,random);
+  const [[unit],[target]]=army.teams;
+  Object.assign(unit,{ready:0,next:0,x:-20,y:0});
+  Object.assign(target,{next:10,x:20,y:0,hp:10_000,maxHp:10_000});
+  const cast=stepArmy(army,armyFrame).find(event=>event.kind==='cast')?.cast;
+  assert.equal(cast?.event.visual,visual);
+  assert.equal(cast.event.name,name);
+  assert.ok(attackTiming(cast.event,false).duration>=1800);
+  let faces=0;
+  const geometry={surface(points){assert.ok(points.flat().every(Number.isFinite));faces++;}};
+  for(const q of [.35,.54,.70,.86])paintArmyCast(geometry,{imageTexture:()=>null},rotation,cast,q);
+  assert.ok(faces>=25,name);
+ }
+ const players=previousBossMoves.map(([,id])=>({row:extreme.get(id)}));
+ const run={players,rivals:rivals.map(row=>({row})),map:'harbor',chapter:0,tier:10,seed:485};
+ assert.deepEqual(beginArmyRun(run).teams[0].map(u=>u.kit.signatureName),previousBossMoves.map(row=>row[2]));
+ assert.deepEqual(beginArmyRun({...run,signatureVersion:armySignatureVersion}).teams[0].map(u=>u.kit.signatureName),profiles.map(row=>row[1]));
 });
 
 test('campaign first clears and replays award different bounties once',async()=>{

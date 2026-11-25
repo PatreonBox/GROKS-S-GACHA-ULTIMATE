@@ -72,7 +72,7 @@ export const sectionGuides={
   ['Compare arena records','Rankings use arena difficulty, surviving cards, and turns taken.'],
   ['Post your result','Win an eligible arena battle, enter a player name, and post your personal best.']
  ]},
- 'saved-levels':{title:'Saved levels',art:'/assets/gd-kingdom.webp',steps:[
+ 'saved-levels':{title:'Saved levels',art:'/assets/gd-kingdom-blue-icon.png',steps:[
   ['Keep levels nearby','Use the bookmark on any level to add it here.'],
   ['Return to a favorite','Open a bookmarked level for its details, or click the bookmark again to remove it.']
  ]},

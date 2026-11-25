@@ -255,7 +255,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const finish=bestFinish(enemy?null:byId(u.id));
   const seal=(u.sealedUntil||0)-b.seq,riposte=enemy&&liveRiposte(u,b.seq);
   const flags=[seal>0?'Sealed '+seal+'T':'',u.marked?'Marked':'',u.weak?'Weak':'',u.shield?'Shield '+short(u.shield):'',
-   u.staggerUntil>b.seq+1?'Staggered':'',u.evade?'Dodge ready':'',u.fury?'Attack boosted':''].filter(Boolean);
+   u.staggerUntil>b.seq+1?'Staggered':'',u.evade===1?'Nullify ready':u.evade?'Dodge ready':'',u.fury?'Attack boosted':''].filter(Boolean);
   const rank=u.difficulty===impossibleCategory?'ILL #'+fmt(u.rank):u.rank?(u.stage?enc(u.stage)+' · ':'')+'#'+fmt(u.rank):ratingLabel(u.stars??(u.tier>=6?10:null),u.platformer);
   const shell='<div class="arena-slot" style="--unit:'+colors[u.tier]+'"><i class="arena-socket" aria-hidden="true"></i>'+
    '<div class="arena-card-body"'+(!u.hp?' data-fallen':'')+'>'+cardChassis;
@@ -294,7 +294,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const done=b.status!=='active',actor=activeActor(b),remix=findRemix(b.remix);
   const stage=stageFor(b.campaign);
   const title=stage?.name||remix?.name||difficulties[b.tier]+' arena';
-  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img src="/assets/gd-kingdom.webp" alt=""><span>GD <b>Kingdom</b></span></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+battleShortcut('training',true)+battleShortcut('remix',true)+'<a class="outline leave-field army-shortcut" href="#battle/army" aria-label="Army mode">'+ico('battle')+'<span>Army mode</span></a><a class="outline leave-field" href="#gacha">Packs</a></div></div>';
+  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-wordmark" src="/assets/gd-kingdom-wordmark.png" width="1110" height="179" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+battleShortcut('training',true)+battleShortcut('remix',true)+'<a class="outline leave-field army-shortcut" href="#battle/army" aria-label="Army mode">'+ico('battle')+'<span>Army mode</span></a><a class="outline leave-field" href="#gacha">Packs</a></div></div>';
   const side=(units,key,title,tip)=>'<div class="battle-side"><h3><span>'+title+'</span><small>'+enc(tip)+'</small></h3><div class="formation">'+units.map((u,i)=>tile(u,i,key,b)).join('')+'</div></div>';
   const relayWait=Math.max(0,(b.relayAt||0)-b.seq);
   const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><i></i><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span><i></i></div>';

@@ -6,6 +6,7 @@ import {difficulties} from './pack-engine.js';
 import {gemTenths} from './card-economy.js';
 import {seriesData} from './army-series-data.js';
 
+export const armySignatureVersion=2;
 export const armyChapters=[
  {name:'Vanguard',count:4,hp:.76,power:.64,coins:.72,bonus:1,gems:1},
  {name:'Siege Line',count:7,hp:.92,power:.86,coins:.92,bonus:2,gems:2},
@@ -126,7 +127,8 @@ export function armyRivals(rows,tier,chapter,series,illustrated) {
 }
 
 export function beginArmyRun(run) {
- const battle = configureTrilogy(makeArmyBattle(run.players,run.rivals,run.map,run.tier,seededRandom(run.seed)),run.chapter,run.seriesKey);
+ const previousMoves=(run.signatureVersion??1)<armySignatureVersion;
+ const battle = configureTrilogy(makeArmyBattle(run.players,run.rivals,run.map,run.tier,seededRandom(run.seed),{previousMoves}),run.chapter,run.seriesKey);
  battle.id=run.id;
  battle.frames=0;
  return battle;

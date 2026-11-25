@@ -8,7 +8,7 @@ import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
 import {findRemix} from './remixes.js';
 import {armyMaps,armyLimit} from './army-battle.js';
-import {armyTrialIds,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
+import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix} from './game-replay.js';
 
 export function newWallet() {
@@ -234,7 +234,7 @@ const rules={
   const {series,rivals,starterRows}=prepared;
   requireRule(series?seriesUnlocked(w,series.key,chapter):chapterUnlocked(w,tier,chapter),'Clear the previous Army stage first.');
   const run={id:crypto.randomUUID(),map,chapter,tier,seriesKey:series?.key,started:now,seed:randomBelow(0x100000000),
-   rivals,players:armyPlayers(w,records,ids,starterRows,now)};
+   signatureVersion:armySignatureVersion,rivals,players:armyPlayers(w,records,ids,starterRows,now)};
   w.armyRun=run;
   return run;
  }},

@@ -29,6 +29,8 @@ export const moveArts = Object.fromEntries(artwork.map(([id,color,hue,shape],til
 ]));
 export const orbSprites=Array.from({length:6},(_,i)=>'/assets/battle/orbits/orb-'+i+'.webp');
 moveArts.orb={color:'#ffcf76',hue:43,shape:'portal',src:orbSprites[1]};
+moveArts.blood={...moveArts.scythe,color:'#ff6d8d',hue:347};
+moveArts.chalk={...moveArts.echo,color:'#fff0da',hue:43};
 moveArts.saw.src=drillSprites.saw;
 moveArts.thorns.src=drillSprites.spike;
 moveArts.portal.src=drillSprites.portals[1];

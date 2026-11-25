@@ -13,7 +13,7 @@ export const mainListMoves=[
  [11,109780665,"Null Horizon","abyss","spiral",1.61,[["strip","allEnemies",1],["mark","target",0.22,"shielded"]],{"visual":"null","pierce":0.8,"cost":3}], // Nullscapes
  [12,117692518,"Overclock Reboot","gear","pulse",1.35,[["charge","self",1,"full"],["lock","next",2],["shield","self",0.29,"charging"]]], // Quanteuse processing
  [13,110816181,"Bassquake","echo","pulse",1.39,[["hit","target",0.19],["hit","allOthers",0.21],["mark","neighbors",0.17]]], // BOOBAWAMBA
- [14,135661111,"Abyssal Pressure","wave","stream",1.47,[["hit","highestHpOther",0.38],["weak","highestHpOther",0.33],["heal","self",0.22,"half"]]], // The Bloop
+ [14,135661111,"Leviathan Breach","wave","stream",1.55,[["hit","allOthers",.24],["stagger","next",1]],{visual:"leviathan"}], // The Bloop
  [15,116174063,"Final Cut","scythe","sweep",1.52,[["hit","target",0.57,"half"],["mark","strongestOther",0.35,"knockout"]]], // Every End
  [16,62912799,"Trialbreaker","wave","fan",1.45,[["hit","next",0.34],["hit","target",0.29,"full"],["charge","self",1,"charging"]]], // Ashley Wave Trials
  [17,4125776,"Silence Protocol","echo","sweep",1.5,[["lock","target",3],["mark","target",0.24,"charging"]]], // Silent clubstep
@@ -24,9 +24,9 @@ export const mainListMoves=[
  [22,127997391,"Infall","abyss","spiral",1.38,[["hit","weakOthers",0.35],["hit","markedOthers",0.23],["charge","self",1,"selfHalf"]]], // Subsuming Vortex
  [23,112313819,"Forbidden Seal","eye","pulse",1.44,[["lock","strongestOther",2],["purge","hurtAlly",1],["mark","target",0.3,"full"]]], // Anathema
  [24,120012581,"Ring Grinder","saw","sweep",1.43,[["hit","target",0.23,"shielded"],["hit","target",0.24,"shielded"],["strip","neighbors",0.69]]], // Defeated Circles
- [25,89496627,"Cinder Gate","magma","slam",1.57,[["strip","target",0.85],["hit","shieldedOthers",0.36],["weak","next",0.32,"full"]]], // Avernus
+ [25,89496627,"Inferno Breath","magma","stream",1.42,[["hit","neighbors",.40],["weak","target",.23]],{visual:"infernoBreath",pierce:.25}], // Avernus
  [26,145709435,"Thorn Canopy","thorns","fan",1.34,[["hit","neighbors",0.24],["mark","allEnemies",0.15,"shielded"]]], // FOREST OF SPIKES
- [27,73667628,"Crossing Toll","wave","stream",1.38,[["hit","strongestOther",0.46],["lock","next",1,"half"]]], // Acheron
+ [27,73667628,"Obsidian Chomp","abyss","slam",1.44,[["strip","target",1],["hit","target",.31,"shielded"]],{visual:"obsidianChomp",school:"shatter",pierce:.40}], // Acheron
  [28,144560194,"Overpass Collapse","gear","slam",1.36,[["hit","neighbors",0.28],["shield","sideAllies",0.32]]], // METROPOLIS
  [29,110815379,"Afterimage Ambush","echo","spiral",1.35,[["hit","markedOthers",0.43],["weak","target",0.28,"marked"],["charge","self",1,"knockout"]]], // Spectre
  [30,107805281,"Threat Radius","thorns","pulse",1.53,[["weak","neighbors",0.31],["lock","target",2,"charging"]]], // Menace
@@ -38,7 +38,7 @@ export const mainListMoves=[
  [36,130891319,"Thought Loop","eye","spiral",1.28,[["lock","markedOthers",2],["mark","allEnemies",0.18]]], // cognitohazard
  [37,93917076,"Ground the Storm","storm","fan",1.39,[["hit","highestHpOther",0.52],["shield","hurtAlly",0.27,"charging"]]], // The Lightning Rod
  [38,48991380,"Four-Link Snare","scythe","stream",1.32,[["hit","next",0.34],["weak","highestHpOther",0.38],["lock","strongestOther",2,"marked"]]], // Maniacal Chains
- [39,27690100,"Red Chamber","magma","slam",1.68,[["hit","weakOthers",0.39],["mark","lowestOther",0.24,"knockout"]]], // Slaughterhouse
+ [39,27690100,"Blood Ward","blood","sweep",1.43,[["hit","neighbors",.25],["drain","self",.36],["evade","self",1]],{visual:"bloodWard",school:"siphon"}], // Slaughterhouse
  [40,113599729,"Zero Coordinate","prism","stream",1.51,[["hit","lowestOther",0.46,"half"],["strip","shieldedOthers",0.36,"full"]]], // Subterminal Point
  [41,87665224,"Cosmic Slingshot","comet","spiral",1.4,[["hit","highestHpOther",0.42],["charge","self",1,"full"]]], // KOCMOC
  [42,130327668,"Homeward Signal","halo","pulse",1.17,[["purge","allAllies",1],["heal","allAllies",0.26],["shield","hurtAlly",0.29,"selfHalf"]]], // BEING HOME
@@ -70,7 +70,7 @@ export const mainListMoves=[
  [68,96314787,"Deathstep Ambush","scythe","sweep",1.75,[["hit","target",0.38,"half"],["mark","target",0.32,"full"]]], // Deadlier Clubstep
  [69,81139702,"Phantom Audience","echo","spiral",1.31,[["weak","markedOthers",0.26],["mark","allEnemies",0.19]]], // The Hallucination
  [70,94359172,"Pressure Chamber","meteor","slam",1.47,[["hit","allOthers",0.17,"shielded"],["strip","target",1,"shielded"],["hit","target",0.25,"full"]]], // COMBUSTION
- [71,90477539,"Objection Sustained","shield","pulse",1.23,[["lock","target",2,"charging"],["shield","allAllies",0.21,"charging"],["heal","self",0.2,"knockout"]]], // Saul Goodman
+ [71,90477539,"Courtroom Chalk","chalk","pulse",1.23,[["weak","allEnemies",.23],["lock","target",1,"charging"]],{visual:"courtroomChalk",school:"vortex"}], // Saul Goodman
  [72,125317359,"Encore Barrage","pulse","fan",1.35,[["hit","highestHpOther",0.41,"knockout"],["heal","otherHurtAlly",0.36,"knockout"]]], // BRITNEY NO SCLEARS
  [73,83244159,"Midnight Constellation","lunar","spiral",1.41,[["hit","highestHpOther",0.36],["shield","self",0.45,"full"]]], // Stellar Night
  [74,114990369,"Gravity Maw","abyss","slam",1.38,[["hit","weakOthers",0.32],["drain","self",0.27,"half"],["weak","highestHpOther",0.22]]], // Gaggatrondra
@@ -152,7 +152,28 @@ export const mainListMoves=[
  [150,127023313,"Hard Disconnect","storm","pulse",1.30,[["lock","target",3],["stagger","strongestOther",5,"charging"],["steal","target",.59,"shielded"]],{visual:'packetDrop',school:'vortex',pierce:.28}], // DISCONNECT
 ];
 
+export const classicCampaignMoves=[
+ [0,12057578,"Unity Pulse","shield","pulse",1.19,[["shield","allAllies",.22],["purge","hurtAlly",0]],{visual:"rampart",school:"ward"}], // Unity
+ [0,11274262,"Three Spike Trial","thorns","slam",1.22,[["hit","target",.24],["hit","target",.24]],{visual:"spikeQuake",school:"rupture"}], // The Triple Trial
+ [0,3010126,"Falling Blocks","gear","slam",1.25,[["strip","target",.70],["hit","neighbors",.30]],{visual:"packetDrop",school:"shatter"}], // Tetrix
+ [0,1799065,"Hex Lock","prism","pulse",1.26,[["mark","allOthers",.19],["lock","target",1,"charging"]],{visual:"prismBloom",school:"rupture"}], // Hexagon Force V2
+ [0,7054561,"Ghost Circuit","abyss","sweep",1.36,[["evade","self",.64],["hit","markedOthers",.34]],{visual:"spectralKeel",school:"vortex"}], // Poltergeist
+ [0,4957691,"Wind Tunnel","storm","stream",1.27,[["hit","neighbors",.34],["stagger","next",1]],{visual:"coilwell",school:"chain"}], // Windy Landscape
+ [0,5155022,"Temple Rampart","shield","slam",1.28,[["shield","allAllies",.25],["mark","target",.17]],{visual:"rampart",school:"ward"}], // Acropolis
+ [0,4706930,"Supersonic Break","pulse","stream",1.43,[["hit","allOthers",.22],["haste","self",1]],{visual:"shockGrid",school:"surge"}], // Supersonic
+];
+
+// Keep the previous signatures available for Army runs issued before this balance update.
+export const previousBossMoves=[
+ [14,135661111,"Abyssal Pressure","wave","stream",1.47,[["hit","highestHpOther",.38],["weak","highestHpOther",.33],["heal","self",.22,"half"]]],
+ [25,89496627,"Cinder Gate","magma","slam",1.57,[["strip","target",.85],["hit","shieldedOthers",.36],["weak","next",.32,"full"]]],
+ [27,73667628,"Crossing Toll","wave","stream",1.38,[["hit","strongestOther",.46],["lock","next",1,"half"]]],
+ [39,27690100,"Red Chamber","magma","slam",1.68,[["hit","weakOthers",.39],["mark","lowestOther",.24,"knockout"]]],
+ [71,90477539,"Objection Sustained","shield","pulse",1.23,[["lock","target",2,"charging"],["shield","allAllies",.21,"charging"],["heal","self",.2,"knockout"]]],
+];
+
 export const extraLevelMoves=[
+ ...classicCampaignMoves,
  [null,61079355,"Saw Garden","saw","fan",1.39,[["hit","target",0.17],["hit","neighbors",0.32],["hit","next",0.2]],{"visual":"acu"}], // Acu
  [null,54953085,"Phase Fold","eye","spiral",1.42,[["lock","target",2],["shield","otherHurtAlly",0.41],["weak","neighbors",0.24,"full"]],{"visual":"domain"}], // Thinking Space
  [null,11588490,"Spectrum Tunnel","portal","stream",1.28,[["hit","next",0.29],["charge","self",1,"marked"],["purge","self",1]],{"visual":"paracosm"}], // Ultra Paracosm

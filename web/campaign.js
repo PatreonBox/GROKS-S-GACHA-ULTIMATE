@@ -1,13 +1,13 @@
 export const campaignStages=[
- {name:'First Light',team:[4454123,26618473,11945914,6508283],captain:'ReTraY',first:600,master:300,turns:10,hp:.62,power:.52,charge:2},
- {name:'Prism Crossing',team:[11940,215705,28255647,26949498],captain:'Spooky Light',first:1500,master:600,turns:10,hp:.82,power:.76,shield:.18},
- {name:'Outer Circuit',team:[28179535,20635816,28200611,27732941],captain:'OuterSpace',first:5400,master:1800,turns:11,hp:.90,power:.90,teamShield:.12},
- {name:'Switchyard',team:[28225110,56199846,7485599,27448202],captain:'Magmatic Sanctuary',first:22000,master:7500,turns:11,hp:.96,power:.94,relay:2},
- {name:'Randomizer Reactor',team:[12057578,44121158,3010126,126765939],captain:'GD Randomizer',first:72000,master:20000,turns:12,openCast:true},
+ {name:'RETRY',team:[4454123,26618473,11945914,6508283],captain:'ReTraY',first:600,master:300,turns:10,hp:.62,power:.52,charge:2},
+ {name:'Fire in the Hole',team:[11940,215705,28255647,26949498],captain:'Spooky Light',first:1500,master:600,turns:10,hp:.82,power:.76,shield:.18},
+ {name:'Air Detected',team:[28179535,20635816,28200611,27732941],captain:'OuterSpace',first:5400,master:1800,turns:11,hp:.90,power:.90,teamShield:.12},
+ {name:'Rock on the Ground',team:[28225110,27483789,7485599,27448202],captain:'Magmatic Sanctuary',first:22000,master:7500,turns:11,hp:.96,power:.94,relay:2},
+ {name:'Insane Classics',team:[11274262,3010126,1799065,12057578],captain:'Unity',first:72000,master:20000,turns:12,openCast:true},
  {name:'Moon Gate',team:[13519,55520,17235008,8660411],captain:'Death Moon',first:160000,master:55000,turns:12,shield:.2,allyShield:.14},
  {name:'Ultraviolet',team:[34085027,58270823,3264805,60887211],captain:'Ultra violence',first:450000,master:150000,turns:13,openCast:true,relay:2},
  {name:'Broken Rings',team:[6939821,40945673,44062068,4284013],captain:'Nine Circles',first:1100000,master:350000,turns:13,teamShield:.18,power:1.08},
- {name:'Overdrive',team:[73725400,4957691,5155022,4706930],captain:'Supersonic',first:3400000,master:1200000,turns:14,shield:.28,charge:3,power:1.10},
+ {name:'Overdrive',team:[7054561,4957691,5155022,4706930],captain:'Supersonic',first:3400000,master:1200000,turns:14,shield:.28,charge:3,power:1.10},
  {name:'The Last Gate',team:[10565740,42584142,86407629,149992717],captain:'GRIEF',firstClear:300_000_000_000,master:12000000,turns:14,hp:1.16,power:1.12,shield:.25,openCast:true}
 ];
 export const campaignFirstMultiplier=30;

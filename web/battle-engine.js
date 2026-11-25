@@ -134,8 +134,9 @@ export function playTurn(wallet,id,seq,move,target,now=Date.now(),random=Math.ra
   const u=b[side][index];if(!u?.hp)return 0;
   const attackingSide=side==='enemies'?'allies':'enemies';
   if(u.evade&&directHits.has(extra.kind)){
+   const blocked=u.evade===1;
    raw*=1-u.evade;delete u.evade;
-   emit('status',side,index,0,{name:'Dodged',cue:'dodge'});
+   emit('status',side,index,0,{name:blocked?'Damage nullified':'Dodged',cue:blocked?'ward':'dodge'});
   }
   const incoming=Math.max(0,Math.round(raw)),shieldable=Math.round(incoming*(1-(extra.pierce||0)));
   const absorbed=Math.min(u.shield||0,shieldable);
@@ -189,7 +190,11 @@ export function playTurn(wallet,id,seq,move,target,now=Date.now(),random=Math.ra
      case 'mend':restore(team,index,u.maxHp*amount,'heal');break;
      case 'drain':restore(team,index,dealt*amount,'heal');break;
      case 'shield':restore(team,index,attack*amount,'shield');break;
-     case 'evade':u.evade=Math.max(u.evade||0,amount);status('Dodge ready',{cue:'dodge'});break;
+     case 'evade':{
+      u.evade=Math.max(u.evade||0,amount);
+      status(u.evade===1?'Nullify ready':'Dodge ready',{cue:u.evade===1?'ward':'dodge'});
+      break;
+     }
      case 'fury':u.fury=Math.max(u.fury||0,amount);status('Attack boosted',{cue:'charged'});break;
      case 'haste':{
       if(!(u.readyAt>b.seq))break;

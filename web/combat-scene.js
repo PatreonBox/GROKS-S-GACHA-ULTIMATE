@@ -15,6 +15,11 @@ const timing={
  execute:[1600,.65,'stealCharge','stealCut']
 };
 const signatureTiming={
+ leviathan:[2430,.68,'whaleCall','tideCrash'],
+ infernoBreath:[2160,.66,'firewallBuild','firewallHit'],
+ obsidianChomp:[1960,.68,'mawGrowl','mawSnap'],
+ bloodWard:[2090,.66,'shieldCast','stealCut'],
+ courtroomChalk:[1880,.65,'paperShuffle','chalkPop'],
  firewall:[2550,.66,'firewallBuild','firewallHit'],
  domain:[2280,.65,'domainBuild','domainHit'],
  artemis:[2080,.68,'prismCast','moonImpact'],
@@ -791,7 +796,161 @@ function packetDrop(mesh,g,q,p){
  mesh.trace(gate,hsla(hue+18,100,87,fade),3.6,9);
 }
 
-const signatureScenes={firewall,domain,artemis,city,acu,amethyst,orbit,null:nullHorizon,paracosm,syringe,mirror:mirrorFrame,
+function joinRings(mesh,rings,paint){
+ for(let i=0;i<rings.length-1;i++){
+  const near=rings[i],far=rings[i+1];
+  for(let j=0;j<near.length;j++){
+   const next=(j+1)%near.length;
+   mesh.poly([near[j],near[next],far[next],far[j]],paint(i,j));
+  }
+ }
+}
+
+const whaleProfile=[
+ [-93,1.6,2.8],[-69,6,6],[-48,12,11],[-26,24,19],[10,30,27],
+ [43,26,23],[62,19,17],[74,10,9],[78,0,0]
+];
+function leviathan(mesh,g,q,p){
+ const {point,reach,at,wide,seed}=g;
+ const fade=ease((q-.13)/.13)*(1-ease((q-at)/(1-at)));
+ if(!fade)return;
+ const scale=Math.min(1.16,wide/125),breach=ease((q-.13)/.50),dive=ease((q-at)/(1-at));
+ const pitch=mix(.32,-.18,p)-dive*.35,cs=Math.cos(pitch),sn=Math.sin(pitch);
+ const x=reach*(.08+.77*p)+dive*44-27,z=10+Math.sin(breach*Math.PI*.82)*64-dive*73;
+ const body=(u,y,v)=>point(x+scale*(u*cs-v*sn),scale*y,z+scale*(u*sn+v*cs));
+ const sides=12,skirt=(u,y,v)=>body(u,y,v+Math.sin(q*16+u*.045)*4);
+ const rings=whaleProfile.map(([u,r,h])=>Array.from({length:sides},(_,i)=>{
+  const angle=i*TAU/sides;
+  return skirt(u,r*Math.cos(angle),h*Math.sin(angle));
+ }));
+ joinRings(mesh,rings,(_,j)=>{
+  const angle=(j+.5)*TAU/sides,back=Math.sin(angle);
+  return hsla(back<-.23?196:209,back<-.23?48:64,
+   back<-.23?53-15*back:35+18*back+Math.cos(angle)*8,fade*.98);
+ });
+ const fin=points=>mesh.poly(points.map(([u,y,v])=>skirt(u,y,v)),hsla(211,68,32,fade),hsla(190,87,65,fade*.52));
+ fin([[-49,0,11],[-26,0,51],[-18,0,24],[-10,0,19]]);
+ for(const side of [-1,1]){
+  const beat=Math.sin(q*16-3.8)*9;
+  fin([[-79,0,0],[-105,side*41,3+beat],[-112,side*23,-6+beat],[-96,0,0]]);
+  fin([[31,side*24,-6],[9,side*57,-22+beat*.45],[-9,side*41,-24],[2,side*23,-13]]);
+  mesh.trace([body(40,side*25,-5),body(53,side*20,-9),body(73,side*9,-6)],
+   hsla(211,55,18,fade),1.7);
+  mesh.trace([body(55,side*21,6),body(58,side*22,7)],hsla(188,92,91,fade),2.3,3);
+ }
+ const wash=ease((q-at+.11)/(.95-at+.11));
+ for(let i=0;i<24;i++){
+  const a=i*2.399+seed,r=(14+wash*(34+i%7*7))*scale,h=Math.sin(wash*Math.PI)*(16+i%8*6);
+  const y=Math.sin(a)*r,u=reach+Math.cos(a)*r;
+  mesh.trace([point(u,y,h-6),point(u+Math.cos(a)*9,y+Math.sin(a)*8,h+5)],
+   hsla(188,96,83,fade*(1-wash*.76)),1.25+i%3*.44,3);
+ }
+}
+
+function infernoBreath(mesh,g,q){
+ const {point,reach,at,seed}=g,fade=held(q,at);
+ const flow=ease((q-.17)/(at-.17)),length=reach*flow;
+ if(length<1)return;
+ const rings=Array.from({length:11},(_,i)=>{
+  const f=i/10,spread=(4+Math.min(48,reach*.23)*f**.78)*flow;
+  return Array.from({length:10},(_,j)=>{
+   const a=TAU*j/10,flutter=.83+.17*Math.sin(i*1.6+j*2.4+q*22);
+   return point(length*f+Math.cos(j+q*24)*f*8,Math.cos(a)*spread*flutter,
+    25+Math.sin(a)*spread*flutter+f*(10+8*Math.sin(i+q*12)));
+  });
+ });
+ joinRings(mesh,rings,(i,j)=>{
+  const flame=Math.sin(i*1.8+j*2.72+q*26);
+  return hsla(9+i*2.5+flame*11,100,45+flame*17,fade*(.70-i*.032));
+ });
+ for(let j=0;j<8;j++){
+  const tongue=Array.from({length:12},(_,i)=>{
+   const f=i/11,a=j*.79+q*13-i*.26;
+   return point(length*f,Math.cos(a)*f*(8+j*3),26+Math.sin(a)*f*(10+j*3)+f*16);
+  });
+  mesh.trace(tongue,hsla(30+j*3,100,70+j*2,fade*(.8-j*.04)),Math.max(1.2,4-j*.35),7);
+ }
+ for(let i=0;i<23;i++){
+  const a=i*2.399+seed,age=(q*2.3+i*.132)%1,u=length*age;
+  const y=Math.cos(a)*age*(13+i%9*5),h=25+age*(10+i%6*12);
+  mesh.trace([point(u-8,y,h-4),point(u,y+Math.sin(a)*4,h)],hsla(42,100,80,fade*(1-age)),1.9,3);
+ }
+}
+
+function extrude(mesh,point,outline,half,front,side,edge){
+ const left=outline.map(([x,z])=>point(x,-half,z)),right=outline.map(([x,z])=>point(x,half,z));
+ mesh.poly(left,front,edge);
+ mesh.poly(right,front,edge);
+ for(let i=0;i<outline.length;i++){
+  const next=(i+1)%outline.length;
+  mesh.poly([left[i],left[next],right[next],right[i]],side,edge);
+ }
+}
+
+function obsidianChomp(mesh,g,q,p){
+ const {point,reach,at,wide}=g,grow=ease(q/.29),fade=held(q,at);
+ const size=Math.min(1.16,wide/139)*grow;
+ const center=reach*(.23+.77*p)-35;
+ const opening=.67*ease((q-.12)/.29)*(1-ease((q-at+.115)/.115));
+ for(const top of [true,false]){
+  const turn=(top?1:-1)*opening,cs=Math.cos(turn),sn=Math.sin(turn);
+  const jaw=(x,y,z)=>point(center+size*(x*cs-z*sn),y*size,33+size*(x*sn+z*cs));
+  const stone=hsla(top?252:262,33,top?21:14,fade*.97);
+  const facet=hsla(top?273:257,37,top?32:20,fade*.95);
+  const neon=hsla(328,92,65,fade*.67);
+  const outline=top?[[-32,6],[-26,24],[3,36],[43,17],[60,4],[47,-2]]:
+   [[-32,-5],[49,-3],[60,-10],[37,-24],[-15,-20]];
+  extrude(mesh,jaw,outline,26,stone,facet,neon);
+  for(const side of [-1,1]){
+   for(const x of [10,27,45]){
+    const tooth=(u,y,z)=>jaw(x+u,side*19+y,z);
+    const direction=top?-1:1;
+    extrude(mesh,tooth,[[-5,0],[0,direction*(10+x*.09)],[5,0]],4,
+     hsla(306,45,88,fade),hsla(279,52,56,fade));
+   }
+   if(top){
+    mesh.poly([[11,14],[32,17],[24,9]].map(([u,z])=>jaw(u,side*26.2,z)),hsla(349,100,77,fade),neon);
+    mesh.trace([jaw(1,side*26.3,28),jaw(14,side*26.3,25)],hsla(308,93,65,fade*.71),2,4);
+   }
+  }
+ }
+}
+
+function bloodWard(mesh,g,q,p){
+ const {point,reach,at,seed}=g,fade=held(q,at);
+ scythe(mesh,g,q,p);
+ const gather=ease((q-.20)/.49),shield=1-ease((q-.87)/.13);
+ for(let i=0;i<3;i++){
+  const loop=circle(point,0,0,14+i*13,(20+i*3)*gather,6,false,q*(2+i*.71));
+  mesh.trace(loop,hsla(347,94,i===1?83:61,shield*gather*.88),1.5,4);
+ }
+ for(let i=0;i<14;i++){
+  const angle=i*2.399+seed,u=reach*(1-gather)+Math.cos(angle)*gather*(18+i%3*8);
+  const y=Math.sin(angle)*gather*(10+i%4*6),z=14+Math.sin(gather*Math.PI)*(12+i%4*5);
+  shard(mesh,point,u,y,z,3.6,8+i%4*2,348,fade*.65,angle);
+ }
+}
+
+function courtroomChalk(mesh,g,q,p){
+ const {point,reach,at,seed}=g,wind=ease(q/.37),fade=held(q,at);
+ const swing=p*1.24-1.1,cs=Math.cos(swing),sn=Math.sin(swing);
+ const pivot=reach*(.31+.62*p)-16;
+ const gavel=(x,y,z)=>point(pivot+x*cs-z*sn,y,29+wind*(x*sn+z*cs));
+ extrude(mesh,gavel,[[-38,15],[16,15],[16,21],[-38,21]],4,hsla(31,65,35,fade),hsla(39,81,55,fade));
+ extrude(mesh,gavel,[[8,3],[24,3],[24,34],[8,34]],12,hsla(29,68,31,fade),hsla(39,80,58,fade));
+ const scatter=ease((q-at+.035)/(1-at+.035));
+ if(!scatter)return;
+ const opacity=(1-scatter)*.68;
+ for(let i=0;i<32;i++){
+  const a=i*2.399+seed,r=(12+(i%12)*6)*scatter,y=Math.sin(a)*r,x=reach+Math.cos(a)*r;
+  const h=12+Math.sin(scatter*Math.PI*.72)*(12+i%10*7),size=(3+i%7*2)*(1+scatter*.65);
+  const cloud=circle(point,x,y,h,size,7,true,a);
+  mesh.poly(cloud.slice(0,-1),hsla(44,33,94,opacity*(.62+i%3*.17)));
+  if(i%3===0)mesh.trace([point(x-5,y,h-3),point(x,y+4,h+6)],hsla(51,85,97,opacity),1.4,3);
+ }
+}
+
+const signatureScenes={leviathan,infernoBreath,obsidianChomp,bloodWard,courtroomChalk,firewall,domain,artemis,city,acu,amethyst,orbit,null:nullHorizon,paracosm,syringe,mirror:mirrorFrame,
  bladeArc,coilwell,spectralKeel,waterfall,secondSun,scrapTurbine,keyCascade,gateRelay,shockGrid,spikeQuake,
  crossfire,prismBloom,rampart,starfall,packetDrop};
 
