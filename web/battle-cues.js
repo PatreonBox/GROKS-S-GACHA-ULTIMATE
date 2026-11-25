@@ -1,0 +1,27 @@
+// [offset, duration] in decoded buffer seconds.
+export const battleCues={
+ auto: [6.687193, 0.102000],
+ easy: [6.851193, 0.125000],
+ normal: [7.038193, 0.149000],
+ hard: [7.249193, 0.172000],
+ harder: [7.483193, 0.193000],
+ insane: [7.738193, 0.214000],
+ easyDemon: [8.014193, 0.235000],
+ mediumDemon: [8.311193, 0.262000],
+ hardDemon: [8.635193, 0.295000],
+ insaneDemon: [8.992193, 0.356000],
+ extremeDemon: [9.410193, 0.534000],
+ attack: [10.006193, 0.144000],
+ charged: [10.212193, 0.280000],
+ guard: [10.554193, 0.215000],
+ enemyHit: [10.831193, 0.132000],
+ knockout: [11.025193, 0.285000],
+ injury: [11.372193, 0.300000],
+ victory: [11.734193, 0.495000],
+ loss: [12.291193, 0.364000],
+ heal: [12.717193, 0.323000],
+ mineAccent: [13.102193, 0.115000],
+ luckAccent: [13.279193, 0.358000],
+ extraAccent: [13.699193, 0.353000],
+};
+export const difficultyCueNames=["auto", "easy", "normal", "hard", "harder", "insane", "easyDemon", "mediumDemon", "hardDemon", "insaneDemon", "extremeDemon"];

@@ -1,0 +1,14 @@
+{
+  "name": "gd-lvl-battles",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --use-env-proxy scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test scripts/game.test.mjs scripts/runtime.test.mjs",
+    "start": "node server/runtime.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}

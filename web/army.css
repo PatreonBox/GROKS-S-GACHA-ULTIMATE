@@ -1,0 +1,280 @@
+#armyRoom{
+ --army-teal:#87f3e4;
+ --army-ember:#ffab8c;
+ --army-panel:#161923;
+ --army-line:#31394b;
+ --army-muted:#aeb7cc;
+ margin-block:clamp(19px,4vh,41px) 42px;
+}
+#armyRoom [hidden]{display:none!important}
+.army-heading,.army-panel-head,.army-strip,.army-field-head,.army-command{
+ display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.army-heading{align-items:flex-end;margin-bottom:clamp(14px,2.1vw,25px)}
+.army-heading h1{margin:0;font:800 clamp(42px,6vw,70px)/.95 Cond,sans-serif}
+.army-heading p{margin:8px 0 0;color:var(--army-muted);font-size:14px}
+.army-nav{display:flex;align-items:center;gap:2px;padding:4px;background:#191c27;border:1px solid var(--army-line);border-radius:9px;white-space:nowrap}
+.army-nav a{color:var(--army-muted);text-decoration:none;font-weight:700;font-size:13px;padding:9px 11px;border-radius:5px}
+.army-nav a:hover,.army-nav a[aria-current]{background:#27363f;color:var(--army-teal)}
+.army-nav .iconbtn{margin-left:3px}
+.army-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(253px,24vw,306px);gap:clamp(12px,2vw,24px);align-items:start}
+.army-stage,.army-panel{min-width:0}
+.army-stage{overflow:hidden;isolation:isolate;background:#141824;border:1px solid var(--army-line);border-radius:13px}
+.army-field{
+ --sky:none;position:relative;isolation:isolate;overflow:hidden;height:clamp(315px,min(42vw,calc(100dvh - 388px)),540px);
+ background-image:linear-gradient(180deg,#0b1129a9 0%,#12142f08 43%,#0a0f1e55 77%,#0a0e1dda),var(--sky);
+ background-color:#141c33;background-size:cover;background-position:center 45%;
+ border-bottom:1px solid var(--army-line);cursor:grab;touch-action:pan-y;
+}
+.army-field[data-map="foundry"]{
+ background-image:linear-gradient(180deg,#24121aa8,#1f111807 42%,#140d1671 79%,#100e1cdd),var(--sky);
+ background-position:center 42%;background-color:#2e1e2c;
+}
+.army-field:active{cursor:grabbing}
+.army-canvas{width:100%;height:100%;position:absolute;inset:0;pointer-events:none}
+.army-field-head,.army-score{position:absolute;z-index:1;inset-inline:clamp(12px,2.3vw,25px);pointer-events:none}
+.army-field-head{top:clamp(12px,1.8vw,20px);align-items:flex-start;text-shadow:0 2px 16px #000b}
+.army-field-head small{display:block;text-transform:uppercase;color:#d8dfeb;font-size:10px;letter-spacing:.16em;font-weight:750}
+.army-field-head h2{margin:3px 0;color:#f6f7fb;font:800 clamp(29px,4.5vw,54px)/.98 Cond,sans-serif}
+.army-timer{color:#f4f6ff;font-variant-numeric:tabular-nums;font-weight:800;background:#0e1424d6;border:1px solid #c0cdff3e;border-radius:6px;padding:5px 10px}
+.army-score{bottom:clamp(10px,1.7vw,20px);display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,1.7vw,22px)}
+.army-team{padding:7px 10px;background:#0b111fde;border:1px solid #7184ae63;border-radius:6px;color:#e9edf3}
+.army-team span{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:750;margin-bottom:5px}
+.army-team b{font-variant-numeric:tabular-nums;color:var(--side)}
+.army-team i,.army-report-hp{display:block;position:relative;height:4px;background:#ffffff22;border-radius:4px;overflow:hidden}
+.army-team i::before,.army-report-hp::before{content:"";display:block;width:calc(var(--hp,0)*100%);height:100%;border-radius:inherit;background:var(--side)}
+#armyRoom [data-side="0"]{--side:var(--army-teal)}
+#armyRoom [data-side="1"]{--side:var(--army-ember)}
+.army-countdown,.army-outcome{
+ position:absolute;z-index:2;top:44%;left:50%;transform:translate(-50%,-50%);min-width:clamp(117px,24vw,224px);
+ text-align:center;pointer-events:none;background:linear-gradient(143deg,#172738ed,#0f1526f2);color:#f3fffb;
+ border:1px solid #a4ffe4a0;border-radius:12px;box-shadow:0 14px 64px #02050ac9,0 0 38px #68ffe92b;padding:12px 18px;
+}
+.army-countdown{font:800 clamp(53px,8.3vw,108px)/.92 Cond,sans-serif;text-shadow:0 0 24px #82f3e480}
+.army-field[data-phase="paused"] .army-countdown{font-size:clamp(38px,6vw,70px)}
+.army-outcome strong{display:block;color:var(--army-teal);font:800 clamp(41px,7vw,89px)/.95 Cond,sans-serif;white-space:nowrap}
+.army-outcome small{display:block;margin-top:10px;font-size:12px;color:#d7e1f1}
+.army-strip,.army-command{padding:clamp(8px,1.1vw,13px) clamp(11px,1.8vw,20px)}
+.army-strip{border-bottom:1px solid #282f42;background:#181d2b;min-height:51px}
+.army-feed{font-weight:650;font-size:13px;color:#e2eaf7;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.army-camera{display:flex;gap:4px}
+#armyRoom .iconbtn{display:grid;place-items:center;width:33px;height:33px;padding:0;border-radius:5px}
+#armyRoom .iconbtn svg{width:17px;height:17px}
+.army-command{justify-content:end;min-height:60px}
+#armyRoom .bt-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;color:#10231f;background:var(--army-teal);border-color:#a8fff0;font-weight:800}
+#armyRoom .bt-primary svg{width:17px;height:17px}
+.army-feedback{color:#ffbfab;font-size:13px;margin:0;padding:0 18px 13px}
+.army-panel{border:1px solid var(--army-line);border-radius:13px;background:var(--army-panel)}
+.army-config,.army-stats{padding:clamp(11px,1.6vw,18px)}
+.army-panel h2{margin:0;font:800 28px/1.1 Cond,sans-serif}
+.army-panel h3{margin:0;font-size:13px}
+.army-panel-head b{font-size:14px;color:var(--army-teal);font-variant-numeric:tabular-nums}
+.army-slots{margin-top:9px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.army-slots>*{
+ display:grid;place-items:center;position:relative;min-width:0;aspect-ratio:1.2;overflow:hidden;border-radius:5px;
+ color:var(--army-muted);background:#202535;border:1px dashed #52607c;font-size:11px;font-weight:750;font-variant-numeric:tabular-nums;
+}
+.army-slots>button{padding:0;border:1px solid #78d9cf;box-shadow:inset 0 0 0 1px #82ebe43e}
+.army-slots .army-card-art{width:100%;height:100%;position:absolute;inset:0;object-fit:cover;opacity:.86}
+.army-slots span:not(.army-empty-slot),.army-slots i{
+ position:absolute;z-index:1;color:#fff;line-height:1.3;background:#0e1526dc;border-radius:3px;padding:1px 3px;
+}
+.army-slots span:not(.army-empty-slot){bottom:2px;left:2px}
+.army-slots i{right:2px;top:2px;font-style:normal;font-size:13px}
+.army-slots button:hover i {background:#8b4550}
+.army-settings{margin-top:15px}
+.army-settings label,.army-maps legend{display:block;color:#d9dfeb;margin-bottom:5px;font-weight:750;font-size:12px}
+.army-settings select,.army-picker input{
+ width:100%;min-width:0;max-width:100%;padding:7px 9px;border:1px solid #424d64;border-radius:5px;
+ color:#edecf9;background:#202636;font:inherit;font-size:14px;
+}
+.army-maps{margin:12px 0 0;border:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px;min-width:0}
+.army-maps button{
+ min-width:0;overflow:hidden;min-height:51px;text-align:left;display:flex;align-items:flex-end;justify-content:flex-start;padding:5px 6px;
+ color:#e9eaf4;background:linear-gradient(0deg,#0f1629f1,transparent 95%),var(--preview) center/cover;
+ border:1px solid #576179;border-radius:5px;font-size:11px;line-height:1;font-weight:800;
+}
+.army-maps button[aria-pressed="true"]{border-color:var(--army-teal);box-shadow:inset 0 0 0 1px #63ffde8c;color:#e3fff7}
+.army-picker{border-top:1px solid #30394c;margin-top:13px;padding-top:9px}
+.army-picker .outline{padding:3px 7px;font-size:11px}
+.army-picker input{margin-top:7px}
+.army-roster{display:grid;gap:4px;margin-top:6px;max-height:162px;overflow:auto;scrollbar-width:thin;scrollbar-color:#55647c transparent}
+.army-roster>p{margin:6px 0;color:var(--army-muted);font-size:12px}
+.army-pick{
+ min-width:0;display:flex;align-items:center;gap:7px;text-align:left;background:#202638;border:1px solid #344057;border-radius:5px;
+ padding:4px;color:#f1f4fb;line-height:1.2;
+}
+.army-pick:enabled:hover{background:#2c3a4b;border-color:#72cfc7}
+.army-pick:disabled{opacity:.56;cursor:default}
+.army-pick .army-card-art{display:block;object-fit:cover;width:34px;height:32px;flex:none;border-radius:3px}
+.army-card-art{background:#252f46 url('/assets/player-cube.png') center/contain no-repeat}
+.army-pick span{min-width:0}
+.army-pick b,.army-pick small{display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.army-pick b{font-size:12px}
+.army-pick small{font-size:10px;color:var(--army-muted);margin-top:2px}
+.army-pick i{font-style:normal;color:var(--army-teal);margin-inline:auto 3px;font-weight:800}
+.army-stats h3{margin:11px 0 5px;color:var(--side);font-size:13px}
+.army-report-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:3px 7px;margin-bottom:6px}
+.army-report-row b{font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.army-report-row small{font-size:10px;color:#cdd6e8;font-variant-numeric:tabular-nums}
+.army-report-hp{height:2px;grid-column:1/-1}
+.army-report-row.is-ko{opacity:.5}
+@media(max-width:855px){
+ .army-layout{grid-template-columns:1fr}
+ .army-config{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+ .army-config>.army-panel-head,.army-slots{grid-column:1/-1;margin-top:0}
+ .army-slots>*{aspect-ratio:auto;min-height:32px}
+ .army-slots .army-card-art{object-position:center}
+ .army-settings,.army-picker{margin:0}
+ .army-picker{border:0;padding-top:0}
+ .army-field{height:clamp(308px,51vw,490px)}
+ .army-stats [data-army-standing]{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+}
+@media(max-width:525px){
+ .army-heading{display:grid;justify-content:stretch;gap:10px}
+ .army-nav{width:max-content}
+ .army-heading p{font-size:13px}
+ .army-field{height:clamp(285px,79vw,350px)}
+ .army-command .bt-primary{margin-left:auto}
+ .army-report-row b{font-size:11px}
+}
+.army-maps+label{margin-top:11px}
+.army-pick [data-style="Melee"]{color:#ffc39f}
+.army-pick [data-style="Ranged"]{color:#aedcef}
+main:has(#armyRoom:not([hidden])){width:min(1710px,100%);padding-inline:max(clamp(12px,2.4vw,42px),env(safe-area-inset-left)) max(clamp(12px,2.4vw,42px),env(safe-area-inset-right))}
+.army-field{height:clamp(430px,min(48vw,calc(100dvh - 236px)),710px)}
+.army-heading{margin-bottom:13px}
+.army-trilogy{
+ display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:clamp(12px,2vw,25px);
+ margin-bottom:12px;padding:8px 12px;border:1px solid #364255;border-radius:10px;
+ background:linear-gradient(115deg,#202a3a,#151a26 61%);
+}
+.army-trilogy h2{font:800 clamp(24px,3.25vw,34px)/1 Cond,sans-serif;margin:0;color:#f1fff9}
+.army-trilogy>div:first-child>span{color:var(--army-muted);font-size:12px}
+.army-chapters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.army-chapters button{
+ display:flex;gap:7px;align-items:center;min-width:0;min-height:45px;padding:5px 8px;text-align:left;
+ color:#e7eef9;background:#182130;border:1px solid #3d4c66;border-radius:6px;
+}
+.army-chapters button[aria-pressed="true"]{border-color:#8af8e5;background:linear-gradient(100deg,#254542,#192c3b);box-shadow:inset 0 0 10px #91ffe918}
+.army-chapters button:disabled:not([aria-pressed="true"]){opacity:.58}
+.army-chapters button:not(:disabled):hover{border-color:var(--army-teal)}
+.army-chapters b,.army-chapters small{display:block}
+.army-chapters b{font-size:14px;line-height:1.12}
+.army-chapters small{color:#bccee0;font-size:11px;white-space:normal}
+.army-chapter-icon{
+ display:grid;place-items:center;width:26px;height:26px;flex:none;border:1px solid #8296b96b;border-radius:5px;
+ color:#b5f9ed;background:#101c2e;font-weight:750
+}
+.army-chapter-icon svg,.army-report-row svg{width:15px;height:15px}
+.army-report-row svg{vertical-align:middle;color:#ffcc6d}
+.army-field.has-card-hover{cursor:pointer}
+.army-camera{align-items:center;flex:none}
+.army-camera output{min-width:37px;text-align:center;font-size:12px;color:#d5e7f5;font-variant-numeric:tabular-nums}
+.army-camera .iconbtn:disabled{opacity:.43;cursor:default}
+.army-copy-count{margin-left:auto;color:#b7f6e9;font-size:12px;font-weight:750;white-space:nowrap;padding-right:2px}
+.army-actions,.army-spoils,.army-result-loot{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.army-spoils{min-width:0;gap:4px 8px}.army-spoils[hidden]{display:none}
+.army-spoils small{font-weight:700;color:#c8d5e5}
+.army-first-clear{border-left:1px solid #64728c70;padding-left:6px}
+.army-command{justify-content:space-between}
+.army-actions{margin-left:auto;justify-content:flex-end}
+.army-money{display:inline-flex;align-items:center;gap:4px;color:#ffda8f;font-size:13px;font-weight:750;white-space:nowrap}
+.army-money[data-currency="gems"]{color:#9fe9ff}
+.army-money img{width:17px;height:17px;object-fit:contain}
+.army-result-loot{justify-content:center;margin-top:9px;color:#d5dfee;font-size:13px}
+.army-result-loot .army-money{background:#101622;border:1px solid #677e9b70;border-radius:6px;padding:4px 6px}
+.army-saving{font-size:13px;color:var(--army-muted)}
+.army-outcome[data-result="lost"] strong,.army-outcome[data-result="retreated"] strong{color:#ffbc99}
+.army-outcome{z-index:5;max-width:calc(100% - 30px);animation:army-arrival .44s .24s both cubic-bezier(.2,.82,.24,1.12)}
+.army-outcome strong{white-space:normal;overflow-wrap:anywhere}
+@keyframes army-arrival{0%{transform:translate(-50%,-43%) scale(.83);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+.army-inspect{
+ position:absolute;z-index:4;pointer-events:none;width:min(204px,calc(100% - 24px));padding:7px 9px;
+ background:#111b2cf0;color:#f7fbff;border:1px solid var(--side,#87f3e4);border-radius:7px;
+ box-shadow:0 6px 20px #000a;transform:translateX(-50%);
+}
+.army-inspect[data-flip="up"]{transform:translate(-50%,-100%)}
+.army-inspect strong{display:block;font:800 19px/1.08 Cond,sans-serif;overflow-wrap:anywhere}
+.army-inspect small{display:block;color:#c9dbec;font-weight:650;font-size:11px;overflow-wrap:anywhere;margin-top:3px}
+.army-inspect>span{display:block;color:var(--side);font-size:11px;font-weight:730}
+.army-inspect>span>b{margin-left:5px;color:#e3eef8}
+.army-floaters{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+.army-hit-number{
+ position:absolute;top:0;left:0;color:#fff6e2;text-shadow:0 2px 3px #080a15,1px 1px 2px #080a15,-1px -1px 2px #080a15;
+ font:800 clamp(13px,1.7vw,23px)/1 Cond,sans-serif;white-space:nowrap;
+}
+.army-hit-number.heavy{color:#ffc08a;font-size:clamp(17px,2.2vw,29px)}
+.army-hit-number.is-ko{color:#ffdf96;font-size:clamp(18px,2.6vw,34px)}
+.army-hit-number.is-tactic{color:#d4eeff;font-size:clamp(11px,1.3vw,16px);white-space:nowrap}
+@media(max-width:855px){.army-field{height:clamp(370px,61vw,600px)}}
+@media(max-width:680px){
+ #armyRoom .army-field{height:clamp(344px,calc(68dvh - 24px),555px)}
+ .army-stage{display:flex;flex-direction:column}
+ #armyRoom .army-command{order:-2;border-bottom:1px solid var(--army-line)}
+ .army-strip{order:-1;flex-wrap:wrap;gap:5px}
+ .army-feed{flex:1 1 125px}
+ .army-camera{margin-left:auto}
+ .army-trilogy{grid-template-columns:1fr;gap:5px;padding:7px}
+ .army-trilogy>div:first-child{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:0 2px}
+ .army-trilogy>div:first-child>span{font-size:11px;text-align:right}
+ .army-chapters{gap:4px}.army-chapters button{min-height:45px;padding:4px;gap:4px}
+ .army-chapters b{font-size:12px}.army-chapters small{font-size:10px}.army-chapter-icon{width:18px;height:22px;font-size:11px}
+ .army-chapter-icon svg{width:12px;height:12px}
+ .army-actions :is(button,a){padding-inline:9px}
+}
+@media(max-width:430px){
+ .army-command{gap:6px 9px;flex-wrap:wrap}
+ .army-spoils{flex:1 1 100%;padding-inline:2px;gap:5px}
+ .army-actions{width:100%;justify-content:space-between}
+}
+@media(max-height:575px) and (orientation:landscape){#armyRoom .army-field{height:clamp(300px,91dvh,453px)}}
+@media(prefers-reduced-motion:reduce){.army-outcome{animation:none}}
+
+.army-trilogy{
+ grid-template-columns:minmax(0,1fr);gap:8px;padding:10px 13px;
+ border-color:#495977;
+ background:radial-gradient(ellipse at 82% 0,#272245,transparent 72%),linear-gradient(115deg,#192a39,#141925 72%);
+}
+.army-series-heading{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.army-series-heading>div:first-child{min-width:0}
+.army-series-heading h2{display:inline-block;margin-right:10px}
+.army-series-heading span,.army-series-info small{color:#c0cde0;font-size:12px}
+.army-series-tabs{display:flex;gap:4px}
+.army-series-tabs .outline{padding:6px 8px;font-size:13px}
+.army-series-tabs [aria-pressed=true],.army-series-controls [aria-pressed=true]{background:#234440;border-color:#83dacc;color:#d9fff3}
+.army-series-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr) auto;align-items:end;gap:6px}
+.army-series-controls[hidden],.army-series-info[hidden],.army-tier-setting[hidden]{display:none}
+.army-series-controls label{display:grid;min-width:0;gap:3px;color:#cad8ec;font-size:12px;font-weight:700}
+.army-series-controls :is(input,select){
+ min-width:0;width:100%;height:38px;padding:5px 8px;border:1px solid #52647c;border-radius:5px;
+ font:500 16px Barlow,system-ui,sans-serif;color:#f2f6ff;background:#131c2c;
+}
+.army-series-controls button{min-height:38px;padding:5px 8px;font-size:13px}
+.army-series-info,.army-series-prize{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px 11px;min-width:0}
+.army-series-info>div:first-child{display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 7px}
+.army-series-info>div>b{font:800 20px/1 Cond,sans-serif;color:#eefff9}
+.army-series-prize svg{width:14px;height:14px;vertical-align:middle}
+.army-series-prize .army-money{font-size:12px}
+.army-chapters button{min-height:55px;position:relative}
+.army-chapters button .army-card-art{width:clamp(44px,7vw,86px);height:38px;border:1px solid #8a94ac70;object-fit:cover;border-radius:4px}
+.army-chapters button .army-card-art[src="/assets/player-cube.png"]{object-fit:contain}
+.army-chapters button b{overflow-wrap:anywhere}
+.army-tier-setting select{display:block;width:100%;margin-top:3px}
+.army-trilogy-clear{width:100%;color:#bdf9e1;text-align:center}
+@media(max-width:600px){
+ .army-trilogy{padding:7px;gap:6px}
+ .army-series-heading h2{font-size:23px;margin:0}
+ .army-series-heading>div:first-child span{display:block;font-size:11px}
+ .army-series-controls{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:5px}
+ .army-series-controls button{grid-column:1/-1;justify-self:start;min-height:28px;padding:3px 6px;font-size:11px}
+ .army-series-controls :is(input,select){font-size:14px}
+ .army-series-info>div>b{font-size:17px}
+ .army-series-info small{font-size:11px}
+ .army-chapters button{display:grid;grid-template-rows:42px 1fr;min-height:90px;align-items:start;gap:4px;}
+ .army-chapters button:not(:has(img)){display:flex;align-items:center;min-height:50px}
+ .army-chapters button .army-card-art{width:100%;height:42px}
+ .army-chapters button:has(img) .army-chapter-icon{position:absolute;top:5px;left:5px;z-index:1}
+ .army-chapters button b{line-height:1.05}
+ .army-series-prize .army-money img{width:14px;height:14px}
+}

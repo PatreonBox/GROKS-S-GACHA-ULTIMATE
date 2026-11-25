@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+
+dist/
+web/assets/
+web/data/
+web/fonts/
+*.sqlite*

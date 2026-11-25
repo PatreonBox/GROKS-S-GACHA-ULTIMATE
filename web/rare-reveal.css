@@ -1,0 +1,130 @@
+/* Pack reveals live in their own full-viewport stage. */
+dialog.rare-reveal{
+ position:fixed;inset:0;margin:0;border:0;border-radius:0;padding:0;
+ height:100vh;height:100dvh;width:100vw;max-width:none;max-height:none;overflow:hidden;
+ color:#fff;background:#020207;isolation:isolate;
+}
+.rare-reveal::backdrop{background:#000}
+.rare-sky{position:absolute;inset:0;z-index:-2;overflow:hidden;pointer-events:none}
+.rare-sky::after{content:"";position:absolute;inset:0;
+ background:radial-gradient(ellipse at 50% 51%,transparent 15%,#05030a70 55%,#020206 96%),
+ linear-gradient(#020207 1%,#04030b22 38%,#04030b28 59%,#020207 99%)}
+.rare-hero{width:100%;height:100%;object-fit:cover;opacity:0;
+ filter:saturate(1.13) blur(3px);transform:scale(1.1);
+ transition:opacity .65s ease-out,transform 2s cubic-bezier(.13,.53,.25,1)}
+.rare-reveal[data-revealed] .rare-hero.ready{opacity:.34;transform:scale(1.02)}
+.rare-reveal>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;z-index:-1}
+.rare-head{position:absolute;z-index:1;top:max(env(safe-area-inset-top),clamp(18px,5.7dvh,62px));inset-inline:10px;
+ text-align:center;display:grid;justify-items:center;gap:6px;pointer-events:none}
+.rare-head span{display:flex;align-items:center;gap:9px;padding:5px 13px;border:1px solid color-mix(in srgb,var(--rarity) 55%,transparent);
+ border-radius:20px;background:#090812c9;letter-spacing:.14em;text-transform:uppercase;color:var(--rarity);font-size:.76rem;font-weight:800}
+.rare-head span::before{content:"";width:6px;height:6px;background:var(--rarity);box-shadow:0 0 11px var(--flare);transform:rotate(45deg)}
+.rare-head strong{font:800 clamp(36px,min(11vw,9.5dvh),83px)/.94 Cond,sans-serif;letter-spacing:-.015em;color:#fcf9ff;
+ text-shadow:0 2px 10px #000,0 0 26px color-mix(in srgb,var(--flare) 70%,transparent)}
+.rare-head small{color:#e5deee;font-size:.84rem;font-weight:660;text-shadow:0 1px 6px #000}
+.rare-head strong,.rare-head small{opacity:0;transform:translateY(7px);transition:opacity .32s ease,transform .45s cubic-bezier(.16,1,.3,1)}
+.rare-reveal[data-revealed] .rare-head :is(strong,small){opacity:1;transform:none}
+.rare-stage{position:absolute;inset:18% 0 15%;display:grid;place-items:center;perspective:920px;pointer-events:none}
+.rare-deck{display:grid;position:relative;width:clamp(156px,min(63vw,43dvh),310px);transform-style:preserve-3d;transform:rotateY(180deg)}
+.rare-back,.rare-front{grid-area:1/1;display:grid;place-items:stretch;backface-visibility:hidden;border-radius:13px}
+.rare-edge{position:absolute;inset:1px;border-radius:12px;transform-style:preserve-3d;background:var(--rarity)}
+.rare-edge::before,.rare-edge::after{content:"";position:absolute;top:7px;bottom:7px;width:8px;transform:rotateY(90deg);
+ background:linear-gradient(90deg,var(--flare),var(--rarity) 42%,#faf5ff 63%,var(--flare))}
+.rare-edge::before{left:-4px}.rare-edge::after{right:-4px}
+.rare-front{position:relative;transform:translateZ(4px);overflow:hidden;background:#11111d}
+.rare-deck .level-card{width:100%;min-height:0;padding:7px 7px 12px;border-width:2px;border-radius:12px}
+.rare-deck .level-card:not(.holo-card,.antimatter-card){border-color:color-mix(in srgb,var(--rarity) 78%,#332b56)}
+.rare-deck .card-art{aspect-ratio:1.62}
+.rare-deck .level-card>strong{font-size:clamp(18px,3vw,31px);line-height:1.05;overflow-wrap:anywhere}
+.rare-deck .level-card small{line-height:1.22}
+.rare-front::after{content:"";position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(117deg,transparent 33%,#fff0 36%,#fff8 47%,#fff3 52%,transparent 64%);
+ transform:translateX(-120%);opacity:.8}
+.rare-reveal[data-revealed] .rare-front::after{animation:rare-sweep .86s cubic-bezier(.2,.8,.25,1) .12s forwards}
+@keyframes rare-sweep{to{transform:translateX(130%);opacity:0}}
+.rare-back{position:absolute;inset:0;transform:translateZ(-4px) rotateY(180deg);place-items:center;border:1px solid var(--rarity);
+ background:repeating-linear-gradient(132deg,#d7c7ff17 0 1px,transparent 1px 16px),radial-gradient(ellipse at 44% 41%,color-mix(in srgb,var(--flare) 34%,#171426),#080713 72%);
+ box-shadow:inset 0 0 24px #a499f737,0 0 30px color-mix(in srgb,var(--flare) 54%,transparent)}
+.rare-back::before{content:"";position:absolute;inset:6px;border:1px solid color-mix(in srgb,var(--rarity) 35%,transparent);border-radius:9px}
+.rare-crest{position:relative;display:grid;place-items:center;width:44%;aspect-ratio:1;border:1px solid var(--rarity);
+ border-radius:16%;transform:rotate(45deg);background:#0e0b1ad9;
+ box-shadow:0 0 30px color-mix(in srgb,var(--flare) 67%,transparent),inset 0 0 22px color-mix(in srgb,var(--flare) 44%,transparent);
+ animation:rare-charge var(--charge) ease-in both}
+.rare-crest img{width:68%;transform:rotate(-45deg);filter:grayscale(1) brightness(1.4) drop-shadow(0 0 6px var(--flare))}
+@keyframes rare-charge{from{opacity:.55;scale:.84}to{opacity:1;scale:1.08}}
+.rare-reveal:not([data-revealed]) .rare-front .level-card{visibility:hidden}
+.rare-controls{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;position:absolute;z-index:2;
+ inset-inline:12px;bottom:max(clamp(16px,5dvh,48px),env(safe-area-inset-bottom))}
+.rare-controls button{min-height:44px}
+.rare-controls .primary{min-width:112px;background:var(--rarity);border-color:var(--rarity);color:#110b20}
+.rare-reveal[data-revealed] .rare-controls .primary{box-shadow:0 0 19px color-mix(in srgb,var(--flare) 36%,transparent)}
+.rare-controls svg,.rare-replay svg{width:16px;height:16px}
+.rare-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.rare-replay{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rare-replay select{min-width:0;max-width:min(100%,240px);padding:8px;border:1px solid #4d4161;border-radius:6px;background:#201a2c;color:#f0e6ff;font:inherit;font-size:.87rem}
+.hand-grid>.level-card[data-unseen]{visibility:hidden}
+
+/* Antimatter uses an obsidian foil with thin, colored highlights. */
+.level-card.antimatter-card,.merge-result.antimatter-card{
+ border:2px solid transparent;
+ background:linear-gradient(142deg,#1b1734,#070711 52%,#0c2330) padding-box,
+ conic-gradient(from 216deg,#66edf3,#39327b,#140e29,#e1a4ff,#eeceaa,#0f1150,#66edf3) border-box;
+ box-shadow:0 0 16px #9e65ff4d,inset 0 0 20px #4ab6fa1a;
+}
+.level-card.antimatter-card .scene-shot{filter:saturate(.80) contrast(1.15)}
+.level-card.antimatter-card:hover{box-shadow:0 0 24px #bd89ff72,inset 0 0 26px #4aaefc2c}
+.fighter.antimatter-card{border-color:#bf93ff;box-shadow:inset 0 0 14px #5f2fbc86,0 0 14px #7c60b05e}
+.level-card.impossible-card{--card-color:#d9a2ff;border-color:#a670f0;background-color:#181025}
+.level-card.impossible-card .card-type{color:#ebbcff}.level-card.impossible-card .card-stats{color:#f2caff;background:#190c2de8}
+.level-card.impossible-card:not(.antimatter-card):not(.holo-card){background:linear-gradient(140deg,#2c1a45,#131021 60%,#201735);box-shadow:inset 0 0 18px #7d43983d}
+.finish-labels{position:absolute;bottom:5px;left:5px;display:grid;gap:2px;max-width:calc(100% - 9px);justify-items:start;z-index:2}
+.finish-labels .holo-label{position:static}
+.antimatter-label{display:inline-flex;padding:3px 5px;border-radius:4px;border:1px solid #856db7;color:#f3c8ff;
+ background:linear-gradient(118deg,#1e1552,#0c1a33 58%,#184c55);font-weight:800;font-size:.68rem;line-height:1.07;text-transform:uppercase;white-space:nowrap}
+.level-card.antimatter-card .draw-chance{color:#e3b9ff}.fusion-antimatter{--fusion-light:#d192ff;--fusion-bright:#d9fbff}
+.level-card:has(.finish-labels) .card-stats{bottom:auto;top:4px}
+.vault-shop-link{margin-top:10px;color:#dac4ff;font-weight:740;text-decoration:underline;text-underline-offset:3px}
+.vault-entry{display:flex;align-items:center;gap:11px;padding:11px 15px;margin:12px 0;border:1px solid #7251a0;border-radius:8px;
+ background:linear-gradient(114deg,#241734,#141a30 67%,#231936);color:#f1d8ff;text-decoration:none}
+.vault-entry:hover{border-color:#c997ff}.vault-entry strong,.vault-entry small{display:block}
+.vault-entry small{margin-top:2px;color:#c9b5e4}.vault-sigil{display:grid;place-items:center;width:40px;aspect-ratio:1;border-radius:9px;
+ color:#e4aaff;background:#1a1033;border:1px solid #7f5bc1;font:800 32px/1 Cond,sans-serif}
+.vault{padding:clamp(13px,3vw,31px);border:1px solid #554270;border-radius:14px;
+ background:radial-gradient(ellipse at 70% -10%,#5638757d,transparent 62%),linear-gradient(126deg,#1a142c,#100d1a 65%,#1c152e)}
+.vault-head{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:21px}
+.vault-head h2{font:800 clamp(60px,9vw,110px)/.87 Cond,sans-serif;letter-spacing:.032em;margin:9px 0 4px;color:#f2d9ff;text-shadow:0 0 39px #a97dff75}
+.vault-head p{font:800 clamp(22px,3vw,34px)/1 Cond,sans-serif;margin:0}
+.vault-progress{display:grid;justify-items:end;gap:3px;color:#ddd2ee;font-size:.92rem}
+.vault-progress>b{font-size:1.11rem;color:#f6e6ff}.vault-progress .primary{margin-top:7px}
+.vault-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(7px,1.35vw,15px)}
+@property --vault-rotation{syntax:'<angle>';initial-value:0deg;inherits:false}
+.vault-shell{position:relative;min-width:0;min-height:158px;aspect-ratio:.78;overflow:hidden;isolation:isolate;display:grid;place-items:center;
+ border:1px solid transparent;border-radius:10px;
+ background:radial-gradient(ellipse at 48% 52%,#40367966,transparent 57%) padding-box,
+ linear-gradient(162deg,#19112c,#080914 56%,#161033) padding-box,
+ conic-gradient(from var(--vault-rotation),#130d21,#7d3ee7,#bdefff,#120c1c,#dc85ed,#462088,#65b5ae,#130d21) border-box;
+ animation:vault-foil 6s linear infinite;animation-delay:calc(var(--vault-i,0) * -.45s)}
+.vault-shell:nth-child(2n){--vault-i:3}.vault-shell:nth-child(3n){--vault-i:6}.vault-shell:nth-child(5n){--vault-i:8}
+.vault-shell:before{content:"";position:absolute;width:65%;aspect-ratio:1;z-index:-1;border-radius:27%;transform:rotate(45deg);
+ border:1px solid #a06aea59;box-shadow:inset 0 0 0 10px #94b9e415,inset 0 0 38px #7f56e949;background:linear-gradient(45deg,#372e6a44,transparent 50%)}
+.vault-mark{font:800 clamp(56px,9.1vw,118px)/1 Cond,sans-serif;color:#d7b7fc;
+ background:linear-gradient(138deg,#fff9fd 24%,#efbaff 42%,#b96afb 58%,#62d9e6 78%,#c99df4);
+ -webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 15px #a97cff88)}
+.vault-ordinal,.vault-caption{position:absolute;color:#b59ed1;font-weight:750;font-size:.74rem;letter-spacing:.065em}
+.vault-ordinal{left:9px;top:8px}.vault-caption{bottom:12px}
+.vault-unlocked{display:grid;align-content:start;gap:5px}.vault-unlocked .level-card{width:100%}
+.vault-unlocked .level-claim,.vault-paid{display:flex;align-items:center;justify-content:center;gap:4px;padding:7px;font-size:.85rem}
+.vault-paid{color:#ccbedd}
+@keyframes vault-foil{to{--vault-rotation:360deg}}
+@media(max-width:790px){.vault-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.vault-mark{font-size:clamp(66px,12vw,113px)}.vault-progress{justify-items:start}}
+@media(max-width:465px){.vault-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-height:540px){
+ .rare-stage{inset:20% 0 14%}.rare-head{top:max(9px,env(safe-area-inset-top));gap:2px}
+ .rare-head span{padding-block:2px}.rare-head strong{font-size:clamp(29px,8.5dvh,43px)}.rare-head small{font-size:.72rem}
+ .rare-deck{width:clamp(122px,min(50vw,41dvh),210px)}.rare-deck .level-card>strong{font-size:clamp(16px,4dvh,24px)}
+ .rare-controls{bottom:max(8px,env(safe-area-inset-bottom))}
+}
+@media(prefers-reduced-motion:reduce){
+ .vault-shell,.rare-crest,.rare-reveal[data-revealed] .rare-front::after{animation:none}
+ .rare-hero,.rare-head strong,.rare-head small{transition:none}
+}
