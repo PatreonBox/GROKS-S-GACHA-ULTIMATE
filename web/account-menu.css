@@ -67,6 +67,7 @@
 .player-dialog-head button{width:38px;height:38px;font-size:24px}
 .player-dialog-body{padding:17px 18px}
 .profile-privacy{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid #4b5f78;border-radius:8px;background:#19283a;cursor:pointer}
+.profile-privacy+.profile-privacy{margin-top:7px}
 .profile-privacy small{display:block;color:#becfe5}
 .profile-privacy input{width:21px;height:21px;flex:none;accent-color:#92e5d6}
 .player-dialog .player-menu-heading .player-avatar{width:56px;height:56px}

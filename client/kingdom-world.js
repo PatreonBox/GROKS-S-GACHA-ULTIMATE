@@ -3,7 +3,7 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,residentPath} from './kingdom-model.js';
 import {createBuildingPreview} from './building-preview.js';
 import {makeManaBubble,makeManaForge} from './mana-forge-model.js';
-import {buildingSpecs,forgeMinimum,forgeStored,kingdomBounds,manaIcon,visitorSlots} from '../web/kingdom-rules.js';
+import {buildingSpecs,forgeMinimum,forgeStored,kingdomBounds,kingdomDaylight,manaIcon,visitorSlots} from '../web/kingdom-rules.js';
 import {kingdomNavigation} from './kingdom-navigation.js';
 import {createKingdomWalker} from './kingdom-walkers.js';
 import {makeTowerConstruction} from './tower-construction.js';
@@ -53,7 +53,7 @@ function release(root){
  parts.forEach(item=>item.dispose());
 }
 
-export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollect}){
+export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect}){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'low-power'});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -65,21 +65,31 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
  scene.fog=new THREE.Fog(frameColor,26,98);
  const camera=new THREE.PerspectiveCamera(52,1,.12,240);
  const sky=makeSky();
- scene.add(sky,new THREE.HemisphereLight('#e3fcff','#8e7757',2.07));
+ const ambient=new THREE.HemisphereLight('#e3fcff','#8e7757',2.07);
+ scene.add(sky,ambient);
  const sun=new THREE.DirectionalLight('#ffe5bd',2.48);
  sun.position.set(-12,17,9);
  sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);
  Object.assign(sun.shadow.camera,{left:-18,right:18,top:18,bottom:-18,near:.5,far:58});
  sun.shadow.normalBias=.038;sun.shadow.bias=-.00018;
  scene.add(sun);
+ const dayPalette=['#e3fcff','#8e7757','#ffe5bd',frameColor].map(value=>new THREE.Color(value));
+ const nightPalette=['#95b1ff','#30375a','#a2c1ff','#424e75'].map(value=>new THREE.Color(value));
+ const lightColors=[ambient.color,ambient.groundColor,sun.color,scene.fog.color];
+ let lastLight=-1;
  const loader=new THREE.TextureLoader();
  const path=residentPath(),tower=makeTower(),owner=makeResident(loader);
  const models={house:makeHouse(),forge:makeManaForge()},icon=loader.load(manaIcon);
+ const improvedModels={house:makeHouse(2),forge:makeManaForge(2)},windows=new Set();
+ for(const model of [models.house,improvedModels.house]){
+  model.traverse(part=>{if(part.material?.name==='Cottage lights')windows.add(part.material)});
+ }
  icon.colorSpace=THREE.SRGBColorSpace;
  const bubbleModel=makeManaBubble(icon),bursts=[];
  let land=0,bounds=kingdomBounds(),landscape=makeLandscape(loader,path,bounds),grid=buildGrid(bounds);
- let nav,navKey='',worksite,clockOffset=0;
- const residentWalk=createKingdomWalker(owner,path.getPointAt(.209),0);
+ let nav,navKey='',worksite;
+ const occupiedHomes=new Set(),openDoors=new Set();
+ const residentWalk=createKingdomWalker(owner,path.getPointAt(.209),0,1,occupiedHomes);
  owner.setCube(cube);scene.add(landscape.ground,grid.grid,tower,owner.resident);
  const ghostFinish=new THREE.MeshStandardMaterial({
   color:'#6cf7b8',emissive:'#48966c',emissiveIntensity:.4,transparent:true,opacity:.52,depthWrite:false
@@ -136,9 +146,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    burstAt(point,true);
   }
  }
- function setPlot(buildings,visitors,towerLevel,landLevel=0,construction=null,offsetMs=0){
+ function setPlot(buildings,visitors,towerLevel,landLevel=0,construction=null){
   setLand(landLevel);
-  clockOffset=offsetMs;
   setWorksite(construction,towerLevel);
   const key=[landLevel,Boolean(construction),...buildings.map(item=>item.id)].join('/');
   if(navKey!==key){
@@ -151,16 +160,25 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    structure.model.removeFromParent();structure.bubble?.removeFromParent();removePicker(structure.key);structures.delete(id);
   }
   for(const building of buildings){
-   const existing=structures.get(building.id);
-   if(existing){existing.building=building;continue}
    const {id,x,z,rotation,kind='house'}=building,{size,height}=buildingSpecs[kind],key=kind+':'+id;
-   const model=models[kind].clone();
+   const level=building.level===2?2:1,existing=structures.get(id);
+   if(existing?.level===level){existing.building=building;continue}
+   const model=(level===2?improvedModels:models)[kind].clone();
    model.position.set(x,groundHeight(x,z),z);model.rotation.y=rotation*Math.PI/2;
    scene.add(model);
+   const door=model.getObjectByName('house-door');
+   if(existing){
+    if(door)door.rotation.y=existing.door.rotation.y;
+    existing.model.removeFromParent();
+    Object.assign(existing,{model,building,door,level});
+    const point=model.position.clone();point.y+=height*.67;
+    burstAt(point,true);
+    continue;
+   }
    const hit=hitBox(key,size.width,height,size.depth,1.94);
    hit.position.copy(model.position);hit.position.y+=height/2;hit.rotation.y=model.rotation.y;
-   const structure={key,model,building};
-   if(kind==='forge'){
+   const structure={key,model,building,door,level};
+   if(kind==='forge'&&onCollect){
     const bubble=bubbleModel.clone();
     bubble.visible=false;bubble.children[0].userData.id='mana:'+id;
     scene.add(bubble);structure.bubble=bubble;
@@ -168,6 +186,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    structures.set(id,structure);
   }
   for(const [id,walker] of guests)if(!visitorIds.has(id)){
+   walker.walk.releaseHome();
    walker.resident.removeFromParent();release(walker.resident);
    removePicker('visitor:'+id);guests.delete(id);
   }
@@ -176,7 +195,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    const walker=makeResident(loader);
    walker.resident.scale.setScalar(.81);walker.setCube(visitor.skin);
    walker.hit=hitBox('visitor:'+visitor.id,1.25,1.25,1.25,.86);
-   walker.walk=createKingdomWalker(walker,path.getPointAt((.21+(visitor.slot+1)/(visitorSlots.length+1))%1),visitor.slot+1,.81);
+   walker.walk=createKingdomWalker(walker,path.getPointAt((.21+(visitor.slot+1)/(visitorSlots.length+1))%1),visitor.slot+1,.81,occupiedHomes);
    scene.add(walker.resident);guests.set(visitor.id,walker);
   }
  }
@@ -252,7 +271,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
  function pick(event){
   const point=aim(event);
   if(!point)return null;
-  const targets=[...picked.values()].map(item=>item.mesh);
+  const targets=[...picked.values()].map(item=>item.mesh).filter(mesh=>!mesh.userData.inactive);
   for(const {bubble} of structures.values())if(bubble?.visible)targets.push(bubble.children[0]);
   const object=ray.intersectObjects(targets,false)[0]?.object;
   return {...point,id:object?.userData.id};
@@ -309,7 +328,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
 
  function showRing(ring,id){
   const marker=picked.get(id);
-  ring.visible=Boolean(marker&&!build);
+  ring.visible=Boolean(marker&&!marker.mesh.userData.inactive&&!build);
   if(!ring.visible)return;
   const {x,z}=marker.mesh.position;
   ring.position.set(x,groundHeight(x,z)+.033,z);
@@ -345,8 +364,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   const point=manaPoint(id);
   if(point)burstAt(point);
  }
- function animateMana(){
-  const now=Date.now();
+ function animateMana(now){
   for(const {bubble,building,model} of structures.values()){
    if(!bubble)continue;
    const ready=!build&&forgeStored(building,now)>=forgeMinimum;
@@ -371,6 +389,29 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    });
   }
  }
+ function lightPlot(light){
+  if(lastLight===light)return;
+  lastLight=light;
+  sky.material.uniforms.daylight.value=light;
+  lightColors.forEach((color,i)=>color.copy(nightPalette[i]).lerp(dayPalette[i],light));
+  ambient.intensity=.93+1.14*light;
+  sun.intensity=.64+1.84*light;
+  for(const material of windows)material.emissiveIntensity=.23+.96*(1-light);
+ }
+ function animateCubes(delta,night){
+  openDoors.clear();
+  const enter=residentWalk.update(nav,delta,groundHeight,motion,cubeHit,night);
+  if(enter)openDoors.add(enter);
+  for(const guest of guests.values()){
+   const house=guest.walk.update(nav,delta,groundHeight,motion,guest.hit,night);
+   if(house)openDoors.add(house);
+  }
+  for(const [id,{door}] of structures){
+   if(!door)continue;
+   const angle=openDoors.has(id)?1.64:0;
+   door.rotation.y=motion?angle:THREE.MathUtils.damp(door.rotation.y,angle,10,delta);
+  }
+ }
  function render(now){
   frame=0;
   if(document.hidden||!inView||disposed||previewOpen)return;
@@ -378,15 +419,14 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   last=now;elapsed+=delta;
   controls.update(delta);
   sky.position.copy(camera.position);
-  if(nav){
-   residentWalk.update(nav,delta,groundHeight,motion,cubeHit);
-   for(const guest of guests.values())guest.walk.update(nav,delta,groundHeight,motion,guest.hit);
-  }
+  const timestamp=clock(),{light,night}=kingdomDaylight(timestamp);
+  lightPlot(light);
+  if(nav)animateCubes(delta,night);
   if(worksite){
    const {startedAt,endsAt}=worksite.schedule;
-   worksite.animate(elapsed,clamp((Date.now()+clockOffset-startedAt)/(endsAt-startedAt),0,1),motion);
+   worksite.animate(elapsed,clamp((timestamp-startedAt)/(endsAt-startedAt),0,1),motion);
   }
-  animateMana();
+  animateMana(timestamp);
   showRing(selectRing,selected);
   showRing(hoverRing,hovered===selected?null:hovered);
   renderer.render(scene,camera);
@@ -416,7 +456,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
   preview?.dispose();
-  scene.add(...Object.values(models),bubbleModel);
+  scene.add(...Object.values(models),...Object.values(improvedModels),bubbleModel);
   release(scene);
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();

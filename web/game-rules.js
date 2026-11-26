@@ -12,7 +12,7 @@ import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnloc
 import {replayDrill,replayRemix} from './game-replay.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildForge,buildHouse,collectForge,expandLand,settleTower,towerPlan,upgradeTower} from './kingdom-rules.js';
+import {buildForge,buildHouse,collectForge,expandLand,settleHouseUpgrades,settleTower,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
 
 export function newWallet() {
  return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
@@ -28,6 +28,7 @@ const gatedActions={
  'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
  'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom',
+ 'kingdom.house.upgrade':'kingdom','kingdom.forge.upgrade':'kingdom','kingdom.construction.finish':'kingdom',
  'upgrade.buy':'upgrades','card.feed':'training','drill.begin':'training',
  'card.merge':'merge','remix.begin':'arcade','army.begin':'army'
 };
@@ -160,11 +161,15 @@ const rules={
   return {house};
  }},
  'kingdom.forge':{run:({w,args,now})=>({forge:buildForge(w,args,now)})},
+ 'kingdom.house.upgrade':{run:({w,args,now})=>({house:upgradeHouse(w,args.id,args.level,now)})},
+ 'kingdom.forge.upgrade':{run:({w,args,now})=>({forge:upgradeForge(w,args.id,args.level,now)})},
  'kingdom.collect':{run:({w,args,now})=>collectForge(w,args.id,now)},
  'kingdom.expand':{run:({w,args})=>expandLand(w,args.level)},
  'profile.privacy':{run:({w,args})=>{
-  requireRule(typeof args.hidden==='boolean','Choose a profile visibility setting.');
-  w.profileHidden=args.hidden;
+  const setting={hidden:'profileHidden',shareKingdom:'shareKingdom',shareBestCard:'shareBestCard'};
+  const entries=Object.entries(args);
+  requireRule(entries.length&&entries.every(([key,value])=>Object.hasOwn(setting,key)&&typeof value==='boolean'),'Choose a profile visibility setting.');
+  for(const [key,value] of entries)w[setting[key]]=value;
  }},
  'kingdom.tower':{run:({w,args,now})=>{
   const plan=towerPlan(w,now);
@@ -177,6 +182,7 @@ const rules={
   requireRule(!w.kingdom?.towerConstruction,'Your tower upgrade is still under construction.');
   return {tower:finishedTower};
  }},
+ 'kingdom.construction.finish':{run:({finishedTower,finishedHouses})=>({tower:finishedTower,houses:finishedHouses})},
  'pack.buy':{cards:true,prepare:async ({packId,quantity},getPool)=>{
   const pack=packs.find(item=>item.id===packId);
   requireRule(pack&&packQuantities.includes(quantity),'Choose a valid pack and quantity.');
@@ -341,10 +347,11 @@ export async function prepareGameAction(name,args,getPool,hasArt=()=>true){
  const prepared=await rule.prepare?.(args,getPool,hasArt);
  return {cards:rule.cards,apply(w,records,changes,now,online){
   const finishedTower=settleTower(w,now);
+  const finishedHouses=settleHouseUpgrades(w,now);
   if(finishedTower)awardPlayerXp(w,30+20*finishedTower.level);
   const feature=Object.hasOwn(gatedActions,name)?features[gatedActions[name]]:null;
   if(feature)requireLevel(w,feature.level,feature.name);
   const income=settleMine(w,now);
-  return rule.run({w,records,changes,args,prepared,now,online,income,finishedTower})??null;
+  return rule.run({w,records,changes,args,prepared,now,online,income,finishedTower,finishedHouses})??null;
  }};
 }

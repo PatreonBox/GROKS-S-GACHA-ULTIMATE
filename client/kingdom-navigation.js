@@ -1,4 +1,4 @@
-import {buildingFootprint,towerFootprint,towerPlot,trailCorners} from '../web/kingdom-rules.js';
+import {buildingFootprint,houseEntry,towerFootprint,towerPlot,trailCorners} from '../web/kingdom-rules.js';
 
 const steps=[[1,0],[-1,0],[0,1],[0,-1]];
 const within=({x,z},box)=>x>=box.left&&x<=box.right&&z>=box.back&&z<=box.front;
@@ -83,7 +83,31 @@ export function kingdomNavigation(bounds,buildings,trees,construction){
  };
  for(const building of buildings){
   const front=building.rotation*Math.PI/2,category=building.kind==='forge'?'production':'housing';
-  targets[category].push({x:building.x+Math.sin(front)*2.55,z:building.z+Math.cos(front)*2.55,look:building});
+  const dx=Math.sin(front),dz=Math.cos(front);
+  const at=distance=>({x:building.x+dx*distance,z:building.z+dz*distance});
+  const approach={...at(2.55),look:building};
+  if(category==='housing'){
+   approach.home={id:building.id,dx,dz,approach:at(2.55),threshold:at(houseEntry.front),inside:at(-.24),building};
+  }
+  targets[category].push(approach);
  }
- return {route,targets};
+ function homeRoute(start,target){
+  const path=route(start,target);
+  if(!path)return null;
+  const {building,approach,inside,dx,dz}=target.home;
+  const end=path.points.at(-1);
+  if((end.x-building.x)*dx+(end.z-building.z)*dz<1.90)return null;
+  const extra=[padded(towerFootprint,construction?.97:.48),
+   ...buildings.filter(item=>item!==building).map(item=>buildingFootprint(item,.52)),
+   ...treeSpots.map(([x,z])=>boxAround(x,z,.64))];
+  for(const [a,b] of [[end,approach],[approach,inside]]){
+   for(let i=0;i<=12;i++){
+    const t=i/12,point={x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t};
+    if(extra.some(box=>within(point,box)))return null;
+   }
+  }
+  path.points.push(approach);
+  return path;
+ }
+ return {route,homeRoute,targets};
 }

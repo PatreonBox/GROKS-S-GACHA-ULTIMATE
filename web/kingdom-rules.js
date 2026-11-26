@@ -1,7 +1,12 @@
 export const housePrice=50_000;
 export const houseSize={width:3.15,depth:2.72};
 export const houseHeight=3.26;
+export const houseEntry={front:1.16,width:1.24,height:1.43,floor:.164};
 export const forgePrice=120_000,forgeWelcomeMana=100,forgeMinimum=5;
+export const houseUpgrade={mana:30,buildMs:10_000,stars:.02};
+export const forgeUpgrade={coins:1_000_000,mana:300};
+export const towerUpgradeMana=500;
+const forgeTiers=[{rate:1,capacity:300},{rate:3,capacity:1200}];
 export const manaIcon='/assets/kingdom/mana-orbs.webp';
 export const buildingSpecs={
  house:{name:'GD House',size:houseSize,height:houseHeight},
@@ -30,6 +35,14 @@ const towerTiers=[
 ];
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
 export const kingdomForges=wallet=>wallet?.kingdom?.forges||[];
+const phaseDuration=360_000;
+export function kingdomDaylight(now){
+ const cycle=now%(2*phaseDuration),night=cycle>=phaseDuration;
+ const elapsed=cycle%phaseDuration;
+ const edge=Math.min(1,elapsed/25_000,(phaseDuration-elapsed)/25_000);
+ const light=edge*edge*(3-2*edge);
+ return {night,remaining:phaseDuration-elapsed,light:night?.44*(1-light):.44+.56*light};
+}
 export function landPlan(wallet){
  const saved=wallet?.kingdom?.landLevel;
  const level=Number.isInteger(saved)&&saved>0&&saved<=lastLandLevel?saved:0;
@@ -43,12 +56,23 @@ export function towerPlan(wallet,now=Date.now()){
  const level=schedule&&!construction?2:built;
  return {level,limit:towerTiers[level-1].limit,next:towerTiers[level],construction};
 }
+export function housePlan(house,now=Date.now()){
+ const construction=house.upgrade&&now<house.upgrade.endsAt?house.upgrade:null;
+ return {level:house.level===2||house.upgrade&&!construction?2:1,construction};
+}
+export function forgePlan(forge,now=Date.now()){
+ const level=forge.level===2?2:1,{rate,capacity}=forgeTiers[level-1];
+ const stored=Math.min(capacity,(forge.storedMana||0)+elapsedForgeSeconds(forge,now)*rate);
+ return {level,rate,capacity,stored};
+}
 export function kingdomStats(wallet,now=Date.now()){
  const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),tower=towerPlan(wallet,now),land=landPlan(wallet);
- const stars=Math.min(50,houses.length*3)/10;
+ const upgraded=houses.filter(house=>housePlan(house,now).level===2).length;
+ const stars=Math.min(500,houses.length*30+upgraded*Math.round(houseUpgrade.stars*100))/100;
  const value=houses.reduce((sum,house)=>sum+(house.price??housePrice),0)+
   towerTiers.slice(0,tower.level).reduce((sum,tier)=>sum+tier.price,0)+
-  (tower.construction?tower.next.price:0)+forges.length*forgePrice+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
+  (tower.construction?tower.next.price:0)+forges.reduce((sum,forge)=>sum+forgePrice+(forge.level===2?forgeUpgrade.coins:0),0)+
+  Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
  return {houses,forges,buildings:[...houses,...forges],tower,land,stars,value,mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houses.length};
 }
 
@@ -70,14 +94,32 @@ export function settleTower(wallet,now){
  return {level:2,limit:towerTiers[1].limit,price:towerTiers[1].price,completed:true};
 }
 
+export function settleHouseUpgrades(wallet,now){
+ const completed=[];
+ for(const house of kingdomHouses(wallet)){
+  if(!house.upgrade||now<house.upgrade.endsAt)continue;
+  delete house.upgrade;
+  house.level=2;
+  completed.push(house.id);
+ }
+ return completed;
+}
+
+function payUpgrade(wallet,mana,coins=0){
+ if(wallet.coins<coins)throw Error('You need '+coins.toLocaleString('en-US')+' coins to upgrade.');
+ const balance=wallet.kingdom?.mana||0;
+ if(balance<mana)throw Error('You need '+mana.toLocaleString('en-US')+' Mana to upgrade.');
+ wallet.coins-=coins;
+ wallet.kingdom={...wallet.kingdom,mana:balance-mana};
+}
+
 export function upgradeTower(wallet,expectedLevel,now){
  const houses=kingdomHouses(wallet),{level,limit,next,construction}=towerPlan(wallet,now);
  if(construction)throw Error('Your tower upgrade is already under construction.');
  if(level!==expectedLevel)throw Error('Your tower level changed. Check its new upgrade.');
  if(!next)throw Error('Your tower is at its highest level.');
  if(houses.length<limit)throw Error('Fill the current house lots before upgrading.');
- if(wallet.coins<next.price)throw Error('You need '+next.price.toLocaleString('en-US')+' coins to upgrade.');
- wallet.coins-=next.price;
+ payUpgrade(wallet,towerUpgradeMana,next.price);
  if(next.buildMs){
   const schedule={startedAt:now,endsAt:now+next.buildMs};
   wallet.kingdom={...wallet.kingdom,towerConstruction:schedule};
@@ -85,6 +127,17 @@ export function upgradeTower(wallet,expectedLevel,now){
  }
  wallet.kingdom={...wallet.kingdom,towerLevel:level+1};
  return {level:level+1,limit:next.limit,price:next.price};
+}
+
+export function upgradeHouse(wallet,id,expectedLevel,now){
+ const house=kingdomHouses(wallet).find(item=>item.id===id);
+ if(!house)throw Error('Choose one of your houses.');
+ const {level,construction}=housePlan(house,now);
+ if(construction)throw Error('This house is already under construction.');
+ if(level!==expectedLevel||level===2)throw Error('This house is already Level 2.');
+ payUpgrade(wallet,houseUpgrade.mana);
+ house.upgrade={startedAt:now,endsAt:now+houseUpgrade.buildMs};
+ return {id,level:2,construction:house.upgrade};
 }
 
 export function buildingFootprint({x,z,rotation,kind='house'},margin=0){
@@ -143,13 +196,26 @@ export function buildForge(wallet,args,now){
  wallet.kingdom={...wallet.kingdom,forges:[...plot.forges,forge],mana:plot.mana+forgeWelcomeMana};
  return forge;
 }
-export const forgeStored=(forge,now=Date.now())=>Math.max(0,Math.floor((now-forge.collectedAt)/1000));
+function elapsedForgeSeconds(forge,now){
+ return Math.max(0,Math.floor((now-(forge.collectedAt??now))/1000));
+}
+export const forgeStored=(forge,now=Date.now())=>forgePlan(forge,now).stored;
+export function upgradeForge(wallet,id,expectedLevel,now){
+ const forge=kingdomForges(wallet).find(item=>item.id===id);
+ if(!forge)throw Error('Choose one of your Mana Forges.');
+ const {level,stored}=forgePlan(forge,now);
+ if(level!==expectedLevel||level===2)throw Error('This Mana Forge is already Level 2.');
+ payUpgrade(wallet,forgeUpgrade.mana,forgeUpgrade.coins);
+ Object.assign(forge,{level:2,collectedAt:now,storedMana:stored});
+ return {id,...forgePlan(forge,now)};
+}
 export function collectForge(wallet,id,now){
  const forges=kingdomForges(wallet),forge=forges.find(building=>building.id===id);
  if(!forge)throw Error('Choose one of your Mana Forges.');
- const earned=forgeStored(forge,now);
+ const {stored:earned,capacity}=forgePlan(forge,now);
  if(earned<forgeMinimum)throw Error('Collect when this forge has at least '+forgeMinimum+' mana.');
- forge.collectedAt+=earned*1000;
+ forge.collectedAt=earned===capacity?now:(forge.collectedAt??now)+elapsedForgeSeconds(forge,now)*1000;
+ delete forge.storedMana;
  wallet.kingdom.mana=(wallet.kingdom.mana||0)+earned;
  return {id,earned};
 }

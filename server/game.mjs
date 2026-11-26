@@ -8,6 +8,7 @@ import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,r
 import {playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {featureLevel} from '../web/level-access.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
+import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 
 const guestCookie='__Host-gdlb-save';
 const cookieLifetime=60*60*24*365;
@@ -94,8 +95,8 @@ async function profile(db,owner,create){
 
 function visibleWallet(wallet){
  const {tapLimit,minePlayerXp,drills,remixRun,armyRun,armyReceipt,...review}=wallet;
- const timing=wallet.kingdom?.towerConstruction?{towerClock:Date.now()}:{};
- return {...review,...timing,discoveredVisitors:discoveredVisitors(wallet)};
+ const now=Date.now();
+ return {...review,kingdomClock:now,...(wallet.kingdom?.towerConstruction?{towerClock:now}:{}),discoveredVisitors:discoveredVisitors(wallet,now)};
 }
 async function inventory(db,id){
  const {results}=await db.prepare('SELECT card FROM game_cards WHERE player_id=?').bind(id).all();
@@ -318,8 +319,18 @@ export function gameRoutes(readJson,hasArt){
      const saved=record&&JSON.parse(record.wallet);
      if(!saved||record.leaderboard_excluded||record.owner===adminOwner||saved.legacyTransfer)reject('This player profile is unavailable.',404);
      if(saved.profileHidden&&!player.mine)reject('This player keeps their profile private.',403);
+     const shareKingdom=(player.mine||saved.shareKingdom!==false)&&playerProgress(saved.playerXp).level>=featureLevel('kingdom');
+     const shareBestCard=player.mine||saved.shareBestCard!==false;
+     if(view==='kingdom'){
+      if(!shareKingdom)reject('This Kingdom is unavailable to visit.',404);
+      return json({kingdom:kingdomShowcase(saved)});
+     }
+     if(view==='best-card'){
+      if(!shareBestCard)reject('This best card showcase is unavailable.',404);
+      return json({bestCard:bestCardShowcase(await inventory(db,target),saved)});
+     }
      const stats=await profileStats(db,record,await getCollectibleIds(),{...options,knownRank:player.place});
-     return json({player,stats});
+     return json({player,stats,showcases:{kingdom:shareKingdom,bestCard:shareBestCard&&stats.copies>0}});
     }
     return await standings(request,db,session,chatgpt,adminOwner,requiresSignIn,request.method==='GET'&&view==='trading');
    }

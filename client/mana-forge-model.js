@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 
-export function makeManaForge(){
+export function makeManaForge(level=1){
+ const upgraded=level===2;
  const forge=new THREE.Group();
  const slate=new THREE.MeshStandardMaterial({color:'#344b58',roughness:.87,flatShading:true});
  const rim=new THREE.MeshStandardMaterial({color:'#748e91',roughness:.65,metalness:.23});
  const bronze=new THREE.MeshStandardMaterial({color:'#b48a56',roughness:.53,metalness:.49});
- const blue=new THREE.MeshStandardMaterial({color:'#37e4fc',emissive:'#0d81d4',emissiveIntensity:.72,roughness:.32,flatShading:true});
+ const blue=new THREE.MeshStandardMaterial({color:upgraded?'#80f2ff':'#37e4fc',emissive:'#0d81d4',emissiveIntensity:upgraded?1.22:.72,roughness:.32,flatShading:true});
  function add(shape,finish,x,y,z){
   const part=new THREE.Mesh(shape,finish);part.position.set(x,y,z);
   part.castShadow=true;part.receiveShadow=true;forge.add(part);return part;
@@ -29,6 +30,11 @@ export function makeManaForge(){
  add(new THREE.OctahedronGeometry(.67),blue,0,2.10,0).scale.set(.79,1.64,.79);
  const upper=add(new THREE.TorusGeometry(.84,.058,6,30),bronze,0,1.75,0);
  upper.rotation.set(Math.PI*.38,.33,.22);
+ if(upgraded){
+  const crown=add(new THREE.TorusGeometry(.89,.073,6,30),bronze,0,2.28,0);
+  crown.rotation.set(Math.PI*.64,-.32,.35);
+  add(new THREE.OctahedronGeometry(.26),blue,0,3.35,0).rotation.y=Math.PI/4;
+ }
  const surfaces=new Map();
  for(const part of forge.children){
   part.updateMatrix();

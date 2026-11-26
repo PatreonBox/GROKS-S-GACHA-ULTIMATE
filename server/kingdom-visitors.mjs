@@ -14,8 +14,8 @@ const creators=[
  ['serponge','Serponge','SerpongeDash','67.4K','402']
 ];
 
-export function discoveredVisitors(wallet){
- const {stars}=kingdomStats(wallet);
+export function discoveredVisitors(wallet,now=Date.now()){
+ const {stars}=kingdomStats(wallet,now);
  return visitorSlots.filter(slot=>stars>=slot.stars).map(({slot})=>{
   const [id,name,channel,audience,cube]=creators[slot];
   return {slot,id,name,channel,audience,cube};

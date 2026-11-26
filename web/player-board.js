@@ -1,4 +1,5 @@
 import {stat} from './card-economy.js';
+import {showBestCard,visitKingdom} from './player-showcase.js';
 
 const full=n=>n.toLocaleString('en-US');
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -19,10 +20,13 @@ async function getPlayers(query=''){
  if(!response.ok||!result)throw Error(result?.error||'Player profiles are temporarily unavailable.');
  return result;
 }
-export function playerBoard(spotlight,standings){
- let view=null,revision=0,profileRevision=0;
+export function playerBoard(spotlight,standings,localCover){
+ let view=null,revision=0,profileRevision=0,showcaseRevision=0,profile,disposeVisit;
  const panel=standings.querySelector('[data-player-rows]');
  const dialog=document.getElementById('rankedProfile'),profileBody=dialog.querySelector('[data-ranked-body]');
+ document.addEventListener('error',event=>{
+  if(event.target.matches?.('.rank-avatar img'))event.target.hidden=true;
+ },true);
  standings.querySelector('[data-reload-ranks]').onclick=()=>load('full');
  function drawTop(rows){
   spotlight.innerHTML=rows.length?rows.slice(0,3).map(row=>'<button class="podrow rank-row ranked-entry"'+entry(row)+'><span class="rank-place" data-place="'+row.place+'">#'+row.place+'</span>'+avatar(row)+
@@ -52,23 +56,84 @@ export function playerBoard(spotlight,standings){
    if(panel.isConnected)panel.innerHTML=rows.length?table(rows):'<p class="rank-empty">Players will appear here when they reach Level 15.</p>';
   }catch(error){if(panel.isConnected)panel.textContent=error.message}
  }
- function drawProfile(row,stats){
+ function drawProfile(row,stats,showcases){
+  profile=row;
+  const tabs=[['stats','Stats'],...(showcases.kingdom?[['kingdom','Visit Kingdom']]:[]),
+   ...(showcases.bestCard?[['best-card','Best card']]:[])];
   const statItems=[['Level',full(stats.level)],['Collection power',full(stats.power)],['Total cards',full(stats.copies)],
    ['Campaign clears',full(stats.campaignClears)+' / '+full(stats.campaignTotal)],['Coins',full(stats.coins)],['Gems',full(stats.gems)]];
   profileBody.innerHTML='<div class="ranked-profile-heading">'+avatar(row)+'<strong>'+esc(row.alias)+'</strong>'+
    '<span class="profile-rank" data-place="'+row.place+'"><small>Global rank</small><b>#'+full(row.place)+'</b></span></div>'+
-   '<dl class="player-stats"><div class="player-collection-stat"><dt>Unique cards discovered</dt><dd>'+full(stats.unique)+' / '+full(stats.collectible)+
+   (tabs.length>1?'<div class="profile-showcase-nav" role="group" aria-label="Profile views">'+tabs.map(([id,title])=>
+    '<button type="button" class="outline" data-profile-view="'+id+'" aria-pressed="'+(id==='stats')+'">'+title+'</button>').join('')+'</div>':'')+
+   '<dl class="player-stats" data-profile-summary><div class="player-collection-stat"><dt>Unique cards discovered</dt><dd>'+full(stats.unique)+' / '+full(stats.collectible)+
    '</dd><progress aria-label="Card collection progress" value="'+stats.unique+'" max="'+(stats.collectible||1)+'"></progress></div>'+
-   statItems.map(([name,value])=>'<div><dt>'+name+'</dt><dd>'+value+'</dd></div>').join('')+'</dl>';
+   statItems.map(([name,value])=>'<div><dt>'+name+'</dt><dd>'+value+'</dd></div>').join('')+'</dl>'+
+   '<div data-profile-showcase hidden></div>';
  }
+ function clearVisit(){
+  disposeVisit?.();
+  disposeVisit=null;
+ }
+ async function openShowcase(section,{retry=false}={}){
+  if(!profile||!retry&&section===dialog.dataset.profileView)return;
+  const request=++showcaseRevision,person=profile;
+  clearVisit();
+  dialog.dataset.profileView=section;
+  const panel=profileBody.querySelector('[data-profile-showcase]');
+  const summary=profileBody.querySelector('[data-profile-summary]');
+  for(const button of profileBody.querySelectorAll('[data-profile-view]')){
+   button.setAttribute('aria-pressed',String(button.dataset.profileView===section));
+  }
+  summary.hidden=section!=='stats';panel.hidden=section==='stats';panel.replaceChildren();
+  if(panel.hidden)return;
+  const mount=document.createElement('div');
+  mount.setAttribute('aria-busy','true');
+  mount.textContent=section==='kingdom'?'Loading Kingdom…':'Loading best card…';
+  panel.append(mount);
+  const current=()=>request===showcaseRevision&&dialog.open&&mount.isConnected;
+  try{
+   const result=await getPlayers('?player='+encodeURIComponent(person.id)+'&view='+section);
+   if(!current())return;
+   if(section==='best-card')showBestCard(mount,result.bestCard,localCover);
+   else{
+    const dispose=await visitKingdom(mount,result.kingdom,person.alias);
+    if(current())disposeVisit=dispose;else dispose?.();
+   }
+  }catch(error){
+   if(current()){
+    const message=document.createElement('p');
+    message.className='rank-empty';
+    message.textContent=error.message;
+    const retryButton=document.createElement('button');
+    retryButton.className='outline';
+    retryButton.type='button';
+    retryButton.textContent='Try again';
+    retryButton.onclick=()=>openShowcase(section,{retry:true});
+    mount.replaceChildren(message,retryButton);
+   }
+  }finally{
+   mount.removeAttribute('aria-busy');
+  }
+ }
+ dialog.addEventListener('click',event=>{
+  const button=event.target.closest('[data-profile-view]');
+  if(button)openShowcase(button.dataset.profileView);
+ });
+ dialog.addEventListener('close',()=>{
+  profileRevision++;showcaseRevision++;
+  clearVisit();profile=null;
+  delete dialog.dataset.profileView;
+  profileBody.replaceChildren();
+ });
  document.addEventListener('click',async event=>{
   const entry=event.target.closest('[data-ranked-profile]');
   if(!entry||dialog.open)return;
   const request=++profileRevision;
   profileBody.textContent='Loading player profile…';dialog.showModal();
   try{
-   const {player,stats}=await getPlayers('?player='+encodeURIComponent(entry.dataset.rankedProfile));
-   if(request===profileRevision&&dialog.open)drawProfile(player,stats);
+   const {player,stats,showcases}=await getPlayers('?player='+encodeURIComponent(entry.dataset.rankedProfile));
+   if(request===profileRevision&&dialog.open)drawProfile(player,stats,showcases);
   }catch(error){if(request===profileRevision&&dialog.open)profileBody.textContent=error.message}
  });
  dialog.querySelector('[data-close-ranked-profile]').onclick=()=>dialog.close();

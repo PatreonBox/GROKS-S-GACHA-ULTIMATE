@@ -1,0 +1,37 @@
+import {statsFor} from '../web/battle-engine.js';
+import {bestFinish} from '../web/card-finishes.js';
+import {schools,skillsFor} from '../web/card-skills.js';
+import {equippedCube} from '../web/cube-catalog.js';
+import {housePlan,kingdomStats} from '../web/kingdom-rules.js';
+import {discoveredVisitors} from './kingdom-visitors.mjs';
+import {combatPower} from './player-rankings.mjs';
+
+export function kingdomShowcase(wallet,clock=Date.now()){
+ const plot=kingdomStats(wallet,clock);
+ return {
+  clock,cube:equippedCube(wallet).id,stars:plot.stars,landLevel:plot.land.level,
+  towerLevel:plot.tower.level,construction:plot.tower.construction,
+  buildings:plot.buildings.map(({id,x,z,rotation,kind='house',...details})=>({
+   id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:details.level===2?2:1,
+   ...(kind==='house'&&details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt}:{})
+  })),
+  visitors:discoveredVisitors(wallet,clock).map(({id,slot,cube,name})=>({id,slot,cube,name}))
+ };
+}
+
+export function bestCardShowcase(records,wallet){
+ let best=null;
+ for(const card of records){
+  if(!(card.copies>0)||!Array.isArray(card.row))continue;
+  const stats=statsFor(card.row,wallet.training?.[card.id]),power=combatPower(stats);
+  if(!best||power>best.power||power===best.power&&card.id<best.card.id)best={card,stats,power};
+ }
+ if(!best)return null;
+ const {card,power,stats:{attack,maxHp,level,stage,role}}=best;
+ const [id,title,creator]=card.row,kit=skillsFor(card.row);
+ return {
+  id,title,creator,difficulty:card.row[6],rank:card.row[10]||0,finish:bestFinish(card),power,attack,maxHp,level,stage,role,
+  basic:{name:kit.basicName,art:kit.basicArt,detail:schools[kit.basic].text},
+  signature:{name:kit.signatureName,art:kit.signatureArt,detail:kit.detail,charge:kit.cost,cooldown:kit.cooldown}
+ };
+}

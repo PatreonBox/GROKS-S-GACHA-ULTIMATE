@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {houseSize,towerPlot,trailCorners} from '../web/kingdom-rules.js';
+import {houseEntry,houseSize,towerPlot,trailCorners} from '../web/kingdom-rules.js';
 
 const vertex=(x,y,z)=>new THREE.Vector3(x,y,z);
 const material=(color,options={})=>new THREE.MeshStandardMaterial({color,roughness:.9,...options});
@@ -29,7 +29,10 @@ export function makeSky(){
   side:THREE.BackSide,depthWrite:false,
   uniforms:{
    zenith:{value:new THREE.Color('#287bcc')},horizon:{value:new THREE.Color('#c7eaf1')},
-   cloudTint:{value:new THREE.Color('#f9fbef')},sunDirection:{value:vertex(-.65,.43,.52).normalize()}
+   cloudTint:{value:new THREE.Color('#f9fbef')},sunDirection:{value:vertex(-.65,.43,.52).normalize()},
+   nightZenith:{value:new THREE.Color('#0d153d')},nightHorizon:{value:new THREE.Color('#405d8a')},
+   duskTint:{value:new THREE.Color('#f7b283')},moonDirection:{value:vertex(-.48,.26,-.83).normalize()},
+   daylight:{value:1}
   },
   vertexShader:`
    varying vec3 direction;
@@ -40,6 +43,8 @@ export function makeSky(){
   fragmentShader:`
    varying vec3 direction;
    uniform vec3 zenith,horizon,cloudTint,sunDirection;
+   uniform vec3 nightZenith,nightHorizon,duskTint,moonDirection;
+   uniform float daylight;
    float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
    float noise(vec2 p){
     vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
@@ -48,13 +53,24 @@ export function makeSky(){
    void main(){
     vec3 ray=normalize(direction);
     float h=max(0.,ray.y);
-    vec3 color=mix(horizon,zenith,pow(clamp(h/.40,0.,1.),.52));
+    float blend=pow(clamp(h/.40,0.,1.),.52);
+    float dusk=4.*daylight*(1.-daylight);
+    vec3 low=mix(nightHorizon,horizon,daylight);
+    vec3 color=mix(mix(low,duskTint,.33*dusk),mix(nightZenith,zenith,daylight),blend);
     float sun=max(0.,dot(ray,sunDirection));
-    color=mix(color,cloudTint,.24*pow(sun,18.)+.68*smoothstep(.9983,.9997,sun));
+    color=mix(color,cloudTint,daylight*(.24*pow(sun,18.)+.68*smoothstep(.9983,.9997,sun)));
+    float moon=max(0.,dot(ray,moonDirection));
+    float shadow=smoothstep(.99925,.99939,dot(ray,normalize(moonDirection+vec3(.013,.006,-.004))));
+    float crescent=smoothstep(.99925,.99939,moon)*(1.-shadow);
+    color+=vec3(.48,.64,1.)*(1.-daylight)*(.10*pow(moon,112.)+.9*crescent);
+    vec2 field=vec2(atan(ray.z,ray.x)*44.,ray.y*99.);
+    float star=hash(floor(field));
+    float point=1.-smoothstep(.03,.15,length(fract(field)-vec2(star,hash(floor(field)+8.))));
+    color+=vec3(.58,.74,1.)*point*step(.91,star)*smoothstep(.035,.24,h)*pow(1.-daylight,3.);
     vec2 p=ray.xz/max(.085,h)*vec2(1.1,.78)+vec2(3.9,19.8);
     float cloud=noise(p)*.59+noise(p*2.05)*.26+noise(p*4.15)*.11+noise(p*8.4)*.04;
     float wisps=smoothstep(.42,.68,cloud)*smoothstep(.015,.125,h);
-    color=mix(color,cloudTint,wisps*.94);
+    color=mix(color,mix(vec3(.022,.042,.096),cloudTint,daylight),wisps*(.25+.69*daylight));
     gl_FragColor=vec4(color,1.);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -433,17 +449,20 @@ function woodGrain(seed,light,shadow){
  return map;
 }
 
-export function makeHouse(){
+export function makeHouse(level=1){
+ const upgraded=level===2;
  const house=new THREE.Group(),positions=new Map();
  const boards=woodGrain(851,'#dfb187','#83573d'),beams=woodGrain(817,'#bd8963','#64412a');
  const timber=material('#a0724c',{map:beams,bumpMap:beams,bumpScale:.018});
- const warm=material('#d3a16c',{map:boards,bumpMap:boards,bumpScale:.012});
- const pale=material('#fae5b9',{map:boards});
+ const warm=material(upgraded?'#d3a16c':'#b79572',{map:boards,bumpMap:boards,bumpScale:.012});
+ const pale=material(upgraded?'#fae5b9':'#d6be98',{map:boards});
  const stepStone=material('#9c9687',{flatShading:true}),mortar=material('#b4a894');
  const dark=material('#43352e'),iron=material('#4f4b43',{metalness:.28});
- const roof=['#73472f','#9c6340','#af7647','#835d41'].map(color=>material(color,{map:boards,bumpMap:boards,bumpScale:.025}));
+ const roofColors=upgraded?['#73472f','#9c6340','#af7647','#835d41']:['#594f3e','#6c5d47'];
+ const roof=roofColors.map(color=>material(color,{map:boards,bumpMap:boards,bumpScale:.025}));
  const lit=material('#ffcf80',{emissive:'#dc7431',emissiveIntensity:.38});
  const glass=material('#ffdf9f',{emissive:'#de974c',emissiveIntensity:.18});
+ glass.name=lit.name='Cottage lights';
  const sash=material('#65452f');
  const copper=material('#e1b662',{metalness:.44,roughness:.46});
  function add(finish,shape,x,y,z,angle=0){
@@ -454,28 +473,40 @@ export function makeHouse(){
  }
  const block=(finish,x,y,z,w,h,d,angle)=>add(finish,new THREE.BoxGeometry(w,h,d),x,y,z,angle);
  const {width,depth}=houseSize;
+ const {front:doorZ,width:doorWidth,height:doorHeight,floor}=houseEntry;
+ const doorTop=floor+doorHeight,wallTop=1.709,pierWidth=(2.77-doorWidth)/2;
  block(stepStone,0,-.10,0,width,.35,depth);
  block(mortar,0,.068,0,3.06,.079,2.63);
  block(stepStone,0,.129,0,2.94,.07,2.53);
- block(warm,0,.97,-.04,2.77,1.58,2.36);
+ block(warm,0,.955,-1.136,2.77,1.57,.18);
+ for(const side of [-1,1]){
+  block(warm,side*1.295,.955,0,.18,1.57,2.32);
+  block(warm,side*(doorWidth/2+pierWidth/2),.955,doorZ-.085,pierWidth,1.57,.17);
+ }
+ block(timber,0,(wallTop+doorTop)/2,doorZ-.05,doorWidth,wallTop-doorTop,.22);
  for(let i=0;i<8;i++){
   const y=.26+i*.185,finish=i%3===1?pale:warm;
-  for(const z of [1.163,-1.226])block(finish,0,y,z,2.71,.170,.034);
-  for(const x of [-1.397,1.397])block(finish,x,y,-.032,.044,.168,2.38);
+  block(finish,0,y,-1.226,2.71,.170,.034);
+  for(const side of [-1,1]){
+   block(finish,side*(doorWidth/2+pierWidth/2),y,doorZ,pierWidth,.170,.034);
+   block(finish,side*1.397,y,-.032,.044,.168,2.38);
+  }
  }
  for(const z of [-1.212,1.14]){
   for(const x of [-1.30,1.30]){
    block(timber,x,.971,z,.20,1.68,.22);
-   block(copper,x,1.43,z+(z>0?.12:-.12),.064,.067,.021);
+   if(upgraded)block(copper,x,1.43,z+(z>0?.12:-.12),.064,.067,.021);
   }
-  for(const y of [.26,1.65])block(timber,0,y,z,2.79,.14,.15);
+  block(timber,0,1.67,z,2.79,.105,.15);
+  if(z<0)block(timber,0,.26,z,2.79,.14,.15);
  }
  for(const x of [-1.387,1.387]){
   for(const y of [.26,1.65])block(timber,x,y,-.035,.145,.14,2.45);
   block(timber,x,.96,-.039,.13,1.51,.16);
  }
+ const ridge=upgraded?2.80:2.50,rise=ridge-1.66,slope=rise/1.53;
  function gable(z,back){
-  const vertices=[-1.33,0,0,1.33,0,0,0,1.09,0];
+  const vertices=[-1.39,0,0,1.39,0,0,0,rise,0];
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
   geo.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,1,0,.5,1],2));
@@ -483,57 +514,71 @@ export function makeHouse(){
   add(pale,geo,0,1.68,z);
  }
  gable(1.151,false);gable(-1.217,true);
- block(timber,0,2.12,1.181,.113,.84,.113);
- block(timber,0,2.12,-1.241,.113,.84,.113);
- const slope=Math.atan(.75),span=Math.hypot(1.53,1.53*.75);
+ if(upgraded){
+  block(timber,0,2.12,1.181,.113,.84,.113);
+  block(timber,0,2.12,-1.241,.113,.84,.113);
+ }
+ const span=Math.hypot(1.53,rise);
  const random=randomFor(884);
  for(const side of [-1,1]){
-  const angle=-side*slope;
-  block(dark,side*.765,2.80-.765*.75,0,span,.115,2.68,angle);
-  for(const z of [-1.286,1.286])block(timber,side*.765,2.81-.765*.75,z,span+.05,.175,.12,angle);
-  for(let row=0;row<8;row++){
-   const x=(row+.52)*.189,y=2.88-x*.75;
-   for(let tile=0;tile<9;tile++){
-    const z=(tile-4)*.292+(row%2?.055:-.027);
-    block(roof[Math.floor(random()*roof.length)],side*x,y,z,.232,.061+random()*.018,.27,angle);
+  const angle=-side*Math.atan(slope),rows=upgraded?8:6,rowWidth=1.53/rows;
+  block(dark,side*.765,ridge-.765*slope,0,span,.115,2.68,angle);
+  for(const z of [-1.286,1.286])block(timber,side*.765,ridge+.01-.765*slope,z,span+.05,.175,.12,angle);
+  for(let row=0;row<rows;row++){
+   const x=(row+.46)*rowWidth,y=ridge+.08-x*slope,w=rowWidth*Math.hypot(1,slope)-.007;
+   if(upgraded){
+    for(let tile=0;tile<9;tile++){
+     const z=(tile-4)*.292+(row%2?.055:-.027);
+     block(roof[Math.floor(random()*roof.length)],side*x,y,z,w,.061+random()*.018,.27,angle);
+    }
+   }else{
+    block(roof[row%2],side*x,y,0,w,.063,2.68,angle);
    }
   }
  }
- block(timber,0,2.91,0,.16,.12,2.65);
- block(stepStone,-.89,2.52,-.62,.47,1.12,.48);
- for(const y of [2.53,2.73,2.93])block(mortar,-.89,y,-.62,.48,.026,.49);
- block(stepStone,-.89,3.102,-.62,.55,.13,.56);
- block(dark,-.89,3.17,-.62,.32,.018,.32);
- block(timber,.02,.83,1.180,.91,1.31,.10);
- block(warm,.02,.82,1.235,.76,1.21,.04);
- for(const x of [-.24,-.07,.10,.27])block(timber,x,.814,1.267,.024,1.14,.013);
- for(const y of [.52,1.11])block(iron,.02,y,1.272,.72,.07,.048);
- block(copper,.23,.83,1.309,.09,.092,.033);
- block(stepStone,.04,.162,1.20,.99,.12,.30);
- for(const x of [-.88,.89]){
+ block(timber,0,ridge+.11,0,.16,.12,2.65);
+ for(const x of [-doorWidth/2-.052,doorWidth/2+.052]){
+  block(timber,x,floor+doorHeight/2,doorZ+.024,.103,doorHeight,.15);
+ }
+ block(stepStone,0,.103,1.34,doorWidth+.19,.12,.43);
+ block(mortar,0,.042,1.46,doorWidth+.32,.076,.40);
+ for(const x of [-.984,.984]){
   block(timber,x,1.09,1.208,.51,.57,.112);
   block(glass,x,1.09,1.274,.394,.43,.026);
   block(sash,x,1.09,1.291,.041,.431,.02);
   block(sash,x,1.09,1.291,.397,.042,.02);
   block(timber,x,.83,1.278,.57,.066,.11);
-  block(timber,x,.572,1.201,.72,.102,.105,x<0?.56:-.56);
+  if(upgraded)block(timber,x,.572,1.201,.60,.102,.105,x<0?.56:-.56);
  }
- block(timber,0,2.179,1.204,.42,.42,.082,Math.PI/4);
- block(lit,0,2.18,1.253,.29,.29,.020,Math.PI/4);
- block(timber,0,2.18,1.271,.085,.085,.015,Math.PI/4);
- for(const side of [-1,1]){
-  block(timber,side*1.424,1.12,-.52,.097,.56,.61);
-  block(glass,side*1.475,1.12,-.52,.019,.416,.458);
-  block(sash,side*1.49,1.12,-.52,.018,.421,.039);
-  block(timber,side*1.462,.845,-.52,.131,.069,.68);
+ if(upgraded){
+  block(stepStone,-.89,2.52,-.62,.47,1.12,.48);
+  for(const y of [2.53,2.73,2.93])block(mortar,-.89,y,-.62,.48,.026,.49);
+  block(stepStone,-.89,3.102,-.62,.55,.13,.56);
+  block(dark,-.89,3.17,-.62,.32,.018,.32);
+  block(timber,0,2.179,1.204,.42,.42,.082,Math.PI/4);
+  block(lit,0,2.18,1.253,.29,.29,.020,Math.PI/4);
+  block(timber,0,2.18,1.271,.085,.085,.015,Math.PI/4);
+  for(const side of [-1,1]){
+   block(timber,side*1.424,1.12,-.52,.097,.56,.61);
+   block(glass,side*1.475,1.12,-.52,.019,.416,.458);
+   block(sash,side*1.49,1.12,-.52,.018,.421,.039);
+   block(timber,side*1.462,.845,-.52,.131,.069,.68);
+  }
+  block(iron,1.17,1.501,1.251,.11,.27,.13);
+  block(lit,1.17,1.50,1.32,.10,.141,.062);
+  block(iron,1.17,1.61,1.316,.16,.07,.085);
  }
- block(iron,1.17,1.501,1.251,.11,.27,.13);
- block(lit,1.17,1.50,1.32,.10,.141,.062);
- block(iron,1.17,1.61,1.316,.16,.07,.085);
  for(const [finish,pieces] of positions){
   meshAt(house,mergeGeometries(pieces),finish,0,0,0);
   pieces.forEach(piece=>piece.dispose());
  }
+ const door=new THREE.Group(),leafWidth=doorWidth-.052,leafHeight=doorHeight-.035;
+ door.name='house-door';door.position.set(-doorWidth/2+.021,floor+.016,doorZ+.02);house.add(door);
+ const doorBlock=(finish,x,y,z,w,h,d)=>meshAt(door,new THREE.BoxGeometry(w,h,d),finish,x,y,z);
+ doorBlock(upgraded?timber:warm,leafWidth/2,leafHeight/2,0,leafWidth,leafHeight,.078);
+ for(let slat=1;slat<=5;slat++)doorBlock(dark,leafWidth*slat/6,leafHeight/2,.042,.014,leafHeight-.03,.008);
+ for(const y of [.32,1.12])doorBlock(upgraded?iron:timber,leafWidth/2,y,.05,leafWidth-.065,.072,.030);
+ doorBlock(upgraded?copper:iron,leafWidth-.17,.66,.063,.089,.10,.058);
  return house;
 }
 

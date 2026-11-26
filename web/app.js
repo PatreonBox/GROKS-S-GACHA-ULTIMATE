@@ -31,7 +31,7 @@ let section='leaderboard',layout=stored('gdlb.view','list'),page=0,focusSlide=0,
 let seed,localImages=new Set(),initialRows=[],rankRows=new Map(),demonRecords=[],demonLoading=null,liveDemonTime=0,current=[],currentDetails=null,statusMode='archive';
 const pageSize=20, rowMap=new Map(),sourceDate='22 Nov 2026';
 let arcade,guides;
-const ranks=playerBoard($('podrows'),$('playersPage'));
+const ranks=playerBoard($('podrows'),$('playersPage'),id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'');
 const sound=createPackSound();
 sound.listenForUiTaps();
 setupLevelUps($('levelUp'),sound);

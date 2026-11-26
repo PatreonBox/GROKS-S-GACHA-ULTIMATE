@@ -27,7 +27,7 @@ export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) 
  const collectionProgress=document.getElementById('playerCollectionProgress');
  const globalRank=document.getElementById('playerGlobalRank');
  const statsStatus=document.getElementById('playerStatsStatus');
- const settings=document.getElementById('playerSettings'),visibility=document.getElementById('profileHidden');
+ const settings=document.getElementById('playerSettings'),privacy=settings.querySelectorAll('[data-profile-privacy]');
  const privacyStatus=document.getElementById('profilePrivacyStatus');
  const report=document.getElementById('bugReport');
  const form=document.getElementById('bugReportForm');
@@ -84,24 +84,30 @@ export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) 
  });
 
  document.getElementById('openPlayerSettings').addEventListener('click',async()=>{
-  menu.open=false;visibility.disabled=true;privacyStatus.textContent='Loading settings…';
+  menu.open=false;
+  for(const input of privacy)input.disabled=true;
+  privacyStatus.textContent='Loading settings…';
   settings.showModal();
   const request=++settingsRequest;
   try{
-   const hidden=await loadPrivacy();
+   const values=await loadPrivacy();
    if(request!==settingsRequest)return;
-   visibility.checked=hidden;visibility.disabled=false;privacyStatus.textContent='';
+   for(const input of privacy){input.checked=values[input.dataset.profilePrivacy];input.disabled=false}
+   privacyStatus.textContent='';
   }catch(error){if(request===settingsRequest)privacyStatus.textContent=error.message}
  });
- visibility.addEventListener('change',async()=>{
-  const hidden=visibility.checked,request=++settingsRequest;
-  visibility.disabled=true;privacyStatus.textContent='Saving…';
+ settings.addEventListener('change',async event=>{
+  const input=event.target,key=input.dataset.profilePrivacy;
+  if(!key)return;
+  const checked=input.checked,request=++settingsRequest;
+  for(const control of privacy)control.disabled=true;
+  privacyStatus.textContent='Saving…';
   try{
-   await savePrivacy(hidden);
-   if(request===settingsRequest)privacyStatus.textContent=hidden?'Profile is private.':'Profile is visible.';
+   await savePrivacy({[key]:checked});
+   if(request===settingsRequest)privacyStatus.textContent='Visibility saved.';
   }catch(error){
-   if(request===settingsRequest){visibility.checked=!hidden;privacyStatus.textContent=error.message}
-  }finally{if(request===settingsRequest)visibility.disabled=false}
+   if(request===settingsRequest){input.checked=!checked;privacyStatus.textContent=error.message}
+  }finally{if(request===settingsRequest)for(const control of privacy)control.disabled=false}
  });
 
  document.getElementById('openBugReport').addEventListener('click',()=>{

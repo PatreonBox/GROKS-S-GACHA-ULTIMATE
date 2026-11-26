@@ -1,6 +1,8 @@
 import {combatStatsVersion,statsFor} from '../web/battle-engine.js';
 import {playerProgress} from '../web/player-progression.js';
 
+export const combatPower=stats=>stats.maxHp+3*stats.attack;
+
 export function collectionPower(records,wallet,changes=new Map()){
  const owned=new Map(records.map(card=>[card.id,card]));
  for(const [id,card] of changes)owned.set(id,card);
@@ -8,7 +10,7 @@ export function collectionPower(records,wallet,changes=new Map()){
  for(const [id,card] of owned){
   if(!(card.copies>0)||!Array.isArray(card.row))continue;
   const stats=statsFor(card.row,wallet.training?.[id]);
-  power+=stats.maxHp+3*stats.attack;
+  power+=combatPower(stats);
  }
  return Math.min(Number.MAX_SAFE_INTEGER,power);
 }

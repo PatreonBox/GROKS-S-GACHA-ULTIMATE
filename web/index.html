@@ -107,7 +107,9 @@
 <dialog class="player-dialog" id="playerSettings" aria-labelledby="playerSettingsTitle">
  <div class="player-dialog-head"><h2 id="playerSettingsTitle">Settings</h2><button type="button" class="iconbtn" data-close-player-dialog aria-label="Close settings">×</button></div>
  <div class="player-dialog-body">
-  <label class="profile-privacy"><span><b>Hide my profile</b><small>Controls who can open your stats from player rankings.</small></span><input type="checkbox" id="profileHidden" disabled></label>
+  <label class="profile-privacy"><span><b>Hide my profile</b><small>Keep your profile and showcases private.</small></span><input type="checkbox" id="profileHidden" data-profile-privacy="hidden" disabled></label>
+  <label class="profile-privacy"><span><b>Share my Kingdom</b><small>Allow players to visit your 3D plot from your public profile.</small></span><input type="checkbox" id="shareKingdom" data-profile-privacy="shareKingdom" disabled></label>
+  <label class="profile-privacy"><span><b>Share my best card</b><small>Show your strongest card and its moves on your public profile.</small></span><input type="checkbox" id="shareBestCard" data-profile-privacy="shareBestCard" disabled></label>
   <p class="player-form-status" id="profilePrivacyStatus" role="status"></p>
  </div>
 </dialog>

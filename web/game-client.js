@@ -127,7 +127,10 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
 
 if (typeof document !== 'undefined') {
  setupPlayerMenu({loadStats:()=>gameRead('profile'),sendReport:body=>submit('/api/game/report',body),
-  loadPrivacy:async()=>Boolean((await gameRead('wallet')).profileHidden),savePrivacy:hidden=>gameCommand('profile.privacy',{hidden})});
+  loadPrivacy:async()=>{
+   const {profileHidden,shareKingdom,shareBestCard}=await gameRead('wallet');
+   return {hidden:Boolean(profileHidden),shareKingdom:shareKingdom!==false,shareBestCard:shareBestCard!==false};
+  },savePrivacy:settings=>gameCommand('profile.privacy',settings)});
  setupAdminTools({canOpen:()=>canAdmin,loadWallet:()=>gameRead('wallet'),run:async(action,args)=>{
   const data=await gameCommand(action,args);
   if(action==='admin.adjust')document.dispatchEvent(new CustomEvent('gdlb-admin-wallet',{detail:data.wallet}));

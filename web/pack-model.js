@@ -28,7 +28,7 @@ export function wrapper(pack,numberOfCards=5,category='Auto'){
 }
 
 // The pack has a printable back and four folded edges, so a full turn stays visible.
-export function bindTurntable(stage){
+export function bindTurntable(stage,item='pack'){
  const model=stage.querySelector('.package-float'),handle=stage.querySelector('.turn-handle');
  let yaw=-15,pitch=6,active=null,startX,startY,startYaw,startPitch;
  function rotate(horizontal,vertical){
@@ -37,7 +37,7 @@ export function bindTurntable(stage){
   const angle=((Math.round(yaw)%360)+360)%360;
   const reflection=Math.sin((yaw+pitch*.55)*Math.PI/180);
   model.style.setProperty('--foil-reflection',(reflection*20).toFixed(1)+'%');
-  handle.setAttribute('aria-label','Rotate pack. Horizontal angle '+angle+' degrees. Use arrow keys or drag.');
+  handle.setAttribute('aria-label','Rotate '+item+'. Horizontal angle '+angle+' degrees. Use arrow keys or drag.');
  }
  function reset(){rotate(-15,6)}
  handle.onpointerdown=e=>{
