@@ -253,10 +253,11 @@ function treeGrove(group,bounds){
  trunks.castShadow=true;trunks.receiveShadow=true;
  crowns.castShadow=true;crowns.receiveShadow=true;
  group.add(trunks,crowns,sprouts);
+ return trees;
 }
 
 function vegetation(group,bounds){
- treeGrove(group,bounds);
+ const trees=treeGrove(group,bounds);
  const random=randomFor(2015),matrix=new THREE.Object3D();
  const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),material('#ffffff',{flatShading:true}),39);
  for(let i=0;i<rocks.count;i++){
@@ -284,13 +285,14 @@ function vegetation(group,bounds){
  geometry.setAttribute('color',new THREE.Float32BufferAttribute(tints,3));
  const grass=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide,vertexColors:true}));
  group.add(grass);
+ return trees;
 }
 
 export function makeLandscape(loader,path,bounds){
  const ground=new THREE.Group();
  const surface=makeGround(loader);
  ground.add(surface,makeTrail(path));
- vegetation(ground,bounds);
+ const trees=vegetation(ground,bounds);
  const random=randomFor(371),hills=['#6f9f99','#6e9b97','#7a9e96','#89adab'].map(color=>material(color,{flatShading:true}));
  const geometry=new THREE.IcosahedronGeometry(1,2);
  for(let i=0;i<20;i++){
@@ -298,7 +300,7 @@ export function makeLandscape(loader,path,bounds){
   const hill=meshAt(ground,geometry,hills[i%hills.length],Math.cos(angle)*radius,-.9,Math.sin(angle)*radius,false);
   hill.rotation.y=angle;hill.scale.set(11+random()*9,2.7+random()*5.4,14+random()*9);
  }
- return {ground,surface};
+ return {ground,surface,trees};
 }
 
 function masonry(){

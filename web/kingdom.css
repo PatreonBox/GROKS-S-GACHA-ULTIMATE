@@ -34,6 +34,14 @@ main:has(#kingdomRoom:not([hidden])){
 }
 .kingdom-plot-stats span{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:7px;font-size:13px;font-weight:700}
 .kingdom-plot-stats svg{color:#aff2d7}
+.tower-construction-meter{
+ position:absolute;inset:58px auto auto 13px;min-width:155px;padding:7px 9px;
+ border:1px solid #ffc672a8;border-radius:7px;background:#312718ef;color:#ffdfa3;
+ font-size:.82rem;pointer-events:none;box-shadow:0 3px 11px #14273159;
+}
+.tower-construction-meter div{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.tower-construction-meter b{font-variant-numeric:tabular-nums;color:#fff5de}
+.tower-construction-meter progress{display:block;width:100%;height:7px;margin-top:4px;accent-color:#ffbf57}
 .kingdom-hover{position:absolute;z-index:3;transform:translate(-50%,-120%);border-radius:7px;padding:5px 8px;font-size:13px;font-weight:750;pointer-events:none;white-space:nowrap}
 .kingdom-controls{
  position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:9px;padding:5px 5px 5px 11px;border-radius:9px;
@@ -114,6 +122,7 @@ main:has(#kingdomRoom:not([hidden])){
 .tower-upgrade{min-height:40px;border-color:#866b45}
 .tower-upgrade span{color:#ffdb91}
 .tower-upgrade img{width:14px;height:14px}
+.tower-upgrade [data-tower-time]{color:#e5c594}
 .kingdom-dashboard{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.80fr);gap:11px;margin-top:11px}
 .kingdom-inspector,.kingdom-stats{border:1px solid #3c4658;border-radius:11px;background:#161e2c}
 .kingdom-inspector{padding:11px 13px}
@@ -180,6 +189,7 @@ main:has(#kingdomRoom:not([hidden])){
  .kingdom-controls>span{display:none}
  .kingdom-controls button{width:42px;height:42px}
  .kingdom-plot-stats{inset:7px auto auto 7px}
+ .tower-construction-meter{inset:47px auto auto 7px}
  .kingdom-plot-stats span{padding:5px 7px;font-size:12px}
  .kingdom-stats>div{padding:9px}
  .kingdom-build-controls button{min-height:41px}

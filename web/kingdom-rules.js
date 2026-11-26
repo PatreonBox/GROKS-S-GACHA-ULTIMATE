@@ -25,7 +25,7 @@ export const visitorSlots=[
  ['Rare',1.8],['Rare',2.4],['Epic',3],['Epic',3.6],['Legendary',4.5]
 ].map(([rarity,stars],slot)=>({slot,rarity,stars}));
 const towerTiers=[
- {limit:2,price:0},{limit:6,price:200_000},{limit:9,price:1_500_000},
+ {limit:2,price:0},{limit:6,price:500_000,buildMs:60_000},{limit:9,price:1_500_000},
  {limit:13,price:10_000_000},{limit:17,price:75_000_000}
 ];
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
@@ -35,17 +35,20 @@ export function landPlan(wallet){
  const level=Number.isInteger(saved)&&saved>0&&saved<=lastLandLevel?saved:0;
  return {level,bounds:kingdomBounds(level),size:1.25**level,nextPrice:level<lastLandLevel?landCost(level):null};
 }
-export function towerPlan(wallet){
- const saved=wallet?.kingdom?.towerLevel;
- const level=Number.isInteger(saved)&&saved>=1&&saved<=towerTiers.length?saved:1;
- return {level,limit:towerTiers[level-1].limit,next:towerTiers[level]};
+export function towerPlan(wallet,now=Date.now()){
+ const kingdom=wallet?.kingdom,saved=kingdom?.towerLevel;
+ const built=Number.isInteger(saved)&&saved>=1&&saved<=towerTiers.length?saved:1;
+ const schedule=built===1?kingdom?.towerConstruction:null;
+ const construction=schedule&&now<schedule.endsAt?schedule:null;
+ const level=schedule&&!construction?2:built;
+ return {level,limit:towerTiers[level-1].limit,next:towerTiers[level],construction};
 }
-export function kingdomStats(wallet){
- const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),tower=towerPlan(wallet),land=landPlan(wallet);
+export function kingdomStats(wallet,now=Date.now()){
+ const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),tower=towerPlan(wallet,now),land=landPlan(wallet);
  const stars=Math.min(50,houses.length*3)/10;
  const value=houses.reduce((sum,house)=>sum+(house.price??housePrice),0)+
   towerTiers.slice(0,tower.level).reduce((sum,tier)=>sum+tier.price,0)+
-  forges.length*forgePrice+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
+  (tower.construction?tower.next.price:0)+forges.length*forgePrice+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
  return {houses,forges,buildings:[...houses,...forges],tower,land,stars,value,mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houses.length};
 }
 
@@ -59,25 +62,39 @@ export function expandLand(wallet,expectedLevel){
  return {level:level+1,price:nextPrice};
 }
 
-export function upgradeTower(wallet,expectedLevel){
- const houses=kingdomHouses(wallet),{level,limit,next}=towerPlan(wallet);
+export function settleTower(wallet,now){
+ const kingdom=wallet.kingdom,construction=kingdom?.towerConstruction;
+ if(!construction||now<construction.endsAt)return null;
+ delete kingdom.towerConstruction;
+ kingdom.towerLevel=2;
+ return {level:2,limit:towerTiers[1].limit,price:towerTiers[1].price,completed:true};
+}
+
+export function upgradeTower(wallet,expectedLevel,now){
+ const houses=kingdomHouses(wallet),{level,limit,next,construction}=towerPlan(wallet,now);
+ if(construction)throw Error('Your tower upgrade is already under construction.');
  if(level!==expectedLevel)throw Error('Your tower level changed. Check its new upgrade.');
  if(!next)throw Error('Your tower is at its highest level.');
  if(houses.length<limit)throw Error('Fill the current house lots before upgrading.');
  if(wallet.coins<next.price)throw Error('You need '+next.price.toLocaleString('en-US')+' coins to upgrade.');
  wallet.coins-=next.price;
+ if(next.buildMs){
+  const schedule={startedAt:now,endsAt:now+next.buildMs};
+  wallet.kingdom={...wallet.kingdom,towerConstruction:schedule};
+  return {level:level+1,limit:next.limit,price:next.price,construction:schedule};
+ }
  wallet.kingdom={...wallet.kingdom,towerLevel:level+1};
  return {level:level+1,limit:next.limit,price:next.price};
 }
 
-function footprint({x,z,rotation,kind='house'},margin=0){
+export function buildingFootprint({x,z,rotation,kind='house'},margin=0){
  const {width,depth}=buildingSpecs[kind].size;
  const wide=rotation%2===0;
  const halfWidth=(wide?width:depth)*.5+margin,halfDepth=(wide?depth:width)*.5+margin;
  return {left:x-halfWidth,right:x+halfWidth,back:z-halfDepth,front:z+halfDepth};
 }
 const overlaps=(a,b)=>a.left<b.right&&a.right>b.left&&a.back<b.front&&a.front>b.back;
-const towerFoot={left:towerPlot.x-1.67,right:towerPlot.x+1.67,back:-1.67,front:1.92};
+export const towerFootprint={left:towerPlot.x-1.67,right:towerPlot.x+1.67,back:-1.67,front:1.92};
 // Retain the trail for resident and visitor traffic.
 function crossesTrail(box){
  for(let i=0;i<trailCorners.length;i++){
@@ -92,11 +109,11 @@ function crossesTrail(box){
 export function buildingPlacementError(buildings,proposal,bounds=plotBounds){
  const {x,z,rotation}=proposal;
  if(!Number.isFinite(x)||!Number.isFinite(z)||!Number.isInteger(rotation)||rotation<0||rotation>3)return 'Choose a position on your plot.';
- const box=footprint(proposal,.06);
+ const box=buildingFootprint(proposal,.06);
  if(box.left<bounds.left||box.right>bounds.right||box.back<bounds.back||box.front>bounds.front)return 'Keep the building inside your plot.';
- const space=footprint(proposal,.22);
- if(overlaps(space,towerFoot)||buildings.some(building=>overlaps(space,footprint(building,.09))))return 'There’s already a building here.';
- if(crossesTrail(footprint(proposal,trailClearance)))return 'Leave the walking trail clear.';
+ const space=buildingFootprint(proposal,.22);
+ if(overlaps(space,towerFootprint)||buildings.some(building=>overlaps(space,buildingFootprint(building,.09))))return 'There’s already a building here.';
+ if(crossesTrail(buildingFootprint(proposal,trailClearance)))return 'Leave the walking trail clear.';
  return '';
 }
 export const housePlacementError=(houses,proposal)=>buildingPlacementError(houses,proposal);
@@ -112,15 +129,16 @@ function buildAt(wallet,plot,args,kind,price){
  wallet.coins-=price;
  return {id:crypto.randomUUID(),...spot,price};
 }
-export function buildHouse(wallet,args){
- const plot=kingdomStats(wallet),{houses,tower,houseCost}=plot;
- if(houses.length>=tower.limit)throw Error(tower.next?'Upgrade your tower to open more house lots.':'All your house lots are full.');
+export function buildHouse(wallet,args,now=Date.now()){
+ const plot=kingdomStats(wallet,now),{houses,tower,houseCost}=plot;
+ if(houses.length>=tower.limit)throw Error(tower.construction?'New house lots open when tower construction finishes.':
+  tower.next?'Upgrade your tower to open more house lots.':'All your house lots are full.');
  const house=buildAt(wallet,plot,{...args,expectedPrice:args.expectedPrice??housePrice},'house',houseCost);
  wallet.kingdom={...wallet.kingdom,houses:[...houses,house]};
  return house;
 }
 export function buildForge(wallet,args,now){
- const plot=kingdomStats(wallet),forge=buildAt(wallet,plot,args,'forge',forgePrice);
+ const plot=kingdomStats(wallet,now),forge=buildAt(wallet,plot,args,'forge',forgePrice);
  forge.collectedAt=now;
  wallet.kingdom={...wallet.kingdom,forges:[...plot.forges,forge],mana:plot.mana+forgeWelcomeMana};
  return forge;

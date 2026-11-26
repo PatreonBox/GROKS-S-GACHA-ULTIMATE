@@ -85,7 +85,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
  const cubeRoot=document.createElement('section');
  cubeRoot.id='cubeShop';
  const cubes=createCubeShop({root:cubeRoot,applyWallet,sound,announce});
- const kingdom=createKingdom(byId('kingdomRoom'),sound,applyWallet);
+ const kingdom=createKingdom(byId('kingdomRoom'),sound,applyWallet,rewards);
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
  const locked=id=>playerLevel<featureLevel(id);
  const kingdomTab=byId('kingdomNew').parentElement;
@@ -129,7 +129,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
   const previous=displayedCoins<0?(credited?coins-credited:coins):displayedCoins;
   const gain=coins-previous;
   displayedCoins=coins;
-  rewards.balance({coins,gems:wallet.gems});
+  rewards.balance({coins,gems:wallet.gems,mana:wallet.kingdom?.mana||0});
   byId('walletLink').title=number(coins)+' coins'+(locked('mine')?' · Coin mine at Level '+featureLevel('mine'):'');
   byId('walletLink').setAttribute('aria-label',byId('walletLink').title+(locked('mine')?'':'. Open the coin mine'));
   coinMine.setCoins(coins,force?0:gain);

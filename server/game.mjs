@@ -94,7 +94,8 @@ async function profile(db,owner,create){
 
 function visibleWallet(wallet){
  const {tapLimit,minePlayerXp,drills,remixRun,armyRun,armyReceipt,...review}=wallet;
- return {...review,discoveredVisitors:discoveredVisitors(wallet)};
+ const timing=wallet.kingdom?.towerConstruction?{towerClock:Date.now()}:{};
+ return {...review,...timing,discoveredVisitors:discoveredVisitors(wallet)};
 }
 async function inventory(db,id){
  const {results}=await db.prepare('SELECT card FROM game_cards WHERE player_id=?').bind(id).all();

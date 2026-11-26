@@ -6,6 +6,7 @@ import {buildingSpecs,buildingPlacementError,forgeMinimum,forgePrice,forgeStored
 import {playerProgress} from './player-progression.js';
 import {towerPlayerLevel} from './level-access.js';
 import {setLevelLock} from './level-lock.js';
+import {rewardOrigin} from './reward-flight.js';
 
 const readout=new Intl.NumberFormat('en-US',{maximumFractionDigits:1});
 const compact=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:2});
@@ -31,11 +32,18 @@ function visitorCard(slot,guest){
   '<button type="button" class="outline" data-visit="'+escape(guest.id)+'" aria-label="Inspect '+escape(guest.name)+'">Visiting</button></article>';
 }
 
-export function createKingdom(root,sound,applyWallet){
+export function createKingdom(root,sound,applyWallet,rewards){
  let wallet,world,ui,coins=0,cube,selection='tower',visit=0,pan=false,keys;
  let plot=kingdomStats(),visitors=[],plotSignature='',snap=true,build=null,placing=false,upgrading=false;
  let buildingKind='house',expanding=false;
+ let towerClockOffset=0,finishingTower=false,towerRetryAt=0;
  const collecting=new Set();
+ const towerNow=()=>Date.now()+towerClockOffset;
+ const timeLeft=site=>Math.max(0,Math.ceil((site.endsAt-towerNow())/1000));
+ function timerText(site){
+  const seconds=timeLeft(site);
+  return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
+ }
  const guestFor=id=>visitors.find(guest=>id==='visitor:'+guest.id);
  const buildingKey=building=>(building.kind||'house')+':'+building.id;
  const buildingFor=id=>plot.buildings.find(building=>buildingKey(building)===id);
@@ -77,12 +85,21 @@ export function createKingdom(root,sound,applyWallet){
   ui.lastForge.dataset.object=forges.length?'forge:'+forges.at(-1).id:'';
   ui.lastForge.setAttribute('aria-pressed',String(forge));
   ui.name.textContent=nameOf(selection);
-  ui.state.textContent=tower?'Level '+plot.tower.level:forge?'Mana production':building?'Home':guest?guest.rarity+' visitor':cube.rarity+' cube';
+  ui.state.textContent=tower?(plot.tower.construction?'Upgrading to Level 2':'Level '+plot.tower.level):
+   forge?'Mana production':building?'Home':guest?guest.rarity+' visitor':cube.rarity+' cube';
   ui.description.textContent=tower?houses.length+' / '+plot.tower.limit+' house lots used.'+(plot.tower.next?' Upgrade the tower for more space.':''):
    building?'Worth '+readout.format(building.price??housePrice)+' coins and adds 0.3 stars.':
    guest?'Visits Kingdoms rated '+guest.stars+' stars or higher.':'Your equipped cube roams the grounds.';
   ui.changeCube.hidden=selection!=='cube';
   paintForge();
+ }
+ function paintConstruction(){
+  const site=plot.tower.construction;
+  ui.towerProgress.hidden=!site;
+  if(!site)return;
+  ui.towerCountdown.textContent=timeLeft(site)?timerText(site):'Finishing…';
+  ui.towerMeter.max=(site.endsAt-site.startedAt)/1000;
+  ui.towerMeter.value=Math.max(0,ui.towerMeter.max-timeLeft(site));
  }
  function select(id){
   if(!nameOf(id))return;
@@ -103,7 +120,7 @@ export function createKingdom(root,sound,applyWallet){
   ui.coins.textContent=wallet?amount(coins):'…';
   if(wallet)ui.coins.title=readout.format(coins)+' coins';
   ui.gems.textContent=wallet?readout.format(wallet.gems):'…';
-  ui.mana.textContent=readout.format(plot.mana);
+  rewards.paint('mana');
   ui.clears.textContent=wallet?Object.keys(wallet.campaign||{}).length+' / '+campaignStages.length:'…';
  }
  function paintPlot(){
@@ -127,11 +144,15 @@ export function createKingdom(root,sound,applyWallet){
     '<small>'+found+' / '+slots.length+'</small></h3>'+slots.map(slot=>visitorCard(slot,discovered.get(slot.slot))).join('')+'</section>';
   }).join('');
   if(focused)[...ui.guestRows.querySelectorAll('[data-visit]')].find(node=>node.dataset.visit===focused)?.focus({preventScroll:true});
-  world?.setPlot(buildings,visitors,plot.tower.level,plot.land.level);
+  world?.setPlot(buildings,visitors,plot.tower.level,plot.land.level,plot.tower.construction,towerClockOffset);
   paintSelection();
+  paintConstruction();
  }
  function setWallet(next){
   wallet=next;
+  const wasBuilding=Boolean(plot.tower.construction);
+  const priorClock=towerClockOffset;
+  towerClockOffset=Number.isFinite(next.towerClock)?next.towerClock-Date.now():0;
   const equipped=equippedCube(wallet),changed=cube?.id!==equipped.id;
   cube=equipped;
   if(changed&&ui){
@@ -139,15 +160,23 @@ export function createKingdom(root,sound,applyWallet){
    world?.setCube(cube);
    paintSelection();
   }
-  plot=kingdomStats(wallet);
+  plot=kingdomStats(wallet,towerNow());
   visitors=visitorsFrom(wallet);
-  const signature=[plot.tower.level,plot.land.level,...plot.buildings.map(building=>building.id+'@'+(building.collectedAt??'')),...visitors.map(guest=>guest.id)].join('/');
+  const signature=[plot.tower.level,plot.tower.construction?.endsAt,plot.land.level,...plot.buildings.map(building=>building.id+'@'+(building.collectedAt??'')),...visitors.map(guest=>guest.id)].join('/');
   if(signature!==plotSignature){
    plotSignature=signature;
    if((selection.startsWith('house:')||selection.startsWith('forge:'))&&!buildingFor(selection))selection='tower';
    if(selection.startsWith('visitor:')&&!guestFor(selection))selection='tower';
    paintPlot();world?.select(selection);
    if(build?.spot)build.error=placementError(build.spot);
+  }else if(plot.tower.construction&&priorClock!==towerClockOffset){
+   world?.setPlot(plot.buildings,visitors,plot.tower.level,plot.land.level,plot.tower.construction,towerClockOffset);
+   paintConstruction();
+  }
+  if(ui&&wasBuilding&&!plot.tower.construction&&plot.tower.level===2){
+   const line='Tower Level 2 complete · '+plot.tower.limit+' house lots';
+   ui.kingdomNotice.textContent=line;ui.buildNotice.dataset.notice=line;
+   sound.play('bonus',{level:.61});
   }
   paintStats();paintBuild();
  }
@@ -155,17 +184,36 @@ export function createKingdom(root,sound,applyWallet){
   coins=amount;
   paintStats();paintBuild();
  }
- function tick(){if(ui&&selection.startsWith('forge:'))paintForge()}
- async function collectMana(id){
+ async function finishTower(){
+  finishingTower=true;
+  try{
+   const {wallet:next}=await gameCommand('kingdom.tower.finish');
+   applyWallet(next);
+  }catch{towerRetryAt=Date.now()+5000}
+  finally{finishingTower=false}
+ }
+ function tick(){
+  if(!ui)return;
+  if(selection.startsWith('forge:'))paintForge();
+  const site=wallet?.kingdom?.towerConstruction;
+  if(!site)return;
+  paintConstruction();
+  if(ui.buildDialog.open)paintBuildMenu();
+  if(!timeLeft(site)&&!finishingTower&&Date.now()>=towerRetryAt)finishTower();
+ }
+ async function collectMana(id,point){
   const forge=plot.forges.find(item=>item.id===id);
   if(!ui||!forge||collecting.has(id)||forgeStored(forge)<forgeMinimum||build)return;
   select('forge:'+id);collecting.add(id);paintForge();
+  const origin=point||world?.manaOrigin(id)||rewardOrigin(ui.collectMana);
   const epoch=visit;
   try{
    const {wallet:next,result}=await gameCommand('kingdom.collect',{id});
+   const ticket=epoch===visit?rewards.reserve('mana',result.earned):null;
    applyWallet(next);
    if(epoch!==visit)return;
-   world?.popMana(id);sound.play('extraAccent',{level:.68});
+   world?.popMana(id);sound.play('extraAccent',{level:.64});
+   rewards.launch(ticket,origin);
    ui.kingdomNotice.textContent='+'+readout.format(result.earned)+' mana collected';
   }catch(error){if(epoch===visit)ui.kingdomNotice.textContent=error.message}
   finally{collecting.delete(id);if(epoch===visit)paintForge()}
@@ -199,13 +247,14 @@ export function createKingdom(root,sound,applyWallet){
   ui.price.textContent=readout.format(price)+' coins';
   ui.priceLine.hidden=house&&full&&!tower.next;
   ui.choose.disabled=!world||!wallet||upgrading||expanding||house&&full||short>0;
-  ui.upgrade.hidden=!house||!full||!tower.next;
+  ui.upgrade.hidden=!house||!full||!tower.next||Boolean(tower.construction);
   if(tower.next){
    setLevelLock(ui.upgrade,required,playerLevel);
    ui.upgrade.disabled=upgrading||expanding||!wallet||coins<tower.next.price;
    ui.towerGate.textContent='Lvl '+required+'+';
    ui.upgradePrice.textContent=readout.format(tower.next.price);
-   ui.upgrade.title='Upgrade to Level '+(tower.level+1)+' for '+tower.next.limit+' house lots';
+   ui.upgradeTime.hidden=!tower.next.buildMs;
+   ui.upgrade.title='Upgrade to Level '+(tower.level+1)+' for '+tower.next.limit+' house lots'+(tower.next.buildMs?' in one minute':'');
   }
   ui.landLevel.textContent='Level '+land.level+' / '+lastLandLevel+' · '+Number(land.size.toFixed(2))+'× starting area';
   ui.landUpgrade.hidden=land.nextPrice===null;
@@ -216,7 +265,8 @@ export function createKingdom(root,sound,applyWallet){
    'Upgrade your tower to open '+(tower.next.limit-tower.limit)+' more house lots.';
   else if(short)hint='Need '+readout.format(short)+' more coins.';
   else if(!world)hint='The 3D plot is unavailable.';
-  const notice=upgrading?'Upgrading tower…':expanding?'Expanding your plot…':ui.buildNotice.dataset.notice||hint;
+  const notice=upgrading?'Starting tower upgrade…':expanding?'Expanding your plot…':tower.construction?
+   'Tower Level 2 under construction · '+timerText(tower.construction):ui.buildNotice.dataset.notice||hint;
   if(ui.buildNotice.textContent!==notice)ui.buildNotice.textContent=notice;
  }
  function previewBuilding(){
@@ -338,7 +388,7 @@ export function createKingdom(root,sound,applyWallet){
  }
  async function improveTower(){
   const {tower,houses}=plot;
-  if(upgrading||!tower.next||houses.length<tower.limit||coins<tower.next.price||
+  if(upgrading||tower.construction||!tower.next||houses.length<tower.limit||coins<tower.next.price||
    expanding||playerProgress(wallet?.playerXp).level<towerPlayerLevel(tower.level+1))return;
   delete ui.buildNotice.dataset.notice;
   upgrading=true;paintBuild();
@@ -347,8 +397,11 @@ export function createKingdom(root,sound,applyWallet){
    const {wallet:next,result}=await gameCommand('kingdom.tower',{level:tower.level});
    applyWallet(next);
    if(epoch!==visit)return;
-   ui.buildNotice.dataset.notice='Tower Level '+result.tower.level+' · '+result.tower.limit+' house lots';
    select('tower');sound.play('buy',{level:.74});
+   if(result.tower.construction){
+    ui.buildDialog.close();reset();
+    ui.canvas.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+   }else ui.buildNotice.dataset.notice='Tower Level '+result.tower.level+' · '+result.tower.limit+' house lots';
   }catch(error){
    if(epoch===visit)ui.buildNotice.dataset.notice=error.message;
   }finally{
@@ -362,10 +415,12 @@ export function createKingdom(root,sound,applyWallet){
    '<span class="kingdom-quality"><span class="kingdom-stars" role="img" aria-label="0 out of 5 stars">'+
    Array.from({length:5},()=>'<span>'+star+'<i>'+star+'</i></span>').join('')+
    '</span><b data-plot-rating>0 / 5</b></span>'+
-   '<span class="kingdom-mana">'+mana+'<span>Mana <b data-plot-mana>0</b></span></span></div></div>'+
+   '<span class="kingdom-mana" id="kingdomManaBadge">'+mana+'<span>Mana <b data-plot-mana id="kingdomManaCount">0</b></span></span></div></div>'+
    '<div class="kingdom-frame" aria-label="Your 3D Kingdom"><canvas tabindex="0" aria-label="Kingdom plot" aria-describedby="kingdomControls"></canvas>'+
    '<p class="kingdom-loading" role="status">Loading your Kingdom…</p>'+
    '<div class="kingdom-plot-stats"><span>'+ico('tower')+'<b data-plot-buildings>1 building</b></span><span>'+ico('box')+'1 resident</span></div>'+
+   '<div class="tower-construction-meter" data-tower-progress hidden><div><strong>Tower Level 2</strong><b data-tower-countdown>1:00</b></div>'+
+   '<progress aria-label="Tower construction progress" max="60" value="0"></progress></div>'+
    '<div class="kingdom-hover" aria-hidden="true" hidden></div>'+
    '<div class="kingdom-controls"><span id="kingdomControls">Drag to orbit · Scroll or pinch to zoom</span><div role="group" aria-label="Camera controls">'+
    cameraButton('pan','pan','Pan camera')+cameraButton('out','zoomOut','Zoom out')+cameraButton('in','zoomIn','Zoom in')+
@@ -397,8 +452,8 @@ export function createKingdom(root,sound,applyWallet){
    '<h2 id="buildModeTitle">Build Mode</h2><button type="button" class="iconbtn" data-build="close" aria-label="Close Build Mode">'+ico('x')+'</button></div>'+
    '<div class="build-capacity"><div><b>House lots</b><span data-house-lots></span></div><strong data-lots-available></strong>'+
    '<progress aria-label="House lots used" data-lot-meter max="2" value="0"></progress></div>'+
-   '<div class="build-catalog" role="group" aria-label="Buildings"><button type="button" class="outline" data-build-kind="house" aria-pressed="true">'+houseName+'</button>'+
-   '<button type="button" class="outline" data-build-kind="forge" aria-pressed="false">'+mana+forgeName+'<small data-forge-count></small></button></div>'+
+   '<div class="build-catalog" role="group" aria-label="Building categories"><button type="button" class="outline" data-build-kind="house" aria-pressed="true">Housing</button>'+
+   '<button type="button" class="outline" data-build-kind="forge" aria-pressed="false">'+mana+'Production<small data-forge-count></small></button></div>'+
    '<article class="build-option"><div class="build-viewport"><canvas tabindex="0" aria-label="GD House 3D preview" aria-describedby="housePreviewControls"></canvas>'+
    '<p data-preview-status role="status" hidden>3D preview unavailable.</p>'+
    '<span id="housePreviewControls">Drag or use arrow keys to rotate</span></div>'+
@@ -408,16 +463,17 @@ export function createKingdom(root,sound,applyWallet){
    '<div class="land-expansion"><div><strong>Land expansion</strong><small data-land-level></small></div>'+
    '<button type="button" class="outline" data-expand-land>Expand +25% <span>'+coin+'<b data-land-price></b></span></button></div>'+
    '<div class="build-menu-footer"><p data-build-notice role="status"></p>'+
-   '<button type="button" class="outline tower-upgrade" data-tower-upgrade hidden>Upgrade tower <span>'+coin+'<b data-tower-cost></b></span>'+
+   '<button type="button" class="outline tower-upgrade" data-tower-upgrade hidden>Upgrade tower <span>'+coin+'<b data-tower-cost></b></span><small data-tower-time hidden>1 min</small>'+
    '<small class="level-lock" data-level-badge hidden>'+ico('lock')+'<b data-tower-gate></b></small></button></div></dialog>';
   const get=selector=>root.querySelector(selector);
   ui={
    canvas:get('.kingdom-frame canvas'),loading:get('.kingdom-loading'),hover:get('.kingdom-hover'),
    controls:get('.kingdom-controls'),instructions:get('#kingdomControls'),
+   towerProgress:get('[data-tower-progress]'),towerCountdown:get('[data-tower-countdown]'),towerMeter:get('[data-tower-progress] progress'),
    pan:get('[data-camera="pan"]'),tower:get('[data-object="tower"]'),resident:get('[data-object="cube"]'),lastHouse:get('[data-last-house]'),lastForge:get('[data-last-forge]'),
    avatar:get('[data-resident-avatar]'),residentName:get('[data-resident-name]'),
    name:get('.kingdom-detail h2'),state:get('[data-plot-state]'),description:get('.kingdom-detail p'),changeCube:get('[data-change-cube]'),
-   coins:get('[data-plot-coins]'),gems:get('[data-plot-gems]'),clears:get('[data-plot-clears]'),mana:get('[data-plot-mana]'),
+   coins:get('[data-plot-coins]'),gems:get('[data-plot-gems]'),clears:get('[data-plot-clears]'),
    collectMana:get('[data-collect-mana]'),kingdomNotice:get('[data-kingdom-notice]'),
    value:get('[data-plot-value]'),buildings:get('[data-plot-buildings]'),starValue:get('[data-plot-rating]'),
    stars:get('.kingdom-stars'),starFills:[...root.querySelectorAll('.kingdom-stars i')],
@@ -428,7 +484,7 @@ export function createKingdom(root,sound,applyWallet){
    landLevel:get('[data-land-level]'),landUpgrade:get('[data-expand-land]'),landPrice:get('[data-land-price]'),
    price:get('[data-house-price]'),priceLine:get('[data-house-price-line]'),placementPrice:get('[data-placement-price]'),placementName:get('[data-placement-name]'),
    limits:get('[data-house-lots]'),available:get('[data-lots-available]'),lotMeter:get('[data-lot-meter]'),
-   upgrade:get('[data-tower-upgrade]'),upgradePrice:get('[data-tower-cost]'),towerGate:get('[data-tower-gate]'),
+   upgrade:get('[data-tower-upgrade]'),upgradePrice:get('[data-tower-cost]'),upgradeTime:get('[data-tower-time]'),towerGate:get('[data-tower-gate]'),
    openBuild:get('[data-build="start"]'),cancel:get('[data-build="cancel"]'),rotate:get('[data-build="rotate"]'),
    snap:get('[data-build="snap"]'),place:get('[data-build="place"]'),
    visitors:get('[data-visitor-index]'),guestDialog:get('.kingdom-guest-index'),guestRows:get('[data-visitor-rows]'),

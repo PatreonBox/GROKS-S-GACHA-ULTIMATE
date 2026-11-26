@@ -4,6 +4,9 @@ import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,resi
 import {createBuildingPreview} from './building-preview.js';
 import {makeManaBubble,makeManaForge} from './mana-forge-model.js';
 import {buildingSpecs,forgeMinimum,forgeStored,kingdomBounds,manaIcon,visitorSlots} from '../web/kingdom-rules.js';
+import {kingdomNavigation} from './kingdom-navigation.js';
+import {createKingdomWalker} from './kingdom-walkers.js';
+import {makeTowerConstruction} from './tower-construction.js';
 
 const clamp=THREE.MathUtils.clamp;
 const frameColor='#c3e5e8';
@@ -75,6 +78,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
  icon.colorSpace=THREE.SRGBColorSpace;
  const bubbleModel=makeManaBubble(icon),bursts=[];
  let land=0,bounds=kingdomBounds(),landscape=makeLandscape(loader,path,bounds),grid=buildGrid(bounds);
+ let nav,navKey='',worksite,clockOffset=0;
+ const residentWalk=createKingdomWalker(owner,path.getPointAt(.209),0);
  owner.setCube(cube);scene.add(landscape.ground,grid.grid,tower,owner.resident);
  const ghostFinish=new THREE.MeshStandardMaterial({
   color:'#6cf7b8',emissive:'#48966c',emissiveIntensity:.4,transparent:true,opacity:.52,depthWrite:false
@@ -118,8 +123,27 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   sun.shadow.camera.updateProjectionMatrix();
   setBuild(build);reset();
  }
- function setPlot(buildings,visitors,towerLevel,landLevel=0){
+ function setWorksite(schedule,towerLevel){
+  if(worksite?.schedule.endsAt===schedule?.endsAt)return;
+  const finished=worksite&&towerLevel===2&&!schedule;
+  if(worksite){worksite.site.removeFromParent();release(worksite.site);worksite=null}
+  if(schedule){
+   worksite={...makeTowerConstruction(loader),schedule};
+   worksite.site.position.copy(tower.position);
+   scene.add(worksite.site);
+  }else if(finished){
+   const point=tower.position.clone();point.y+=3.3;
+   burstAt(point,true);
+  }
+ }
+ function setPlot(buildings,visitors,towerLevel,landLevel=0,construction=null,offsetMs=0){
   setLand(landLevel);
+  clockOffset=offsetMs;
+  setWorksite(construction,towerLevel);
+  const key=[landLevel,Boolean(construction),...buildings.map(item=>item.id)].join('/');
+  if(navKey!==key){
+   nav=kingdomNavigation(bounds,buildings,landscape.trees,construction);navKey=key;
+  }
   tower.getObjectByName('pennant').material.color.set(['#7ce5d9','#eeb852','#f17e57','#bb81eb','#ffe398'][towerLevel-1]);
   const buildingIds=new Set(buildings.map(house=>house.id));
   const visitorIds=new Set(visitors.map(guest=>guest.id));
@@ -152,7 +176,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    const walker=makeResident(loader);
    walker.resident.scale.setScalar(.81);walker.setCube(visitor.skin);
    walker.hit=hitBox('visitor:'+visitor.id,1.25,1.25,1.25,.86);
-   walker.phase=(visitor.slot+1)/(visitorSlots.length+1);
+   walker.walk=createKingdomWalker(walker,path.getPointAt((.21+(visitor.slot+1)/(visitorSlots.length+1))%1),visitor.slot+1,.81);
    scene.add(walker.resident);guests.set(visitor.id,walker);
   }
  }
@@ -266,7 +290,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    if(build)plot(event,true);
    else{
     const hit=pick(event);
-    if(hit?.id?.startsWith('mana:'))onCollect(hit.id.slice(5));
+    if(hit?.id?.startsWith('mana:'))onCollect(hit.id.slice(5),{x:event.clientX,y:event.clientY});
     else if(hit?.id)onSelect(hit.id);
    }
   }
@@ -283,16 +307,6 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   if(event.key==='Home'){event.preventDefault();reset()}
  },{signal});
 
- function walk({resident,body},hit,time,phase,scale=1){
-  const loop=(.209+phase+time*.031)%1,point=path.getPointAt(loop),direction=path.getTangentAt(loop);
-  const stride=(time*2.2+phase*.78)%1,bounce=motion?0:Math.sin(Math.PI*stride)*.295;
-  const floor=groundHeight(point.x,point.z);
-  resident.position.set(point.x,floor+(.55+bounce)*scale,point.z);
-  resident.rotation.y=Math.atan2(direction.x,direction.z);
-  body.rotation.x=motion?0:Math.sin(stride*Math.PI*2)*.12;
-  body.rotation.z=motion?0:.095*Math.cos((time+phase)*4.8);
-  hit.position.copy(resident.position);
- }
  function showRing(ring,id){
   const marker=picked.get(id);
   ring.visible=Boolean(marker&&!build);
@@ -301,11 +315,35 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   ring.position.set(x,groundHeight(x,z)+.033,z);
   ring.scale.set(marker.radius,1,marker.radius);
  }
- function popMana(id){
+ function manaPoint(id){
   const structure=structures.get(id);
-  if(!structure?.bubble)return;
-  const effect=bubbleModel.clone(),point=structure.bubble.position.clone();
-  scene.add(effect);bursts.push({effect,point,start:elapsed});
+  if(!structure?.bubble)return null;
+  const point=structure.model.position.clone();
+  point.y+=4.02;
+  return structure.bubble.visible?structure.bubble.position.clone():point;
+ }
+ function manaOrigin(id){
+  const point=manaPoint(id);
+  if(!point)return null;
+  point.project(camera);
+  if(Math.abs(point.x)>1||Math.abs(point.y)>1||Math.abs(point.z)>1)return null;
+  const view=canvas.getBoundingClientRect();
+  return {x:view.left+(point.x+1)*view.width*.5,y:view.top+(1-point.y)*view.height*.5};
+ }
+ function burstAt(point,celebration=false){
+  if(motion)return;
+  const group=new THREE.Group(),color=celebration?'#ffe286':'#87efff',reach=celebration?2.8:1.2;
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.91,1,32),
+   new THREE.MeshBasicMaterial({color,transparent:true,opacity:.94,depthWrite:false,side:THREE.DoubleSide}));
+  const geometry=new THREE.OctahedronGeometry(.084),bright=new THREE.MeshBasicMaterial({color});
+  const pale=new THREE.MeshBasicMaterial({color:celebration?'#f6b3ff':'#d9ffff'});
+  const sparks=Array.from({length:celebration?20:13},(_,i)=>new THREE.Mesh(geometry,i%2?bright:pale));
+  group.add(ring,...sparks);group.position.copy(point);scene.add(group);
+  bursts.push({group,ring,sparks,reach,duration:celebration ? .82 : .43,start:elapsed});
+ }
+ function popMana(id){
+  const point=manaPoint(id);
+  if(point)burstAt(point);
  }
  function animateMana(){
   const now=Date.now();
@@ -320,10 +358,17 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
    bubble.scale.setScalar(motion?1:Math.max(.10,Math.sin(growth*Math.PI/2)*(1+.18*Math.sin(growth*Math.PI))));
   }
   for(let i=bursts.length-1;i>=0;i--){
-   const {effect,point,start}=bursts[i],progress=clamp((elapsed-start)*2.4,0,1);
-   if(progress===1){effect.removeFromParent();bursts.splice(i,1);continue}
-   effect.position.copy(point);effect.position.y+=progress*.9;
-   effect.scale.setScalar((1+.55*Math.sin(progress*Math.PI))*(1-progress));
+   const {group,ring,sparks,reach,duration,start}=bursts[i],progress=clamp((elapsed-start)/duration,0,1);
+   if(progress===1){group.removeFromParent();release(group);bursts.splice(i,1);continue}
+   const spread=1-(1-progress)**2;
+   ring.quaternion.copy(camera.quaternion);
+   ring.scale.setScalar(.54+spread*reach);ring.material.opacity=.9*(1-progress)**1.6;
+   sparks.forEach((spark,j)=>{
+    const angle=j*2.39996,spreadOut=spread*reach*(.56+(j%5)*.11);
+    spark.position.set(Math.cos(angle)*spreadOut,spreadOut*(.56*Math.sin(angle)+.46)-progress**2*.38,Math.sin(angle)*spreadOut*.53);
+    spark.rotation.set(angle+progress*4,j+progress*5,angle);
+    spark.scale.setScalar(Math.max(.02,(1-progress)*(1.3+j%3*.16)));
+   });
   }
  }
  function render(now){
@@ -333,8 +378,14 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   last=now;elapsed+=delta;
   controls.update(delta);
   sky.position.copy(camera.position);
-  walk(owner,cubeHit,elapsed,0);
-  for(const guest of guests.values())walk(guest,guest.hit,elapsed,guest.phase,.81);
+  if(nav){
+   residentWalk.update(nav,delta,groundHeight,motion,cubeHit);
+   for(const guest of guests.values())guest.walk.update(nav,delta,groundHeight,motion,guest.hit);
+  }
+  if(worksite){
+   const {startedAt,endsAt}=worksite.schedule;
+   worksite.animate(elapsed,clamp((Date.now()+clockOffset-startedAt)/(endsAt-startedAt),0,1),motion);
+  }
   animateMana();
   showRing(selectRing,selected);
   showRing(hoverRing,hovered===selected?null:hovered);
@@ -370,5 +421,5 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollec
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();
  }
- return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,popMana,panMode,zoom,reset,dispose};
+ return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,manaOrigin,popMana,panMode,zoom,reset,dispose};
 }

@@ -1,7 +1,8 @@
 // Receipts are already saved. Only the displayed balance waits for the sprites to arrive.
 const currencies={
  gems:{file:'gem',label:'Gems',badge:'gemLink',count:'gemCount',tint:'#9ae8ff'},
- coins:{file:'coin',label:'Coins',badge:'walletLink',count:'walletCount',tint:'#ffdf7e'}
+ coins:{file:'coin',label:'Coins',badge:'walletLink',count:'walletCount',tint:'#ffdf7e'},
+ mana:{src:'/assets/kingdom/mana-orbs.webp',label:'Mana',badge:'kingdomManaBadge',count:'kingdomManaCount',tint:'#79ecff'}
 };
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 const ease=t=>t*t*(3-2*t);
@@ -10,6 +11,7 @@ const spriteLimit=15;
 const coinCadence=125;
 export function rewardSpriteCount(kind,amount){
  if(!Number.isFinite(amount)||amount<=0)return 0;
+ if(kind==='mana')return Math.min(9,3+Math.floor(Math.log2(Math.max(1,amount))));
  const quantity=kind==='gems'?Math.ceil(amount):1+Math.floor(Math.log2(Math.max(1,amount)));
  return Math.min(spriteLimit,quantity);
 }
@@ -20,21 +22,21 @@ export function rewardOrigin(element){
 }
 
 export function createRewardFlight(sound,format){
- const totals={coins:0,gems:0},owed={coins:0,gems:0},images={};
+ const totals={coins:0,gems:0,mana:0},owed={coins:0,gems:0,mana:0},images={};
  const tickets=new Set(),bursts=[];
  let layer,canvas,ctx,meter,raf=0,removeTimer=0,lastChime=0,width=0,height=0;
  let nextCoin=0,queuedCoin=null,lastCoinPulse=-Infinity;
- function visual(kind){return Math.max(0,kind==='coins'?totals.coins-Math.round(owed.coins/10):Math.round(totals.gems*10-owed.gems)/10)}
+ function visual(kind){return Math.max(0,kind==='gems'?Math.round(totals.gems*10-owed.gems)/10:totals[kind]-Math.round(owed[kind]/10))}
  function paint(kind){
   const el=document.getElementById(currencies[kind].count);
   const value=visual(kind);
-  if(el){const label=format(value);if(el.textContent!==label)el.textContent=label}
+  if(el){const label=kind==='mana'?money(value):format(value);if(el.textContent!==label)el.textContent=label}
   if(meter?.dataset.kind===kind){
    const counter=meter.querySelector('b'),label=money(value);
    if(counter.textContent!==label)counter.textContent=label;
   }
  }
- function balance(wallet){for(const kind of Object.keys(totals)){totals[kind]=wallet[kind];paint(kind)}}
+ function balance(wallet){for(const kind of Object.keys(totals)){totals[kind]=wallet[kind]??0;paint(kind)}}
  function settle(ticket){
   if(!tickets.delete(ticket))return;
   owed[ticket.kind]-=ticket.units-ticket.landed;ticket.landed=ticket.units;paint(ticket.kind);
@@ -75,7 +77,7 @@ export function createRewardFlight(sound,format){
    lastCoinPulse=now;
   }
   badge?.animate?.([{filter:'brightness(1.9)',scale:'1.12'},{filter:'brightness(1)',scale:'1'}],{duration:b.reduce?120:230,easing:'ease-out'});
-  if(!b.quiet&&performance.now()-lastChime>105){lastChime=performance.now();sound.play(b.kind==='gems'?'bonus':'mineAccent',{rate:1.2,level:.41})}
+  if(!b.quiet&&performance.now()-lastChime>105){lastChime=performance.now();sound.play(b.kind==='coins'?'mineAccent':'bonus',{rate:1.2,level:.41})}
  }
  function frame(now){
   if(queuedCoin&&now>=nextCoin){
@@ -96,12 +98,17 @@ export function createRewardFlight(sound,format){
     continue;
    }
    const sx=clamp(x,18,w-18),sy=clamp(y,20,h-28);
-   const total=b.streamed?550:b.small?660:1060;
+   const mana=b.kind==='mana',burstEnd=mana ? .27 : .46;
+   const total=mana?850:b.streamed?550:b.small?660:1060;
    if(!b.streamed&&age<total*.58){
     const k=age/(total*.58);
     const glow=ctx.createRadialGradient(sx,sy,0,sx,sy,Math.max(1,22+32*k));
     glow.addColorStop(0,tint+'9a');glow.addColorStop(1,tint+'00');
     ctx.globalAlpha=(1-k)*.65;ctx.fillStyle=glow;ctx.fillRect(sx-60,sy-60,120,120);ctx.globalAlpha=1;
+    if(mana){
+     ctx.beginPath();ctx.arc(sx,sy,10+47*k,0,Math.PI*2);
+     ctx.strokeStyle=tint;ctx.lineWidth=2.8*(1-k)+.4;ctx.globalAlpha=(1-k)**1.55;ctx.stroke();ctx.globalAlpha=1;
+    }
    }
    let last=0,lifted=0;
    for(const p of b.sprites){
@@ -109,16 +116,16 @@ export function createRewardFlight(sound,format){
     last+=t===1?1:0;
     if(b.streamed)lifted=ease(clamp((t-.73)/.27,0,1));
     if(t<=0||t>=1)continue;
-    const low=clamp(sy+p.drop,20,h-18),side=clamp(sx+p.dx,14,w-14);
+    const low=clamp(sy+(mana?-p.drop:p.drop),20,h-18),side=clamp(sx+p.dx,14,w-14);
     let a,px,py,size;
     if(b.streamed){
      a=ease(t);const inv=1-a,midX=clamp((sx+to.x)*.5+p.dx,8,w-8),midY=Math.max(10,Math.min(sy,to.y)-p.lift);
      px=inv*inv*sx+2*inv*a*midX+a*a*to.x;py=inv*inv*sy+2*inv*a*midY+a*a*to.y;
      size=p.size*(.9-.40*a+.27*Math.sin(Math.PI*a));
-    }else if(t<.46){
-     a=t/.46;px=sx+(side-sx)*Math.sin(a*Math.PI/2);py=sy+(low-sy)*a*a-p.kick*4*a*(1-a);size=p.size*(.6+.55*Math.min(1,a*3));
+    }else if(t<burstEnd){
+     a=t/burstEnd;px=sx+(side-sx)*Math.sin(a*Math.PI/2);py=sy+(low-sy)*a*a-p.kick*4*a*(1-a);size=p.size*(.6+.55*Math.min(1,a*3));
     }else{
-     a=ease((t-.46)/.54);const inv=1-a;
+     a=ease((t-burstEnd)/(1-burstEnd));const inv=1-a;
      const cy=Math.max(10,Math.min(low,to.y)-p.lift),cx=clamp(side+p.dx*.75,8,w-8);
      px=inv*inv*side+2*inv*a*cx+a*a*to.x;py=inv*inv*low+2*inv*a*cy+a*a*to.y;
      size=p.size*(1.14-.65*a);
@@ -157,7 +164,10 @@ export function createRewardFlight(sound,format){
   const amount=ticket.units/10,count=streamed?1:rewardSpriteCount(ticket.kind,amount);
   if(!count||document.hidden||!origin){settle(ticket);return}
   setup();
-  if(!images[ticket.kind]){const img=new Image();img.src='/assets/packs/'+currencies[ticket.kind].file+'.png';images[ticket.kind]=img}
+  if(!images[ticket.kind]){
+   const img=new Image(),currency=currencies[ticket.kind];
+   img.src=currency.src||('/assets/packs/'+currency.file+'.png');images[ticket.kind]=img;
+  }
   const from=origin.getBoundingClientRect?rewardOrigin(origin):origin;
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const spread=Math.min(26+count*5,innerWidth*.15);
@@ -180,5 +190,5 @@ export function createRewardFlight(sound,format){
   if(!raf)raf=requestAnimationFrame(frame);
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)clear()});
- return {balance,reserve,launch,streamCoins,settle,clear};
+ return {balance,paint,reserve,launch,streamCoins,settle,clear};
 }
