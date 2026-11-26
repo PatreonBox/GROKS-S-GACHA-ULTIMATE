@@ -52,7 +52,7 @@ export function makeManaForge(level=1){
  return forge;
 }
 
-export function makeManaBubble(icon){
+export function makeResourceBubble(icon){
  const bubble=new THREE.Group();
  const finish=new THREE.ShaderMaterial({
   transparent:true,depthWrite:false,

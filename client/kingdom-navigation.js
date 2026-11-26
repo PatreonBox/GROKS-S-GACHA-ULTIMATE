@@ -82,7 +82,7 @@ export function kingdomNavigation(bounds,buildings,trees,construction){
   housing:[],production:[]
  };
  for(const building of buildings){
-  const front=building.rotation*Math.PI/2,category=building.kind==='forge'?'production':'housing';
+  const front=building.rotation*Math.PI/2,category=(building.kind||'house')==='house'?'housing':'production';
   const dx=Math.sin(front),dz=Math.cos(front);
   const at=distance=>({x:building.x+dx*distance,z:building.z+dz*distance});
   const approach={...at(2.55),look:building};

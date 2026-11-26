@@ -8,7 +8,7 @@ import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,r
 import {playerProgress} from '../web/player-progression.js';
 import {featureLevel} from '../web/level-access.js';
 import {tradeLevelNotice} from '../web/trade-rules.js';
-import {kingdomVisitors} from './kingdom-visitors.mjs';
+import {kingdomVisitors,settleKingdomVisitors} from './kingdom-visitors.mjs';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
@@ -209,8 +209,11 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    if(prepared.cards)records=await inventory(db,record.player_id);
    await seedAchievements(db,record.player_id,wallet,now,records);
    const lastTraining=trainingAction?trainingLevels(wallet):0;
+   const kingdomAction=action.startsWith('kingdom.');
+   if(kingdomAction)settleKingdomVisitors(wallet,now);
    try{result=prepared.apply(wallet,records||[],changes,now,true);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
+   if(kingdomAction)settleKingdomVisitors(wallet,now,true);
    updateAchievements(wallet,{cards:changes.values(),wins:Number(action==='arena.move'&&battleWasActive&&wallet.battle?.status==='won'),
     trained:trainingAction?Math.max(0,trainingLevels(wallet)-lastTraining):0},now);
   }

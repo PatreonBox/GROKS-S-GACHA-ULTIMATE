@@ -12,10 +12,10 @@ export function kingdomShowcase(wallet,clock=Date.now()){
   clock,cube:equippedCube(wallet).id,stars:plot.stars,landLevel:plot.land.level,
   towerLevel:plot.tower.level,construction:plot.tower.construction,removedTrees:plot.removedTrees,
   buildings:plot.buildings.map(({id,x,z,rotation,kind='house',...details})=>({
-   id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:forgePlan(details,clock).level,
+   id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:kind==='forge'?forgePlan(details,clock).level:1,
    ...(details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt}:{})
   })),
-  visitors:discoveredVisitors(wallet,clock).filter(visitor=>visitor.visiting).map(({id,slot,cube,name})=>({id,slot,cube,name}))
+  visitors:discoveredVisitors(wallet,clock).map(({id,slot,cube,name,arrivedAt})=>({id,slot,cube,name,arrivedAt}))
  };
 }
 

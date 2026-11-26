@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,residentPath} from './kingdom-model.js';
 import {createBuildingPreview} from './building-preview.js';
-import {makeManaBubble,makeManaForge} from './mana-forge-model.js';
-import {buildingSpecs,forgeMinimum,forgeStored,kingdomBounds,kingdomDaylight,manaIcon,plotTrees,visitorSlots} from '../web/kingdom-rules.js';
+import {makeResourceBubble,makeManaForge} from './mana-forge-model.js';
+import {makeGemMine} from './gem-mine-model.js';
+import {buildingSpecs,forgeMinimum,forgeStored,gemMinePlan,kingdomBounds,kingdomDaylight,manaIcon,plotTrees,visitorSlots,visitorWelcomeMs} from '../web/kingdom-rules.js';
 import {kingdomNavigation} from './kingdom-navigation.js';
 import {createKingdomWalker} from './kingdom-walkers.js';
 import {treeWithin} from '../web/kingdom-forest.js';
@@ -104,13 +105,20 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  let lastLight=-1;
  const loader=new THREE.TextureLoader();
  const path=residentPath(),tower=makeTower(),owner=makeResident(loader);
- const models={house:makeHouse(),forge:makeManaForge()},icon=loader.load(manaIcon);
+ const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine()};
  const improvedModels={house:makeHouse(2),forge:makeManaForge(2)},windows=new Set();
  for(const model of [models.house,improvedModels.house]){
   model.traverse(part=>{if(part.material?.name==='Cottage lights')windows.add(part.material)});
  }
- icon.colorSpace=THREE.SRGBColorSpace;
- const bubbleModel=makeManaBubble(icon),bursts=[];
+ function bubbleFor(path){
+  const icon=loader.load(path);icon.colorSpace=THREE.SRGBColorSpace;
+  return makeResourceBubble(icon);
+ }
+ const resources={
+  forge:{key:'mana',bubble:bubbleFor(manaIcon),lift:4.02,amount:forgeStored,minimum:forgeMinimum},
+  'gem-mine':{key:'gems',bubble:bubbleFor('/assets/packs/gem.png'),lift:4.10,amount:(mine,now)=>gemMinePlan(mine,now).stored,minimum:1}
+ };
+ const bursts=[];
  let land=0,bounds=kingdomBounds(),forest=plotTrees([]),forestKey=forest.map(tree=>tree.id).join('/');
  let landscape=makeLandscape(loader,path,bounds,forest),grid=buildGrid(bounds);
  let nav,navKey='',worksite;
@@ -186,23 +194,24 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    burstAt(point,true);
   }
  }
- function forgeFloor(building){
-  let level=groundHeight(building.x,building.z);
-  for(let i=0;i<16;i++){
-   const angle=i*Math.PI/8;
-   level=Math.max(level,groundHeight(building.x+Math.cos(angle)*1.56,building.z+Math.sin(angle)*1.56));
-  }
-  return level+.033;
+ function foundationOutline({x,z,kind,rotation},segments){
+  const {width,depth}=buildingSpecs[kind].size,turn=rotation*Math.PI/2;
+  const sin=Math.sin(turn),cos=Math.cos(turn);
+  return Array.from({length:segments},(_,i)=>{
+   const angle=i*Math.PI*2/segments,dx=Math.sin(angle)*(width/2-.04),dz=Math.cos(angle)*(depth/2-.04);
+   return [x+dx*cos+dz*sin,z+dz*cos-dx*sin];
+  });
  }
- function forgeBase(building,level){
-  const vertices=[],radius=1.56;
-  const edge=i=>{
-   const angle=i*Math.PI/4-building.rotation*Math.PI/2;
-   const x=building.x+radius*Math.cos(angle),z=building.z+radius*Math.sin(angle);
-   return [[x,level-.10,z],[x,groundHeight(x,z)-.09,z]];
-  };
-  for(let i=0;i<8;i++){
-   const [a,b]=edge(i),[c,d]=edge(i+1);
+ function floorAt(building){
+  const level=groundHeight(building.x,building.z);
+  if(!resources[building.kind])return level;
+  return Math.max(level,...foundationOutline(building,16).map(([x,z])=>groundHeight(x,z)))+.033;
+ }
+ function productionBase(building,level){
+  const vertices=[],outline=foundationOutline(building,8);
+  const edges=outline.map(([x,z])=>[[x,level-.10,z],[x,groundHeight(x,z)-.09,z]]);
+  for(let i=0;i<edges.length;i++){
+   const [a,b]=edges[i],[c,d]=edges[(i+1)%edges.length];
    vertices.push(...a,...b,...c,...c,...b,...d);
   }
   const geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
@@ -236,12 +245,12 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    if(existing?.level===level&&existing.building.x===x&&existing.building.z===z&&existing.building.rotation===rotation){
     existing.building=building;continue;
    }
-   const model=(level===2?improvedModels:models)[kind].clone(),floor=kind==='forge'?forgeFloor(building):groundHeight(x,z);
+   const model=((level===2&&improvedModels[kind])||models[kind]).clone(),floor=floorAt(building);
    model.position.set(x,floor,z);model.rotation.y=rotation*Math.PI/2;
    scene.add(model);
-   const door=model.getObjectByName('house-door'),base=kind==='forge'?forgeBase(building,floor):null;
+   const resource=resources[kind],door=model.getObjectByName('house-door'),base=resource?productionBase(building,floor):null;
    if(base)scene.add(base);
-   const hit=existing?picked.get(key).mesh:hitBox(key,size.width,height,size.depth,1.94);
+   const hit=existing?picked.get(key).mesh:hitBox(key,size.width,height,size.depth,Math.max(size.width,size.depth)/2+.34);
    hit.position.copy(model.position);hit.position.y+=height/2;hit.rotation.y=model.rotation.y;
    if(existing){
     if(door&&existing.door)door.rotation.y=existing.door.rotation.y;
@@ -251,10 +260,11 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
     Object.assign(existing,{model,building,door,level,base});
     continue;
    }
-   const structure={key,model,building,door,level,base};
-   if(kind==='forge'&&onCollect){
-    const bubble=bubbleModel.clone();
-    bubble.visible=false;bubble.children[0].userData.id='mana:'+id;
+   const structure={key,model,building,door,level,base,resource};
+   if(resource&&onCollect){
+    const bubble=resource.bubble.clone();
+    bubble.visible=false;
+    bubble.children[0].userData={id:resource.key+':'+id,kind,buildingId:id};
     scene.add(bubble);structure.bubble=bubble;
    }
    structures.set(id,structure);
@@ -269,7 +279,12 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    const walker=makeResident(loader);
    walker.resident.scale.setScalar(.81);walker.setCube(visitor.skin);
    walker.hit=hitBox('visitor:'+visitor.id,1.25,1.25,1.25,.86);
-   walker.walk=createKingdomWalker(walker,path.getPointAt((.21+(visitor.slot+1)/(visitorSlots.length+1))%1),visitor.slot+1,.81,occupiedHomes);
+   const recent=visitor.arrivedAt>0&&clock()-visitor.arrivedAt<visitorWelcomeMs;
+   const spawn=recent?{x:(visitor.slot-4.5)*1.9,z:bounds.front+1.8}:
+    path.getPointAt((.21+(visitor.slot+1)/(visitorSlots.length+1))%1);
+   const trailX=(visitor.slot%5-2)*1.25;
+   const entrance=recent?{x:trailX,z:4.25,look:{x:trailX,z:bounds.front}}:null;
+   walker.walk=createKingdomWalker(walker,spawn,visitor.slot+1,.81,occupiedHomes,entrance);
    scene.add(walker.resident);guests.set(visitor.id,walker);
   }
  }
@@ -315,7 +330,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   if(!build?.spot)return;
   const ghost=ghosts[build.kind];
   const {x,z,rotation}=build.spot;
-  ghost.position.set(x,(build.kind==='forge'?forgeFloor(build.spot):groundHeight(x,z))+.04,z);
+  ghost.position.set(x,floorAt(build.spot)+.04,z);
   ghost.rotation.y=rotation*Math.PI/2;
   const good=!build.error;
   ghostFinish.color.set(good?(build.locked?'#a2ffe2':'#60eab9'):'#fa7680');
@@ -339,6 +354,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   if(!bounds.width||!bounds.height)return null;
   const x=event.clientX-bounds.left,y=event.clientY-bounds.top;
   pointer.set(x/bounds.width*2-1,1-y/bounds.height*2);
+  camera.updateMatrixWorld();
   ray.setFromCamera(pointer,camera);
   return {x,y};
  }
@@ -348,7 +364,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const targets=[...picked.values()].map(item=>item.mesh).filter(mesh=>!mesh.userData.inactive);
   for(const {bubble} of structures.values())if(bubble?.visible)targets.push(bubble.children[0]);
   const object=ray.intersectObjects(targets,false)[0]?.object;
-  return {...point,id:object?.userData.id};
+  return {...point,...object?.userData};
  }
  function plot(event,lock){
   if(build.locked)return;
@@ -383,7 +399,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    if(build)plot(event,true);
    else{
     const hit=pick(event);
-    if(hit?.id?.startsWith('mana:'))onCollect(hit.id.slice(5),{x:event.clientX,y:event.clientY});
+    if(hit?.buildingId)onCollect(hit.kind,hit.buildingId,{x:event.clientX,y:event.clientY});
     else if(hit?.id)onSelect(hit.id);
    }
   }
@@ -415,15 +431,15 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   }
   positions.needsUpdate=true;
  }
- function manaPoint(id){
+ function productionPoint(id){
   const structure=structures.get(id);
   if(!structure?.bubble)return null;
   const point=structure.model.position.clone();
-  point.y+=4.02;
+  point.y+=structure.resource.lift;
   return structure.bubble.visible?structure.bubble.position.clone():point;
  }
- function manaOrigin(id){
-  const point=manaPoint(id);
+ function productionOrigin(id){
+  const point=productionPoint(id);
   if(!point)return null;
   point.project(camera);
   if(Math.abs(point.x)>1||Math.abs(point.y)>1||Math.abs(point.z)>1)return null;
@@ -441,18 +457,18 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   group.add(ring,...sparks);group.position.copy(point);scene.add(group);
   bursts.push({group,ring,sparks,reach,duration:celebration ? .82 : .43,start:elapsed});
  }
- function popMana(id){
-  const point=manaPoint(id);
+ function popProduction(id){
+  const point=productionPoint(id);
   if(point)burstAt(point);
  }
- function animateMana(now){
-  for(const {bubble,building,model} of structures.values()){
+ function animateProduction(now){
+  for(const {bubble,building,model,resource} of structures.values()){
    if(!bubble)continue;
-   const ready=!build&&forgeStored(building,now)>=forgeMinimum;
+   const ready=!build&&resource.amount(building,now)>=resource.minimum;
    if(ready&&!bubble.visible)bubble.userData.appeared=elapsed;
    bubble.visible=ready;
    if(!ready)continue;
-   bubble.position.copy(model.position);bubble.position.y+=4.02+(motion?0:.15*Math.sin(elapsed*3));
+   bubble.position.copy(model.position);bubble.position.y+=resource.lift+(motion?0:.15*Math.sin(elapsed*3));
    const growth=motion?1:clamp((elapsed-bubble.userData.appeared)*4,0,1);
    bubble.scale.setScalar(motion?1:Math.max(.10,Math.sin(growth*Math.PI/2)*(1+.18*Math.sin(growth*Math.PI))));
   }
@@ -514,7 +530,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    const {startedAt,endsAt}=worksite.schedule;
    worksite.animate(elapsed,clamp((timestamp-startedAt)/(endsAt-startedAt),0,1),motion);
   }
-  animateMana(timestamp);
+  animateProduction(timestamp);
   showRing(selectRing,selected);
   showRing(hoverRing,hovered===selected?null:hovered);
   renderer.render(scene,camera);
@@ -544,10 +560,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
   preview?.dispose();
-  scene.add(...Object.values(models),...Object.values(improvedModels),bubbleModel);
+  scene.add(...Object.values(models),...Object.values(improvedModels),...Object.values(resources).map(resource=>resource.bubble));
   release(scene);foundationMaterial.dispose();
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();
  }
- return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,manaOrigin,popMana,panMode,zoom,reset,dispose};
+ return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,productionOrigin,popProduction,panMode,zoom,reset,dispose};
 }

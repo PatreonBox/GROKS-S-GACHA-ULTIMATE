@@ -45,7 +45,7 @@ export function poseKingdomCube(body,action,time,reduced){
  body.scale.set(width,tall,width);
 }
 
-export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set()){
+export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set(),entrance=null){
  let x=spawn.x,z=spawn.z,heading=0,turnIndex=seed,stepIndex=seed,choiceIndex=seed,seen;
  let route=[],goal,mode='look',time=0,waiting=.2+(seed%6)*.18,visit,heldHome,seekHome=false,wasNight=false,jammed=0,avoiding=false;
  let openStep=()=>true;
@@ -71,6 +71,16 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set())
   heldHome=null;
  }
  function plan(nav){
+  if(entrance){
+   const path=nav.route({x,z},entrance);
+   if(path){
+    if(path.recovery&&!openStep(path.recovery)){waiting=.31;return;}
+    if(path.recovery)({x,z}=path.recovery);
+    goal={category:'entrance',target:entrance};route=path.points;mode='trot';time=0;
+    return;
+   }
+   entrance=null;
+  }
   for(let i=0;i<destinations.length;i++){
    const category=seekHome?'housing':destinations[turnIndex++%destinations.length];
    seekHome=false;
@@ -99,7 +109,9 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set())
   mode='look';waiting=1.3;time=0;
  }
  function arrive(){
-  if(goal.target.home){
+  if(goal.category==='entrance'){
+   entrance=null;mode='wave';waiting=1.7;
+  }else if(goal.target.home){
    const home=goal.target.home;
    visit={home,phase:'enter',points:[home.threshold,home.inside]};
    mode=seed%2?'peek':'knock';waiting=.59;

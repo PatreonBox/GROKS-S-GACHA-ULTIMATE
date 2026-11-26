@@ -20,7 +20,7 @@ import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/ca
 import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
 import {playerProgress,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
-import {forgePlan,housePlacementError,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {forgePlan,gemMine,gemMinePlan,housePlacementError,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
 import {achievements,achievementProgress} from '../web/progression-rules.js';
 import {kingdomVisitors} from '../server/kingdom-visitors.mjs';
@@ -863,16 +863,124 @@ test('Trees clear once and buildings move, store and restore without repurchasin
  assert.equal(moved.wallet.kingdom.mana,900);
 });
 
-test('Kingdom visitors wait one to three minutes and use independent visiting windows',()=>{
+test('Old Kingdom visiting windows become permanent arrivals',()=>{
  const start=1_795_000_000_000,house=id=>({id,x:0,z:7,rotation:0,builtAt:start});
  const first={kingdom:{houses:[house('first')]}};
  assert.equal(kingdomVisitors(first,start+59_999).discoveredVisitors.length,0);
  const arrival=kingdomVisitors(first,start).visitorRefreshAt;
  assert.ok(arrival>=start+60_000&&arrival<=start+180_000);
- assert.equal(kingdomVisitors(first,arrival).discoveredVisitors[0].visiting,true);
- assert.equal(kingdomVisitors(first,arrival+120_000).discoveredVisitors[0].visiting,false);
+ const arrived=kingdomVisitors(first,arrival);
+ assert.equal(arrived.discoveredVisitors[0].visiting,true);
+ assert.equal(arrived.discoveredVisitors[0].arrivedAt,arrival);
+ assert.equal(arrived.visitorRefreshAt,null);
+ assert.deepEqual(kingdomVisitors(first,arrival+120_000),arrived);
+ assert.deepEqual(kingdomVisitors(first,arrival+15*86_400_000),arrived);
  assert.ok(Array.from({length:20},(_,i)=>kingdomVisitors({kingdom:{houses:[house('plot-'+i),house('second')]}},start+179_999))
   .some(visit=>visit.discoveredVisitors.length===1));
+});
+
+test('A visitor stays across saves and a restored house starts a fresh wait before the first arrival',async t=>{
+ const start=Date.now();
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),owner=await f.open('resident-owner'),viewer=await f.open('resident-viewer');
+ f.store(owner.id,w=>{w.coins=50_000;w.playerXp=playerXpAt(8);});
+ const command=(action,args)=>f.command(owner,'kingdom.'+action,args);
+ const spot={x:-8,z:7,rotation:1};
+ const built=await (await command('house',spot)).json(),id=built.result.house.id;
+ assert.equal(built.wallet.discoveredVisitors.length,0);
+ assert.ok(built.wallet.visitorRefreshAt>=start+60_000&&built.wallet.visitorRefreshAt<=start+180_000);
+ t.mock.timers.setTime(start+59_999);
+ assert.equal((await f.wallet(owner)).discoveredVisitors.length,0);
+ assert.equal((await command('building.store',{id})).status,200);
+ const later=start+6*60_000;
+ t.mock.timers.setTime(later);
+ assert.equal((await f.wallet(owner)).visitorRefreshAt,null);
+ const restored=await (await command('building.place',{...spot,id,mode:'restore'})).json();
+ const arrival=restored.wallet.visitorRefreshAt;
+ assert.ok(arrival>=later+60_000&&arrival<=later+180_000);
+ assert.equal(restored.wallet.discoveredVisitors.length,0);
+ const readVisitors=async()=>((await (await f.call('/api/game?view=kingdom-visitors',owner)).json())['kingdom-visitors']);
+ t.mock.timers.setTime(arrival-1);
+ assert.deepEqual((await readVisitors()).discoveredVisitors,[]);
+ t.mock.timers.setTime(arrival);
+ const {discoveredVisitors}=await readVisitors();
+ assert.equal(discoveredVisitors.length,1);
+ assert.equal(discoveredVisitors[0].arrivedAt,arrival);
+ assert.equal((await command('building.store',{id})).status,200);
+ t.mock.timers.setTime(arrival+2*86_400_000);
+ assert.deepEqual((await f.wallet(owner)).discoveredVisitors,discoveredVisitors);
+ const {kingdom}=await (await f.call('/api/players?player='+owner.id+'&view=kingdom',viewer)).json();
+ assert.equal(kingdom.stars,0);
+ assert.equal(kingdom.visitors[0].id,discoveredVisitors[0].id);
+});
+
+test('An arriving cube walks in from the plot edge and waves on the trail',()=>{
+ const nav=kingdomNavigation(kingdomBounds(),[],[],false);
+ const model={resident:new Group(),body:new Group()},hit=new Group();
+ const walker=createKingdomWalker(model,{x:0,z:16},1,.81,new Set(),{x:0,z:4,look:{x:0,z:16}});
+ let furthest=16,welcomed=false;
+ for(let i=0;i<160;i++){
+  const {z:before}=walker.position;
+  walker.update(nav,.04,()=>0,false,hit);
+  const {z}=walker.position;
+  assert.ok(Math.abs(before-z)<=.15);
+  furthest=Math.min(z,furthest);
+  if(z===4&&model.body.rotation.z>.27)welcomed=true;
+ }
+ assert.equal(furthest,4);
+ assert.equal(welcomed,true);
+});
+
+test('A Gem Mine unlocks at Tower Level 2, banks offline production, and caps and collects exactly once',async t=>{
+ const start=Date.now(),tick=gemMine.interval;
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),owner=await f.open('gem-miner'),viewer=await f.open('mine-viewer');
+ const spot={x:8,z:7,rotation:0,expectedPrice:0},command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
+ f.store(owner.id,w=>{w.playerXp=playerXpAt(8);w.coins=23;w.gems=2.5;});
+ assert.match((await (await command('gem-mine',spot)).json()).error,/Tower Level 2/);
+ f.store(owner.id,w=>{w.kingdom={towerLevel:2};});
+ assert.equal((await command('gem-mine',{...spot,x:-2.65,z:0})).status,400);
+ const builds=await Promise.all([command('gem-mine',spot),command('gem-mine',{...spot,x:-8})]);
+ assert.deepEqual(builds.map(res=>res.status).sort(),[200,400]);
+ const created=await builds.find(res=>res.ok).json(),mine=created.result.building,id=mine.id;
+ assert.equal(created.wallet.coins,23);
+ assert.equal(created.wallet.gems,2.5);
+ assert.equal(kingdomStats(created.wallet).houseLots,0);
+ assert.equal(kingdomStats(created.wallet).buildings[0].kind,'gem-mine');
+ t.mock.timers.setTime(start+tick-1);
+ assert.equal(gemMinePlan(mine).stored,0);
+ assert.equal((await command('gem-mine.collect',{id})).status,400);
+ t.mock.timers.setTime(start+tick+10_000);
+ const first=await (await command('gem-mine.collect',{id})).json();
+ assert.equal(first.result.earned,1);
+ assert.equal(first.wallet.gems,3.5);
+ assert.equal(gemMinePlan(first.wallet.kingdom.gemMines[0]).progress,10_000);
+ t.mock.timers.setTime(start+2*tick+50_000);
+ const stored=await (await command('building.store',{id})).json();
+ assert.equal(stored.wallet.kingdom.storage[0].storedGems,1);
+ assert.equal(kingdomStats(stored.wallet).houseLots,0);
+ assert.equal((await command('gem-mine',spot)).status,400);
+ assert.equal((await command('gem-mine.collect',{id})).status,400);
+ const restoredAt=start+45*tick;
+ t.mock.timers.setTime(restoredAt);
+ const restored=await (await command('building.place',{...spot,id,mode:'restore'})).json();
+ assert.deepEqual(gemMinePlan(restored.result.building),{stored:1,capacity:20,progress:50_000});
+ const moved=await (await command('building.place',{...spot,x:-8,id,mode:'move'})).json();
+ assert.equal(moved.result.building.collectedAt,restoredAt);
+ const {kingdom}=await (await f.call('/api/players?player='+owner.id+'&view=kingdom',viewer)).json();
+ assert.deepEqual(kingdom.buildings,[{id,x:-8,z:7,rotation:0,kind:'gem-mine',level:1}]);
+ t.mock.timers.setTime(restoredAt+50*tick);
+ assert.equal(gemMinePlan(moved.result.building).stored,20);
+ assert.equal((await f.wallet(owner)).gems,3.5);
+ const receipt=crypto.randomUUID(),takes=await Promise.all([command('gem-mine.collect',{id},receipt),command('gem-mine.collect',{id},receipt)]);
+ for(const response of takes){
+  assert.equal(response.status,200);
+  const {wallet,result}=await response.json();
+  assert.equal(wallet.gems,23.5);
+  assert.equal(result.earned,20);
+  assert.deepEqual(gemMinePlan(wallet.kingdom.gemMines[0]),{stored:0,capacity:20,progress:0});
+ }
+ assert.equal((await command('gem-mine.collect',{id})).status,400);
 });
 
 test('LIMBO unlocks a verified eight-key shuffle and pays 100 XP exactly once per clear',async t=>{

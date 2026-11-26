@@ -13,7 +13,7 @@ import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnloc
 import {replayDrill,replayRemix} from './game-replay.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildForge,buildHouse,clearKingdomTree,collectForge,expandLand,placeKingdomBuilding,settleForgeUpgrades,settleHouseUpgrades,settleTower,skipTower,storeKingdomBuilding,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
+import {buildForge,buildGemMine,buildHouse,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleForgeUpgrades,settleHouseUpgrades,settleTower,skipTower,storeKingdomBuilding,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
 import {validTradeMinimum} from './trade-rules.js';
 
 export function newWallet() {
@@ -30,6 +30,7 @@ const gatedActions={
  'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
  'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom',
+ 'kingdom.gem-mine':'kingdom','kingdom.gem-mine.collect':'kingdom',
  'kingdom.house.upgrade':'kingdom','kingdom.forge.upgrade':'kingdom','kingdom.construction.finish':'kingdom',
  'kingdom.tower.skip':'kingdom','kingdom.building.store':'kingdom','kingdom.building.place':'kingdom','kingdom.tree.clear':'kingdom',
  'trade.settings':'trading',
@@ -165,9 +166,11 @@ const rules={
   return {house};
  }},
  'kingdom.forge':{run:({w,args,now})=>({forge:buildForge(w,args,now)})},
+ 'kingdom.gem-mine':{run:({w,args,now})=>({building:buildGemMine(w,args,now)})},
  'kingdom.house.upgrade':{run:({w,args,now})=>({house:upgradeHouse(w,args.id,args.level,now)})},
  'kingdom.forge.upgrade':{run:({w,args,now})=>({forge:upgradeForge(w,args.id,args.level,now)})},
  'kingdom.collect':{run:({w,args,now})=>collectForge(w,args.id,now)},
+ 'kingdom.gem-mine.collect':{run:({w,args,now})=>collectGemMine(w,args.id,now)},
  'kingdom.expand':{run:({w,args})=>expandLand(w,args.level)},
  'kingdom.building.store':{run:({w,args,now})=>storeKingdomBuilding(w,args.id,now)},
  'kingdom.building.place':{run:({w,args,now})=>placeKingdomBuilding(w,args,now)},

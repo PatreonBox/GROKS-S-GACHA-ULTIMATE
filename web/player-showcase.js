@@ -4,7 +4,7 @@ import {impossibleCover} from './impossible-cards.js';
 import {moveArt} from './combat-arts.js';
 import {cubeCatalog,equippedCube} from './cube-catalog.js';
 import {ico} from './icons.js';
-import {buildingSpecs,forgePlan,houseUpgrade,kingdomDaylight} from './kingdom-rules.js';
+import {buildingSpecs,forgePlan,gemMine,houseUpgrade,kingdomDaylight} from './kingdom-rules.js';
 
 const number=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const skins=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
@@ -44,7 +44,7 @@ export async function visitKingdom(root,plot,alias){
  scene.className='profile-visit';
  scene.innerHTML='<div class="profile-visit-summary"><h3>'+escape(alias)+'’s Kingdom</h3>'+
   '<span><img src="/assets/gd-star.png" alt=""> <b data-visit-stars></b></span>'+
-  '<span>'+number.format(plot.buildings.length+1)+' buildings</span><span>'+plot.visitors.length+' visitors</span></div>'+
+  '<span>'+number.format(plot.buildings.length+1)+' buildings</span><span>'+(plot.visitors.length+1)+(plot.visitors.length?' residents':' resident')+'</span></div>'+
   '<div class="kingdom-frame"><canvas tabindex="0" aria-label="Visit '+escape(alias)+'’s Kingdom"></canvas>'+
   '<div class="kingdom-plot-stats"><span class="kingdom-daylight"><i aria-hidden="true"></i><b></b></span></div>'+
   '<p class="profile-visit-selection" aria-live="polite"></p>'+
@@ -71,9 +71,10 @@ export async function visitKingdom(root,plot,alias){
   selected=id;
   const building=items.get(id),tower=id==='tower';
   const upgrading=tower?construction:building?.upgradeEndsAt;
+  const mine=building?.kind==='gem-mine';
   const extras=building?.kind==='forge'?' · '+forgePlan(building,clock()).rate+' Mana/s':
-   upgrading?' · Upgrading to Level 2':'';
-  selection.textContent=name(id)+(tower||building?' · Level '+(tower?towerLevel:building.level):'')+extras;
+   mine?' · 1 gem every '+gemMine.interval/60_000+' min':upgrading?' · Upgrading to Level 2':'';
+  selection.textContent=name(id)+(tower||building&&!mine?' · Level '+(tower?towerLevel:building.level):'')+extras;
   world.select(id);
  }
  const world=createKingdomWorld({canvas,cube,clock,onSelect:inspect,onHover(id,point){

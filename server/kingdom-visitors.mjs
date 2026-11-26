@@ -1,4 +1,4 @@
-import {kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {kingdomHouses,kingdomRating,visitorSlots} from '../web/kingdom-rules.js';
 
 // Names and skins are only sent to players whose Kingdom meets the slot's rating.
 const creators=[
@@ -14,41 +14,58 @@ const creators=[
  ['serponge','Serponge','SerpongeDash','67.4K','402']
 ];
 
-const visitWindow=300_000,visitLength=120_000;
+const visitWindow=300_000;
 function hash(value){
  let result=2166136261;
  for(const char of value)result=Math.imul(result^char.charCodeAt(0),16777619);
  return result>>>0;
 }
 
-export function kingdomVisitors(wallet,now=Date.now()){
- const {stars,houses}=kingdomStats(wallet,now);
+function firstArrival(seed,slot,start){
+ for(let cycle=0;cycle<=5;cycle++){
+  const key=seed+':'+slot+':'+cycle;
+  if((slot===0&&cycle===0)||cycle===5||hash(key)%100<55)
+   return start+cycle*visitWindow+60_000+hash(key+':time')%120_001;
+ }
+}
+
+function arrivalSchedule(wallet,now,newEligibility){
+ const houses=kingdomHouses(wallet),prior=wallet.kingdom?.visitorSchedule;
+ const schedule=prior?.slice()??[],stars=kingdomRating(houses,now);
  const residences=houses.toSorted((a,b)=>(a.builtAt||0)-(b.builtAt||0));
  const seed=residences[0]?.id||'kingdom';
- const visitors=[];
- let nextAt=null;
- const schedule=at=>{if(at>now&&(nextAt===null||at<nextAt))nextAt=at;};
  for(const {slot,stars:required} of visitorSlots){
-  if(stars<required)continue;
-  const home=residences[Math.min(residences.length-1,Math.ceil(required/.30-1e-6)-1)];
-  const origin=home?.builtAt||0,window=Math.max(0,Math.floor((now-origin)/visitWindow));
-  const visit=cycle=>{
-   const key=seed+':'+slot+':'+cycle;
-   const arrival=origin+cycle*visitWindow+60_000+hash(key+':time')%120_001;
-   return {arrival,leaves:arrival+visitLength,chosen:(slot===0&&cycle===0)||cycle===5||hash(key)%100<55};
-  };
-  // The initial streak discovers visitors eventually even if a later window is empty.
-  const fixed=visit(window),upcoming=visit(window+1);
-  if(fixed.chosen){schedule(fixed.arrival);schedule(fixed.leaves);}
-  schedule(upcoming.chosen?upcoming.arrival:origin+(window+2)*visitWindow);
-  const visiting=fixed.chosen&&now>=fixed.arrival&&now<fixed.leaves;
-  let discovered=visiting||!home?.builtAt;
-  for(let i=0;!discovered&&i<=Math.min(window,16);i++){
-   const prior=visit(i);discovered=prior.chosen&&now>=prior.arrival;
+  const known=schedule[slot];
+  // A completed arrival remains in the save even if a house is later stored.
+  if(known!=null&&(known<=now||stars>=required))continue;
+  if(stars<required){
+   if(known!=null)schedule[slot]=null;
+   continue;
   }
-  if(!discovered)continue;
+  if(prior||newEligibility){schedule[slot]=firstArrival(seed,slot,now);continue;}
+  // Carry over arrivals from the old visiting windows for existing Kingdoms.
+  const home=residences[Math.min(residences.length-1,Math.ceil(required/.30-1e-6)-1)];
+  schedule[slot]=home.builtAt?firstArrival(seed,slot,home.builtAt):0;
+ }
+ return schedule;
+}
+
+export function settleKingdomVisitors(wallet,now,newEligibility=false){
+ if(wallet.kingdom)wallet.kingdom.visitorSchedule=arrivalSchedule(wallet,now,newEligibility);
+}
+
+export function kingdomVisitors(wallet,now=Date.now()){
+ const schedule=arrivalSchedule(wallet,now,false),visitors=[];
+ let nextAt=null;
+ for(const {slot} of visitorSlots){
+  const arrivedAt=schedule[slot];
+  if(arrivedAt==null)continue;
+  if(arrivedAt>now){
+   if(nextAt===null||arrivedAt<nextAt)nextAt=arrivedAt;
+   continue;
+  }
   const [id,name,channel,audience,cube]=creators[slot];
-  visitors.push({slot,id,name,channel,audience,cube,visiting});
+  visitors.push({slot,id,name,channel,audience,cube,arrivedAt,visiting:true});
  }
  return {discoveredVisitors:visitors,visitorRefreshAt:nextAt};
 }
