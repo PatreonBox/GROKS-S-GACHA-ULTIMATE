@@ -270,8 +270,8 @@ test('ranked profiles respect privacy and Trading is gated at Level 15',async()=
  assert.equal(stats.level,15);
  assert.equal(stats.copies,2);
  assert.equal((await f.call('/api/players?view=trading',viewer)).status,403);
- const {rows}=await (await f.call('/api/players?view=trading',owner)).json();
- assert.deepEqual(rows.map(row=>row.id),[owner.id]);
+ const oldTrading=await (await f.call('/api/players?view=trading',owner)).json();
+ assert.deepEqual(oldTrading,{rows:[],notice:'Only level 15+ people can trade.'});
  assert.equal((await f.command(owner,'profile.privacy',{hidden:'yes'})).status,400);
  assert.equal((await f.command(owner,'profile.privacy',{hidden:true})).status,200);
  assert.equal((await profile(viewer)).status,403);

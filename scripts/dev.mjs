@@ -22,7 +22,7 @@ http.createServer(async(req,res)=>{
  try{
   const host=req.headers.host||('127.0.0.1:'+port);
   const u=new URL(req.url,'http://'+host);
-  if(u.pathname==='/api/game'||u.pathname==='/api/game/transfer'||u.pathname==='/api/players'){
+  if(['/api/game','/api/game/transfer','/api/players','/api/trades','/api/admin/players'].includes(u.pathname)){
    const chunks=[];let size=0;
    for await(const chunk of req){
     size+=chunk.length;

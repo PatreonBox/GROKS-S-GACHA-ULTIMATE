@@ -18,6 +18,7 @@ import {createCubeShop} from './cube-shop.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {createCoinMine} from './coin-mine.js';
 import {createKingdom} from './kingdom.js';
+import {createTrading} from './trading.js';
 import {packPlayerXp,packXpAllowance,packXpLimit,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels} from './level-access.js';
 import {lockAttributes,lockBadge,lockedPage,setLevelLock} from './level-lock.js';
@@ -49,7 +50,7 @@ const plural=n=>n===1?'pack':'packs';
 const visiblePackLimit=10;
 const mineCheckpointMs=20000;
 
-export function createPackRoom({localCover,openLevel,announce,onGuide,showTrading,sound,initialWallet}){
+export function createPackRoom({localCover,openLevel,announce,onGuide,sound,initialWallet}){
  const rewards=createRewardFlight(sound,headerAmount);
  const root=byId('arcade'),reveal=byId('packReveal'),code=byId('coinCode');
  let view=null,wallet=null,selected=packs[0],quantity=1,busy=false,version=0,upgrading=false;
@@ -86,10 +87,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
  cubeRoot.id='cubeShop';
  const cubes=createCubeShop({root:cubeRoot,applyWallet,sound,announce});
  const kingdom=createKingdom(byId('kingdomRoom'),sound,applyWallet,rewards);
+ const trade=createTrading(root,{coverSource,syncWallet:sync});
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
  const locked=id=>playerLevel<featureLevel(id);
  const kingdomTab=byId('kingdomNew').parentElement;
- const tradingTab=byId('tradingTab');
  kingdomTab.insertAdjacentHTML('beforeend',lockBadge(featureLevel('kingdom'),false));
  const markKingdomNav=()=>{
   const badge=byId('kingdomNew'),visited=seenGuide(newAreas.kingdom)||locked('kingdom');
@@ -105,7 +106,6 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
   playerLevel=playerProgress(w.playerXp).level;
   if(first||previousLevel!==playerLevel){
    markKingdomNav();
-   setLevelLock(tradingTab,featureLevel('trading'),playerLevel);
    setLevelLock(byId('walletLink'),featureLevel('mine'),playerLevel);
    setLevelLock(byId('gemLink'),featureLevel('upgrades'),playerLevel);
    if(view&&routeLocked!==locked(view))page(view,routePack);
@@ -166,6 +166,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
  onOtherTab(event=>{
   sync();
   if(event.data==='mine')return;
+  if(event.data==='trade')trade.refresh();
   if(view==='collection')loadCollection();
   if(!routeLocked&&['merge','index','vault'].includes(view))readWallet().then(w=>{
    if(!routeLocked&&['merge','index','vault'].includes(view))stations.show(view,w);
@@ -240,7 +241,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
  }
  function page(next,packId){
   if(view!==next){stopTimers();rewards.clear()}
-  stations.leave();coinMine.leave();version++;view=next;routePack=packId;
+  stations.leave();coinMine.leave();trade.leave();version++;view=next;routePack=packId;
   routeLocked=locked(next);
   const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom',trading=next==='trading';
   root.hidden=!view||!routeLocked&&(combat||home);
@@ -249,19 +250,15 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,showTradin
   cubes.show(false);kingdom.show(home&&!routeLocked);
   if(home&&!routeLocked){markGuide(newAreas.kingdom);markKingdomNav()}
   if(reveal.open)reveal.close();
+  if(trading){trade.show(routeLocked);return routeLocked;}
   if(routeLocked){
-   const heading=combat?'Battle mode':home?'Kingdom':trading?'Trading':'Gacha';
-   root.innerHTML='<div class="arc-heading"><h1>'+heading+'</h1>'+(!combat&&!home&&!trading?'<div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div>':'')+
+   const heading=combat?'Battle mode':home?'Kingdom':'Gacha';
+   root.innerHTML='<div class="arc-heading"><h1>'+heading+'</h1>'+(!combat&&!home?'<div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div>':'')+
     '</div>'+lockedPage(features[next],playerLevel,combat?'#battle':'#gacha');
    updateSectionAlerts();
    return true;
   }
   if(!view||combat||home)return;
-  if(trading){
-   root.innerHTML='<div class="player-ranks-heading"><div><h1>Trading</h1><p>Players who have reached Level '+featureLevel('trading')+'</p></div></div><div class="player-ranks-table" data-trading-players aria-live="polite"></div>';
-   showTrading(root.querySelector('[data-trading-players]'));
-   return;
-  }
   sound.preload();
   const destination=next==='vault'?'index':next;
   if(tabLinks.some(([key])=>key===destination))markGuide(tabVisit(destination));

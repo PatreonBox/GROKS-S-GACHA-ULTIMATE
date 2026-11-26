@@ -9,7 +9,7 @@ export const features={
  cubes:{level:8,name:'Cube shop',href:'#gacha/cubes',icon:'box',detail:'Equip a new cube to roam your Kingdom.'},
  towerExpansion:{level:10,name:'Tower expansion',href:'#kingdom',icon:'tower',detail:'Expand your tower to Levels 3 and 4 as you fill its lots.'},
  upgrades:{level:11,name:'Gem Upgrades',href:'#gacha/upgrades',icon:'spark',detail:'Improve your card luck and bonus card chance.'},
- trading:{level:15,name:'Trading',href:'#trading',icon:'exchange',detail:'Browse players at Level 15 and above.'},
+ trading:{level:15,name:'Trading',href:'#trading',icon:'exchange',detail:'Find players and exchange cards at Level 15.'},
  towerFinale:{level:15,name:'Tower Level 5',href:'#kingdom',icon:'tower',detail:'Open the last house lots and attract the Legendary visitor.'}
 };
 export const packLevels={common:0,uncommon:0,rare:2,'super-rare':5,epic:8,legendary:14,mythic:20,godly:30};

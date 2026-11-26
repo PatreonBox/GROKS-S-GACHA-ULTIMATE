@@ -13,6 +13,7 @@ import {replayDrill,replayRemix} from './game-replay.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
 import {buildForge,buildHouse,collectForge,expandLand,settleHouseUpgrades,settleTower,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
+import {validTradeMinimum} from './trade-rules.js';
 
 export function newWallet() {
  return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
@@ -29,6 +30,7 @@ const gatedActions={
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
  'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom',
  'kingdom.house.upgrade':'kingdom','kingdom.forge.upgrade':'kingdom','kingdom.construction.finish':'kingdom',
+ 'trade.settings':'trading',
  'upgrade.buy':'upgrades','card.feed':'training','drill.begin':'training',
  'card.merge':'merge','remix.begin':'arcade','army.begin':'army'
 };
@@ -170,6 +172,10 @@ const rules={
   const entries=Object.entries(args);
   requireRule(entries.length&&entries.every(([key,value])=>Object.hasOwn(setting,key)&&typeof value==='boolean'),'Choose a profile visibility setting.');
   for(const [key,value] of entries)w[setting[key]]=value;
+ }},
+ 'trade.settings':{run:({w,args})=>{
+  requireRule(typeof args.enabled==='boolean'&&validTradeMinimum(args.minimum),'Choose valid Trade settings.');
+  w.trade={enabled:args.enabled,minimum:args.minimum};
  }},
  'kingdom.tower':{run:({w,args,now})=>{
   const plan=towerPlan(w,now);

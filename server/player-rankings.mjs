@@ -18,7 +18,7 @@ export const powerIsCurrent=record=>record.power_version===combatStatsVersion&&r
 export const rankingVersion=combatStatsVersion;
 
 const visibility=`
- p.leaderboard_excluded=0 AND p.owner<>? AND (?=0 OR p.owner LIKE 'discord:%')
+ p.banned_at IS NULL AND p.leaderboard_excluded=0 AND p.owner<>? AND (?=0 OR p.owner LIKE 'discord:%')
  AND json_extract(p.wallet,'$.legacyTransfer.id') IS NULL`;
 
 async function fillPlayerPower(db,adminOwner,discordOnly,inventory){
@@ -70,9 +70,7 @@ export async function rankedPlayer(db,options,target){
  return match?rankedRow(match):null;
 }
 
-export async function playerStandings(db,options,minXp){
- const eligible=Number.isFinite(minXp);
- const rows=eligible?await selectRanked(db,options,' SELECT *,player_id=? AS mine FROM ranked WHERE xp>=? ORDER BY place LIMIT 50',options.playerId,minXp):
-  await selectRanked(db,options,' SELECT *,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place',options.playerId,options.playerId);
+export async function playerStandings(db,options){
+ const rows=await selectRanked(db,options,' SELECT *,player_id=? AS mine FROM ranked WHERE place<=50 OR player_id=? ORDER BY place',options.playerId,options.playerId);
  return rows.map(rankedRow);
 }

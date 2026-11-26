@@ -13,6 +13,10 @@ let ordered = Promise.resolve();
 async function exchange(url, options) {
  const response = await fetch(url, {cache:'no-store', credentials:'same-origin', ...options});
  const result = await response.json().catch(() => ({}));
+ if(result.banned&&!response.ok){
+  opening=null;
+  renderAccount({signedIn:true,banned:true,error:result.error,accountProvider:discordRequired?'discord':null,requiresSignIn:discordRequired});
+ }
  if(response.status===401&&discordRequired){
   opening=null;
   document.getElementById('gameAuthError').textContent='Your session has expired. Sign in again to continue.';
@@ -39,9 +43,11 @@ export function gameSession() {
 export async function gameRead(view) {
  const initial = !opening;
  const session = await gameSession();
+ if(session.banned)throw Error(session.error);
  if(session.requiresSignIn&&!session.signedIn)throw Error('Sign in with Discord to play.');
  const data = initial && view === 'wallet' ? session : await exchange('/api/game?view=' + view);
  if (view === 'wallet') renderAccount(data);
+ if(data.banned)throw Error(data.error);
  return data[view];
 }
 
@@ -63,6 +69,7 @@ function queue(run) {
 export function gameCommand(action, args = {}, notice = 'changed') {
  return queue(async()=>{
   const session=await gameSession();
+  if(session.banned)throw Error(session.error);
   if(session.requiresSignIn&&!session.signedIn)throw Error('Sign in with Discord to play.');
   const data=await submit('/api/game',{action,args,requestId:crypto.randomUUID()});
   renderAccount(data);
@@ -71,6 +78,20 @@ export function gameCommand(action, args = {}, notice = 'changed') {
  });
 }
 export function onOtherTab(fn) { updates?.addEventListener('message', fn); }
+
+export function tradeRead(view,params={}){
+ const query=new URLSearchParams({view,...params});
+ return exchange('/api/trades?'+query,{signal:AbortSignal.timeout(15000)});
+}
+export function tradeCommand(action,args){
+ return queue(async()=>{
+  const data=await submit('/api/trades',{action,args,requestId:crypto.randomUUID()});
+  updates?.postMessage('trade');
+  return data;
+ });
+}
+const searchAdminPlayers=term=>exchange('/api/admin/players?'+new URLSearchParams({q:term}),{signal:AbortSignal.timeout(15000)});
+const runPlayerAdmin=(id,action,amount)=>queue(()=>submit('/api/admin/players',{id,action,amount,requestId:crypto.randomUUID()}));
 
 function saveLinks(provider) {
  const link=document.getElementById('gameAccount');
@@ -88,14 +109,19 @@ function refreshDiscordProfile(automatic=false) {
  form.submit();
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error}) {
  const account=document.getElementById('gameAccount');
  const logout=document.getElementById('gameSignOut');
  const transfer=document.getElementById('gameTransfer');
  const status=document.getElementById('gameSaveNotice');
- const locked=requiresSignIn&&!signedIn;
+ const locked=banned||requiresSignIn&&!signedIn;
  discordRequired=Boolean(requiresSignIn);
- canAdmin=Boolean(signedIn&&admin);
+ canAdmin=Boolean(signedIn&&admin&&!banned);
+ document.getElementById('openAdminTools').hidden=!canAdmin;
+ document.getElementById('gameBannedLogout').hidden=!(banned&&accountProvider==='discord');
+ document.getElementById('gameGateIntro').hidden=Boolean(banned);
+ document.getElementById('gameSignInGuide').hidden=Boolean(banned);
+ if(banned)document.getElementById('gameAuthError').textContent=error;
  document.body.dataset.account=locked?'locked':'ready';
  document.getElementById('accountGate').hidden=!locked;
  document.getElementById('gameMain').hidden=locked;
@@ -104,12 +130,12 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  if(locked)for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  renderPlayerProgress(locked?null:wallet,saveRevision);
  if(account){
-  account.hidden=!locked;
+  account.hidden=!locked||Boolean(banned);
   account.dataset.provider=accountProvider||'';
   saveLinks(accountProvider);
  }
  if(logout)logout.hidden=accountProvider!=='discord'||!signedIn;
- renderPlayerMenu(accountProvider==='discord'&&signedIn,playerProfile);
+ renderPlayerMenu(accountProvider==='discord'&&signedIn&&!banned,playerProfile);
  if(!transfer||!wallet)return;
  const receipt=wallet.legacyTransfer;
  if(receipt)transfer.hidden=true;
@@ -131,7 +157,7 @@ if (typeof document !== 'undefined') {
    const {profileHidden,shareKingdom,shareBestCard}=await gameRead('wallet');
    return {hidden:Boolean(profileHidden),shareKingdom:shareKingdom!==false,shareBestCard:shareBestCard!==false};
   },savePrivacy:settings=>gameCommand('profile.privacy',settings)});
- setupAdminTools({canOpen:()=>canAdmin,loadWallet:()=>gameRead('wallet'),run:async(action,args)=>{
+ setupAdminTools({canOpen:()=>canAdmin,loadWallet:()=>gameRead('wallet'),searchPlayers:searchAdminPlayers,moderate:runPlayerAdmin,run:async(action,args)=>{
   const data=await gameCommand(action,args);
   if(action==='admin.adjust')document.dispatchEvent(new CustomEvent('gdlb-admin-wallet',{detail:data.wallet}));
   return data;

@@ -49,13 +49,6 @@ export function playerBoard(spotlight,standings,localCover){
    if(request===revision)slot.textContent='Player rankings could not load.';
   }finally{slot.removeAttribute('aria-busy')}
  }
- async function trading(panel){
-  panel.textContent='Loading players…';
-  try{
-   const {rows}=await getPlayers('?view=trading');
-   if(panel.isConnected)panel.innerHTML=rows.length?table(rows):'<p class="rank-empty">Players will appear here when they reach Level 15.</p>';
-  }catch(error){if(panel.isConnected)panel.textContent=error.message}
- }
  function drawProfile(row,stats,showcases){
   profile=row;
   const tabs=[['stats','Stats'],...(showcases.kingdom?[['kingdom','Visit Kingdom']]:[]),
@@ -137,7 +130,7 @@ export function playerBoard(spotlight,standings,localCover){
   }catch(error){if(request===profileRevision&&dialog.open)profileBody.textContent=error.message}
  });
  dialog.querySelector('[data-close-ranked-profile]').onclick=()=>dialog.close();
- return {trading,show(mode){
+ return {show(mode){
   standings.hidden=mode!=='full';
   if(mode===view)return;
   view=mode;

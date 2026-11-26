@@ -12,6 +12,7 @@ import {setGuideProgress} from './guide-progress.js';
 import {playerBoard} from './player-board.js';
 import {sectionGuideId} from './section-guides.js';
 import {setupLevelUps} from './level-up.js';
+import {levelMarketDetails} from './trade-card-view.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=n=>n==null?'—':Number(n).toLocaleString('en-US');
@@ -223,12 +224,13 @@ function showDetails(id,uuid){
  else if(tierLevel||r[15])stats.push(['GDDL tier',r[11]!=null?formatRating(r[11]):'Unscored']);
  if(meta?.rankSource&&r[12]>0)stats.push([meta.rankSource+' rank','#'+num(r[12])]);
  $('detail').innerHTML='<div class="detail-cover">'+cover(id,true)+'</div><div class="modalbody"><div class="sectionline"><span></span>LEVEL DETAILS</div><h2 id="modalTitle">'+esc(r[1])+'</h2><div class="modalmeta">'+badge(r[6])+'<span>by '+esc(author(r))+'</span></div>'+(r[14]?'<p class="rank-note">'+esc(r[14])+'</p>':'')+'<div class="stats">'+stats.map(([k,v])=>'<div class="stat"><small>'+k+'</small><strong>'+(k==='Stars'||k==='Moons'?ratingLabel(r[7],k==='Moons'):esc(v))+'</strong></div>').join('')+'</div>'+(d?.tags?.length?'<div class="tags">'+d.tags.slice(0,8).map(x=>'<span>'+esc(x)+'</span>').join('')+'</div>':'')+'<div class="detailactions"><button class="primary" id="copyId">'+ico('copy')+'Copy level ID</button><button class="outline" data-save="'+id+'"></button><a class="outline" href="https://history.geometrydash.eu/level/'+id+'" target="_blank" rel="noopener">GDHistory '+ico('external')+'</a>'+(meta?.rankUrl&&r[12]>0?'<a class="outline" href="'+esc(meta.rankUrl)+'" target="_blank" rel="noopener">'+esc(meta.rankSource)+' '+ico('external')+'</a>':'')+(r[13]?'<a class="outline" href="https://www.youtube.com/watch?v='+esc(r[13])+'" target="_blank" rel="noopener">Watch verification '+ico('external')+'</a>':'')+'</div></div>';refreshSaves();openModal();
+ if(cardTiers.includes(r[6]))levelMarketDetails($('detail'),id);
  if(cardTiers.includes(r[6]))Promise.all([readWallet(),r[6]==='Extreme Demon'?cardPool(r[6]).catch(()=>[]):[]]).then(([w,extremes])=>{
   if(!dlg.open||currentDetails!==r)return;
   const row=extremes.find(x=>x[0]===id)||r;
   const base=statsFor(row),s=statsFor(row,w.training?.[id]),el=document.createElement('section');el.className='level-combat-stats';
   el.innerHTML='<h3>Battle stats'+(s.stage&&row[10]?' · '+s.stage:'')+'</h3><div><span>HP <b>'+cardNum(s.maxHp)+'</b><small>'+cardNum(base.maxHp)+' base · +'+cardNum(s.hpGain)+' trained</small></span><span>Attack <b>'+cardNum(s.attack)+'</b><small>'+cardNum(base.attack)+' base · +'+cardNum(s.attackGain)+' trained</small></span></div>'+(s.stage?'<p class="stat-ceiling">Fully trained · '+cardNum(s.hpCap)+' HP · '+cardNum(s.attackCap)+' ATK</p>':'');
-  $('detail').querySelector('.detailactions')?.before(el);
+  $('detail').querySelector('.level-market-stats')?.before(el);
  }).catch(()=>{});
  $('copyId').onclick=async()=>{try{await navigator.clipboard.writeText(String(id));$('copyId').innerHTML=ico('check')+'Copied'}catch{$('copyId').textContent='Level ID '+id}}
 }
@@ -241,6 +243,7 @@ function showSecretDetails(row){
   '<div class="detailactions"><a class="outline" href="https://impossiblelevels.com/" target="_blank" rel="noopener">Impossible Levels List '+ico('external')+'</a>'+
   (gdId?'<a class="outline" href="https://history.geometrydash.eu/level/'+gdId+'" target="_blank" rel="noopener">Level ID '+gdId+' '+ico('external')+'</a>':'')+'</div></div>';
  openModal();
+ levelMarketDetails($('detail'),id);
  readWallet().then(w=>{
   if(!dlg.open||currentDetails!==row)return;
   const trained=statsFor(row,w.training?.[id]);
@@ -281,7 +284,7 @@ $('pageJump').onsubmit=event=>{
 };
 function changePage(delta){if(delta>0&&!nextPage||page+delta<0)return;if(section==='leaderboard'&&!offline&&delta>0)cursors[page+1]=nextPage;page+=delta;loadPage();if(document.querySelector('.board').getBoundingClientRect().top<0)document.querySelector('.board').scrollIntoView({block:'start'})}
 $('nextPage').onclick=()=>changePage(1);$('prevPage').onclick=()=>changePage(-1);
-document.addEventListener('keydown',e=>{if(e.key==='/'&&!playerRanks()&&!['gacha','battle','kingdom'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!playerRanks()&&!['gacha','battle','kingdom','trading'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
 window.addEventListener('hashchange',()=>seed&&setSection(location.hash.slice(1)));
 async function init(){try{const r=await fetch('/data/start.json');if(!r.ok)throw Error('init');seed=await r.json();localImages=new Set(seed.images);initialRows=seed.top;storeRows(initialRows);storeRows(seed.featured.map(x=>x.row));storeRows([...saved.values()].filter(r=>!rowMap.has(r[0])));featured();refreshSaves();changeLayout(layout==='grid'?'grid':'list');if(!location.hash||location.hash==='#leaderboard'){render(initialRows.slice(0,20),seed.indexed,true,'index');$('retry').hidden=true}setSection(location.hash.slice(1));demons().catch(()=>{})}catch{$('resultMeta').textContent='Could not open the index.';$('results').innerHTML='<button class="outline" id="retryInit">Retry</button>';$('retryInit').onclick=init}}
 async function start(){
@@ -289,14 +292,14 @@ async function start(){
  $('gameGateLoading').hidden=false;
  try{
   const session=await gameSession();
-  if(session.requiresSignIn&&!session.signedIn)return;
+  if(session.banned||session.requiresSignIn&&!session.signedIn)return;
   setGuideProgress(session.wallet.guideSeen,id=>gameCommand('guide.seen',{id},null).catch(()=>{}));
   guides=createSectionGuides($('gameGuide'));
   arcade=createPackRoom({
    sound,initialWallet:session.wallet,
    localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
    openLevel:row=>{storeRows([row]);showDetails(row[0])},
-   announce,onGuide:guides.select,showTrading:ranks.trading,
+   announce,onGuide:guides.select,
   });
   init();
  }catch(error){

@@ -5,29 +5,27 @@ import {mineEarnings,settleMine} from '../web/mine-economy.js';
 import {createMergePlanner,gemTenths} from '../web/card-economy.js';
 import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
 import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,rankingVersion} from './player-rankings.mjs';
-import {playerProgress,playerXpAtLevel} from '../web/player-progression.js';
+import {playerProgress} from '../web/player-progression.js';
 import {featureLevel} from '../web/level-access.js';
+import {tradeLevelNotice} from '../web/trade-rules.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
+import {GameRequestError,one,reject,uuid} from './game-http.mjs';
+import {trading} from './trading.mjs';
+import {playerModeration} from './player-moderation.mjs';
 
 const guestCookie='__Host-gdlb-save';
 const cookieLifetime=60*60*24*365;
 const receiptLifetime=10*60*1000;
 const maxBody=550000;
 const maxTransferBody=2500000;
-const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const encoder=new TextEncoder();
-
-class GameRequestError extends Error {
- constructor(message,status){super(message);this.status=status;}
-}
-const reject=(message,status=400)=>{throw new GameRequestError(message,status);};
+const banMessage='This account is banned from GD Kingdom.';
 const json=(body,status=200,cookie)=>{
  const headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'};
  if(cookie)headers['Set-Cookie']=cookie;
  return Response.json(body,{status,headers});
 };
-const one=async (db,query,...args)=>(await db.prepare(query).bind(...args).all()).results[0];
 const hex=bytes=>Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('');
 const guestOwner=async token=>'guest:'+hex(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(token))));
 
@@ -84,7 +82,7 @@ async function identity(request,db,initial,owner){
 }
 
 async function profile(db,owner,create){
- const query='SELECT player_id,revision,wallet,leaderboard_excluded,collection_power,power_version FROM game_profiles WHERE owner=?';
+ const query='SELECT player_id,owner,revision,wallet,banned_at,leaderboard_excluded,collection_power,power_version FROM game_profiles WHERE owner=?';
  let record=await one(db,query,owner);
  if(record||!create)return record;
  await db.prepare('INSERT OR IGNORE INTO game_profiles(player_id,owner,wallet,updated_at) VALUES(?,?,?,?)')
@@ -131,7 +129,7 @@ async function commit(db,{owner,record,wallet,changes,requestId,result,now,power
  if(changes.size||reset)wallet.cardsRevision=version;
  const statements=[db.prepare(`UPDATE game_profiles SET wallet=?, revision=?, last_request=?,updated_at=?,
   leaderboard_excluded=MAX(leaderboard_excluded,?),collection_power=?,power_version=?,ranking_xp=?
-  WHERE player_id=? AND owner=? AND revision=?`+transferGuard)
+  WHERE player_id=? AND owner=? AND revision=? AND banned_at IS NULL`+transferGuard)
   .bind(JSON.stringify(wallet),version,writeId,now,Number(admin),power,rankingVersion,wallet.playerXp||0,
    id,owner,record.revision,...(transferId?[transferId]:[]))];
  if(reset)statements.push(
@@ -181,12 +179,14 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
  for(let attempt=0;attempt<4;attempt++){
   const record=await profile(db,session.owner,false);
   if(!record)reject('Reload the page to reconnect to your save.',401);
+  if(record.banned_at!==null)reject(banMessage,403,{banned:true});
   const previous=await one(db,'SELECT result FROM game_requests WHERE player_id=? AND request_id=?',record.player_id,requestId);
   let wallet=normalizeWallet(JSON.parse(record.wallet));
   if(previous){
    // The receipt may have committed after the profile read.
    const current=await profile(db,session.owner,false);
    if(!current)reject('Reload the page to reconnect to your save.',401);
+   if(current.banned_at!==null)reject(banMessage,403,{banned:true});
    return {wallet:visibleWallet(JSON.parse(current.wallet)),saveRevision:current.revision,result:JSON.parse(previous.result)};
   }
   const changes=new Map(),now=Date.now();
@@ -226,6 +226,7 @@ async function transferSave(db,session,body,getPool){
  for(let attempt=0;attempt<4;attempt++){
   const record=await profile(db,session.owner,false);
   if(!record)reject('Reload the page to reconnect to your save.',401);
+  if(record.banned_at!==null)reject(banMessage,403,{banned:true});
   const wallet=normalizeWallet(JSON.parse(record.wallet));
   if(wallet.legacyTransfer){
    if(wallet.legacyTransfer.id!==transferId)reject('This online save already has a browser transfer.',409);
@@ -300,6 +301,10 @@ export function gameRoutes(readJson,hasArt){
     if(initial)return json(account);
     reject('Sign in with Discord to play.',401);
    }
+   if(owner&&await one(db,'SELECT 1 FROM game_profiles WHERE owner=? AND banned_at IS NOT NULL',owner)){
+    if(initial)return json({...account,banned:true,error:banMessage});
+    reject(banMessage,403,{banned:true});
+   }
    if(isReport){
     if(!env.discordUser)reject('Sign in to report a bug.',401);
     if(!env.submitBugReport)reject('Bug reports are temporarily unavailable.',503);
@@ -307,6 +312,16 @@ export function gameRoutes(readJson,hasArt){
     return json(body,status);
    }
    const session=await identity(request,db,initial,owner);
+   if(url.pathname==='/api/admin/players'){
+    if(!admin)reject('Admin tools are unavailable for this account.',403);
+    const record=await profile(db,session.owner,false);
+    return json(await playerModeration(db,record,url,request.method==='POST'?await readBody(request,4096):null));
+   }
+   if(url.pathname==='/api/trades'){
+    const record=await profile(db,session.owner,false);
+    return json(await trading(db,record,url,request.method==='POST'?await readBody(request,16000):null,
+     {inventory,getPool,adminOwner,discordOnly:requiresSignIn}));
+   }
    if(url.pathname==='/api/players'){
     const target=url.searchParams.get('player');
     if(target!==null&&request.method==='GET'){
@@ -344,7 +359,7 @@ export function gameRoutes(readJson,hasArt){
    if(view==='profile')return json({profile:await profileStats(db,record,await getCollectibleIds(),{adminOwner,discordOnly:requiresSignIn,admin})});
    reject('Unknown save view.');
   }catch(error){
-   if(error instanceof GameRequestError)return json({error:error.message},error.status);
+   if(error instanceof GameRequestError)return json({error:error.message,...error.details},error.status);
    console.error('Game API failed:',error.message);
    return json({error:'The game server could not save this change. Try again.'},503);
   }
@@ -359,9 +374,8 @@ async function standings(request,db,session,accountSignIn,adminOwner,discordOnly
  const canPost=Boolean(record&&!privateProfile&&!legacyProgress&&(session.signedIn||!accountSignIn));
  if(trading){
   const level=featureLevel('trading');
-  if(playerProgress(wallet?.playerXp).level<level)reject('Reach Level '+level+' to unlock Trading.',403);
-  const rows=await playerStandings(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record.player_id,inventory},playerXpAtLevel(level));
-  return json({rows});
+  if(playerProgress(wallet?.playerXp).level<level)reject(tradeLevelNotice,403);
+  return json({rows:[],notice:tradeLevelNotice});
  }
  if(request.method==='POST'){
   if(privateProfile)reject('This profile is excluded from public player rankings.',403);
@@ -372,10 +386,11 @@ async function standings(request,db,session,accountSignIn,adminOwner,discordOnly
   const best=wallet?.arenaBest;
   if(!best)reject('Win an online arena battle before posting a score.');
   await db.prepare(`INSERT INTO game_scores(player_id,alias,tier,survivors,turns,score,posted_at)
-   VALUES(?,?,?,?,?,?,?) ON CONFLICT(player_id) DO UPDATE SET
+   SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM game_profiles WHERE player_id=? AND banned_at IS NULL)
+   ON CONFLICT(player_id) DO UPDATE SET
    alias=excluded.alias,tier=excluded.tier,survivors=excluded.survivors,turns=excluded.turns,
    score=excluded.score,posted_at=CASE WHEN excluded.score>game_scores.score THEN excluded.posted_at ELSE game_scores.posted_at END
-   WHERE excluded.score>=game_scores.score`).bind(record.player_id,alias.trim(),best.tier,best.survivors,best.turns,best.score,Date.now()).run();
+   WHERE excluded.score>=game_scores.score`).bind(record.player_id,alias.trim(),best.tier,best.survivors,best.turns,best.score,Date.now(),record.player_id).run();
  }
  const rows=await playerStandings(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record?.player_id||'',inventory});
  return json({rows,signedIn:session.signedIn,canPost,legacyProgress,privateProfile});
