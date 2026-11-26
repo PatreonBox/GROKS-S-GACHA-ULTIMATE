@@ -435,4 +435,5 @@ export async function finishDrill(token,proof){
  return {wallet,...result};
 }
 export const startRemix = async id => (await gameCommand('remix.begin',{id},null)).result;
-export const recordRemix = (token,proof) => walletFrom('remix.finish',{token,proof});
+export const startLimboFinale = async(token,proof) => (await gameCommand('remix.finale',{token,proof},null)).result;
+export const recordRemix = (token,proof) => gameCommand('remix.finish',{token,proof});

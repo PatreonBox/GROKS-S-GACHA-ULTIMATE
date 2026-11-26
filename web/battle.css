@@ -165,3 +165,20 @@ body:has(#battleRoom:not([hidden]) .live-arena)>:is(header,footer){display:none}
 @media(max-width:540px){.feed-form{grid-template-columns:minmax(0,1fr) minmax(104px,.6fr)}.feed-form>button{grid-column:1/-1}.feed-head h3{font-size:24px}}
 
 .gym-kicker.training-tier{display:inline-flex;align-items:center;gap:7px}.training-tier img{width:22px;height:22px;object-fit:contain}
+
+.limbo-finale{position:absolute;inset:0;z-index:3;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:7px;padding:clamp(10px,3vw,24px);background:radial-gradient(ellipse at 50% 41%,#332560,#10132b 72%);color:#f8eeff}
+.limbo-finale-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.limbo-finale-heading p{margin:0;color:#a9a6ec;font-size:.7rem;font-weight:800;letter-spacing:.12em}
+.limbo-finale-heading h3{margin:3px 0 0;font:800 clamp(1.2rem,4vw,2rem)/1 Cond,sans-serif}
+.limbo-finale-heading b{background:#28274e;border:1px solid #65599c;border-radius:6px;padding:5px 8px;font-size:.77rem}
+.limbo-key-grid{position:relative;touch-action:none;min-height:120px;max-height:340px;width:min(100%,620px);margin:auto;align-self:stretch;height:100%;border:1px solid #afa7fa38;border-radius:10px;background:#1313279e;isolation:isolate}
+.limbo-key,.limbo-choice{position:absolute;width:25%;height:50%;top:calc(50%*var(--row));left:calc(25%*var(--column));display:grid;place-items:center}
+.limbo-key{z-index:2;pointer-events:none;color:var(--key-color)}
+.limbo-key svg{width:min(60%,72px);height:min(73%,72px);fill:currentColor;fill-rule:evenodd;stroke:#efebff80;stroke-width:1px;filter:drop-shadow(0 0 8px currentColor)}
+.limbo-finale[data-phase=shuffle] .limbo-key,.limbo-finale[data-phase=choose] .limbo-key{color:#b8aeed}
+.limbo-finale:not([data-phase]) .limbo-key.is-green svg{filter:drop-shadow(0 0 12px currentColor) brightness(1.2)}
+.limbo-choice{color:transparent;border:1px solid #bba3ed20;background:#211b3d29;font-size:.76rem;line-height:1;text-align:right;align-items:end;justify-items:end;padding:7px;border-radius:6px}
+.limbo-choice:not(:disabled){color:#d4c5ec}
+.limbo-choice:not(:disabled):is(:hover,:focus-visible,[data-hover]){background:#4f3a7a;outline:2px solid #cab6ff;outline-offset:-2px}
+.limbo-choice[data-picked=true]{background:#822c4d88}.limbo-choice[data-answer=true]{background:#357343a0;outline:2px solid #a7f68e;outline-offset:-2px}
+.limbo-cue{text-align:center;margin:0;color:#ddd3f4;font-size:.82rem}

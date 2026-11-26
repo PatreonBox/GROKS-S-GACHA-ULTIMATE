@@ -1,4 +1,5 @@
 export const features={
+ progression:{level:1,name:'Progression',href:'#progression',icon:'crown',detail:'Track your player milestones and badges.'},
  mine:{level:3,name:'Coin mine',href:'#gacha/mine',icon:'mine',detail:'Tap for coins and build machines for steady income.'},
  training:{level:3,name:'Training zone',href:'#battle/training',icon:'spark',detail:'Run drills and strengthen your cards.'},
  arcade:{level:4,name:'Meme levels',href:'#battle/arcade',icon:'flame',detail:'Play short Geometry Dash challenges.'},
@@ -21,6 +22,7 @@ const milestones=[
  }))
 ].sort((a,b)=>a.level-b.level);
 export const featureLevel=id=>Object.hasOwn(features,id)?features[id].level:0;
+export const nextUnlocks=(level,count=4)=>milestones.filter(item=>item.level>level).slice(0,count);
 export const unlockedBetween=(from,to)=>milestones.filter(item=>item.level>from&&item.level<=to);
 export const towerPlayerLevel=target=>target===5?features.towerFinale.level:target>=3?features.towerExpansion.level:features.kingdom.level;
 export const levelCue=(from,to)=>Math.floor(to/5)>Math.floor(from/5)?'levelMilestone':to-from>1?'levelMulti':'levelSingle';

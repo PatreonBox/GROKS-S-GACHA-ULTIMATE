@@ -5,7 +5,7 @@ export const tradeLevel=featureLevel('trading');
 export const tradeLevelNotice='Only level '+tradeLevel+'+ people can trade.';
 export const tradeCardLimit=20;
 export const marketDays=30;
-export const marketMinPairs=3;
+export const marketMinPairs=5;
 
 export const validTradeMinimum=value=>Number.isInteger(value)&&value>=0&&value<=impossibleTier;
 export function tradePreferences(wallet){

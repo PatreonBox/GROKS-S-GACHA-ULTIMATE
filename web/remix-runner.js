@@ -1,4 +1,5 @@
 import {VIEW_WIDTH as WIDTH,VIEW_HEIGHT as HEIGHT,STEP,makeCourse,newAttempt,advanceRunner} from './remix-physics.js';
+import {openLimboFinale} from './limbo-finale.js';
 import {createRemixArt} from './remix-art.js';
 import {helpButton,installMinigameGuide,remixGuide} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
@@ -10,7 +11,7 @@ import {runnerInput} from './game-replay.js';
 
 const controls=['Space','ArrowUp','KeyW'];
 const launchTime=.56;
-export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
+export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starterCube}){
  const course=makeCourse(remix),dialog=document.createElement('dialog');
  dialog.className='runner-modal';dialog.setAttribute('aria-label',remix.name);dialog.style.setProperty('--remix',remix.color);
  const instruction=course.mode==='cube'?'Tap or press Space to jump.':remix.mode==='wave'?'Hold to climb. Release to dive.':'Hold for thrust. Release to descend.';
@@ -28,8 +29,8 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
  let viewWidth=WIDTH,viewHeight=HEIGHT,scale=1;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const particles=[],keys=new Set();
- let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,keyIndex=0,closed=false,lastPercent=-1,highWater=0,practice=false,pointer=null;
- let launch=0,ticks=0,trace=[],token=null;
+ let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,closed=false,lastPercent=-1,highWater=0,practice=false,pointer=null;
+ let launch=0,ticks=0,trace=[],token=null,closeFinale;
  const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running');
  const paint=createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
  const guide=installMinigameGuide(dialog,remixGuide(remix,avatar.icon),pause);
@@ -47,13 +48,18 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
  function draw(){
   const state=phase==='running'&&!launch&&carry?{...s,x:s.x+carry*course.speed,y:s.y+carry*s.vy}:s;
   canvas.parentElement.style.setProperty('--runner-progress',Math.min(1,s.x/course.end));
-  paint(state,{phase,key:keyIndex,particles,reduced,width:viewWidth,height:viewHeight});
+  paint(state,{phase,particles,reduced,width:viewWidth,height:viewHeight});
  }
  function action(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;buttons.append(b);return b}
  function displayed(){return Math.min(remix.finish?remix.finish-1:99,Math.floor((remix.finish||100)*s.x/course.end))}
  function persist(value,key=null){
-  if(practice||!token||value<=highWater)return;
-  highWater=value;Promise.resolve(onResult(token,{ticks,trace:trace.slice(),key})).catch(()=>{
+  if(practice||!token||key==null&&value<=highWater)return;
+  highWater=value;
+  const attemptToken=token;
+  return Promise.resolve(onResult(token,key==null?{ticks,trace:trace.slice()}:{key})).then(result=>{
+   if(!closed&&attemptToken===token&&remix.mark==='KEY'&&result?.percent===100)message.textContent=remix.quote+' · +'+result.playerXpEarned+' XP';
+  }).catch(()=>{
+   if(attemptToken!==token)return;
    highWater=0;if(!closed)message.textContent='Your record could not be saved.';
   });
  }
@@ -77,7 +83,7 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
  }
  function resetInput(){keys.clear();pointer=null;control('reset');}
  function finish(won,key=null){
-  music?.pause();
+  music?.pause();closeFinale?.();closeFinale=null;
   phase=won?'won':'lost';pad.hidden=true;resetInput();buttons.replaceChildren();
   if(won){
    persist(100,key);readout.textContent=remix.finish?remix.finish+'% · CUT!':'100%';
@@ -87,7 +93,7 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
    const n=displayed(),wrong=remix.mark==='KEY'&&s.x>=course.end;
    readout.textContent=n+'%';persist(n,key);burst(s.x,s.y,24,remix.color);
    message.textContent=(practice?'Practice':'Attempt '+attempt)+' · '+n+'%. '+(wrong?'Wrong key.':s.x>=course.end&&course.finale?'Tap all three pink orbs.':'Try again.');
-   sound.play('injury',{level:.68});
+   sound.playGame('gdDeath',{level:.62});
   }
   action(won?'Replay level':'Retry',()=>start(practice)).focus({preventScroll:true});
   if(course.finale)action(practice?'Start full level':'Practice finale',()=>start(!practice));
@@ -100,12 +106,22 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
   }
   draw();if(particles.length)frame=requestAnimationFrame(settle);
  }
- function onClear(){
+ async function onClear(){
   music?.pause();
-  if(remix.mark!=='KEY'){finish(true);return}
-  phase='key';pad.hidden=true;resetInput();message.textContent='Which key lit up?';buttons.replaceChildren();draw();
-  ['◆ Diamond','● Circle','▲ Triangle'].forEach((name,i)=>action(name,()=>finish(i===keyIndex,i)));
-  buttons.firstChild?.focus({preventScroll:true});
+  if(remix.mark!=='KEY'){finish(true);return;}
+  phase='key';pad.hidden=true;resetInput();
+  message.textContent='Opening the key chamber…';buttons.replaceChildren();draw();
+  const attemptToken=token;
+  try{
+   const {seed}=await onFinale(token,{ticks,trace:trace.slice()});
+   if(closed||attemptToken!==token)return;
+   closeFinale=openLimboFinale(viewport,seed,sound,(slot,won)=>finish(won,slot));
+   message.textContent='Watch the green key, then choose where it lands.';
+  }catch(error){
+   if(closed||attemptToken!==token)return;
+   message.textContent=error.message;
+   action('Retry key chamber',onClear).focus({preventScroll:true});
+  }
  }
  function tick(now){
   if(phase!=='running'||closed)return;
@@ -150,16 +166,16 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
   canvas.focus({preventScroll:true});last=0;carry=0;frame=requestAnimationFrame(tick);
  }
  async function start(isPractice=false){
-  cancelAnimationFrame(frame);
+  cancelAnimationFrame(frame);closeFinale?.();closeFinale=null;
   phase='starting';message.textContent='Preparing attempt…';buttons.replaceChildren();
   try {
    const session=isPractice?null:await onStart();
    if(closed)return;
-   token=session?.token||null;keyIndex=session?.key??Math.floor(Math.random()*3);
+   token=session?.token||null;
    ticks=0;trace=[];particles.length=0;practice=isPractice;s=newAttempt(course,practice?course.finale:0);resetInput();
    music?.reset();
    attempt++;launch=launchTime;attemptLabel.textContent='GET READY';
-   lastPercent=-1;sound.prepareGame();sound.play('stack',{level:.55});draw();running();
+   lastPercent=-1;sound.prepareGame();sound.prepareGame('gdDeath');sound.playGame('gdPlay',{level:.62});draw();running();
   } catch(error){
    if(closed)return;
    phase='ready';message.textContent=error.message;action('Try again',()=>start(isPractice)).focus({preventScroll:true});
@@ -197,7 +213,7 @@ export function openRunner(remix,{sound,onStart,onResult,avatar=starterCube}){
  dialog.querySelector('[data-close]').onclick=()=>dialog.close();
  const observer=new ResizeObserver(resize);observer.observe(viewport);
  dialog.addEventListener('close',()=>{
-  closed=true;music?.close();observer.disconnect();cancelAnimationFrame(frame);sound.stop();window.removeEventListener('keyup',keyup);
+  closed=true;closeFinale?.();music?.close();observer.disconnect();cancelAnimationFrame(frame);sound.stop();window.removeEventListener('keyup',keyup);
   window.removeEventListener('blur',pause);document.removeEventListener('visibilitychange',hidden);dialog.remove();
  },{once:true});
  resize();message.textContent=remix.hint+' '+instruction;

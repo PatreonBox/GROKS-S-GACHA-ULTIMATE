@@ -218,3 +218,13 @@ main:has(#kingdomRoom:not([hidden])){
  .build-option-info .primary{grid-column:1/-1;margin-top:0}
 }
 @media(prefers-reduced-motion:reduce){.kingdom-stars i{transition:none}}
+
+.kingdom-manage{display:flex;flex-wrap:wrap;justify-content:flex-start!important;gap:8px;margin-top:10px}
+.kingdom-detail [data-clear-tree]{display:inline-flex;gap:6px}
+.kingdom-detail [data-clear-tree] img,[data-skip-tower] img{width:17px;height:17px;object-fit:contain}
+.kingdom-upgrade [data-skip-tower]{justify-self:start;margin-top:6px}
+.build-storage{padding:9px 12px;border:1px solid #38506b;border-radius:8px;background:#131e30}
+.build-storage summary{cursor:pointer;font-weight:800;color:#edf6ff}
+.build-storage p,.build-storage ul{margin:8px 0 2px;color:#c1cee0}
+.build-storage [data-build-storage]>div{display:flex;gap:8px;justify-content:space-between;align-items:center;padding-top:7px}
+.visitor-away{font-size:.78rem;color:#aab8cd;text-align:right}

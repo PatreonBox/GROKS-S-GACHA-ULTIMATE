@@ -20,6 +20,7 @@ export function readRoute(hash) {
   if ((page==='leaderboard'||page==='battle')&&slug==='players')return {section:'leaderboard',tier:'players'};
   if (page === 'battle') return {section:'battle',tier:['training','army','arcade'].includes(slug)?slug:'easy'};
   if (page === 'kingdom') return {section:'kingdom',tier:'kingdom'};
+  if (page === 'progression') return {section:'progression',tier:slug==='achievements'?'achievements':'progression'};
   if (page === 'trading') return {section:'trading',tier:'trading'};
   if (page === 'cubes') return {section:'gacha',tier:'cubes'};
   if (page==='gacha'&&Object.hasOwn(packLevels,slug))return {section:'gacha',tier:'shop',pack:slug};

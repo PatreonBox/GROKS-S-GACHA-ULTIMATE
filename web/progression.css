@@ -1,0 +1,55 @@
+.progression-room{width:min(1120px,100%);margin-inline:auto;padding-block:4px 22px}
+.progression-title{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:17px}
+.progression-title h1{font:800 clamp(2.5rem,8vw,3.5rem)/1 Cond,sans-serif;margin:0 0 7px}
+.progression-title p,.progression-player p,.progression-recent p,.progression-unlocks p{margin:0;color:#b3bfd7}
+[data-achievement-overall]{display:grid;grid-template-columns:auto auto;gap:2px 8px;align-items:center;min-width:134px;padding:9px 12px;border:1px solid #534873;border-radius:9px;background:#242039}
+[data-achievement-overall] b{color:#f6d18a;font-weight:850;white-space:nowrap}
+[data-achievement-overall] span{font-size:.73rem;color:#e1d8ee}
+[data-achievement-overall] progress{grid-column:1/-1;width:100%;height:7px;accent-color:#ddaf67}
+.progression-tabs,.achievement-filters{display:flex;gap:6px;flex-wrap:wrap;padding:6px;border:1px solid #414462;border-radius:10px;background:#171a2c;margin-bottom:12px}
+.progression-tabs a,.achievement-filters button{border-radius:6px;padding:7px 12px;min-height:40px;font-weight:760;display:inline-flex;align-items:center;color:#d3d8ee}
+.progression-tabs a[aria-current],.achievement-filters button[aria-pressed=true]{background:#352952;border:1px solid #b185ef;color:#f3eaff}
+.progression-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.progression-overview section,.progression-recent{border:1px solid #3d475e;border-radius:11px;background:#171d2e;padding:16px;min-width:0}
+.progression-player{background:linear-gradient(135deg,#22324b,#1e2037)!important}
+.progression-player h2,.progression-unlocks h2,.progression-recent h2{margin:0 0 9px;font:800 clamp(1.45rem,5vw,2rem)/1.1 Cond,sans-serif}
+.progression-player>span{color:#b8cee8;font-size:.83rem;font-weight:760}
+.progression-player>progress{height:13px;width:100%;accent-color:#70c8ff}
+.progression-player>p{font-size:.83rem;margin-top:5px}
+.progression-player dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:15px 0 0}
+.progression-player dl div{padding:7px 8px;border-radius:7px;background:#10182b;border:1px solid #3d5069}
+.progression-player dt,.progression-unlocks small{color:#becbe4;font-size:.75rem}
+.progression-player dd{margin:3px 0 0;font-weight:850;color:#eaf6ff;overflow-wrap:anywhere}
+.progression-unlocks ul{display:grid;gap:6px;list-style:none;margin:0;padding:0}
+.progression-unlocks li{display:flex;align-items:center;gap:9px;padding:7px;border-radius:6px;background:#10182a;color:#e9eefb}
+.progression-unlocks li svg{width:19px;height:19px;color:#c7a8f0;flex:none}
+.progression-unlocks li div{flex:1;min-width:0}
+.progression-unlocks li small{display:block;margin-top:2px}
+.progression-unlocks li span{white-space:nowrap;font-size:.76rem;color:#dcb5ff;font-weight:800}
+.progression-recent{margin-top:12px}
+.progression-recent>div:first-child{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.achievement-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,315px),1fr));gap:8px}
+.achievement-card{display:flex;align-items:center;gap:10px;min-width:0;padding:11px;border:1px solid #3c475f;border-radius:9px;background:#161c2d}
+.achievement-card[data-earned=true]{border-color:#665546;background:#232132}
+.achievement-badge{position:relative;display:grid;place-items:center;flex:none;width:54px;height:60px;color:var(--medal,#f2ce85);isolation:isolate}
+.achievement-badge::before,.achievement-badge::after{content:"";position:absolute;inset:0;clip-path:polygon(50% 0,94% 22%,94% 73%,50% 100%,6% 73%,6% 22%);z-index:-1}
+.achievement-badge::before{background:linear-gradient(145deg,#fff4c7,var(--medal),#756394)}
+.achievement-badge::after{inset:4px;background:radial-gradient(circle at 35% 20%,#3a3e66,#1b2040 65%)}
+.achievement-badge>svg,.achievement-badge>img{width:29px;height:29px;object-fit:contain;filter:drop-shadow(0 2px 3px #0008)}
+.achievement-badge.locked{--medal:#909ab6!important}
+.achievement-badge.locked::before{background:linear-gradient(145deg,#9bafc3,#556480,#46516f)}
+.achievement-lock{display:grid;place-items:center;width:28px;height:30px;background:#6e7895;color:#141b2f;border-radius:6px;box-shadow:inset 0 1px #afb8cc}
+.achievement-lock svg{width:21px;height:21px;stroke-width:2.8}
+.achievement-information{flex:1;min-width:0}
+.achievement-information>div:first-child{display:flex;align-items:baseline;gap:4px 8px;flex-wrap:wrap}
+.achievement-information h3{margin:0;color:#f5f2fc;font:800 1.15rem/1.1 Cond,sans-serif}
+.achievement-information>div:first-child span{font-size:.69rem;color:#b5a5cc}
+.achievement-information p{margin:4px 0 6px;font-size:.8rem;color:#c3cce0}
+.achievement-track{display:flex;align-items:center;gap:7px;color:#c1cde6;font-size:.73rem}
+.achievement-track progress{height:7px;flex:1;min-width:25px;accent-color:#c6a4f8}
+[data-earned=true] .achievement-track progress{accent-color:#efc779}
+.achievement-toast{position:fixed;inset:12px auto auto 50%;transform:translateX(-50%);margin:0;width:min(430px,calc(100vw - 22px));display:flex;align-items:center;gap:12px;z-index:1000;padding:8px 14px;color:#fff2cb;background:linear-gradient(145deg,#263853,#26223e);border:1px solid #dcbb73;border-radius:10px;box-shadow:0 12px 42px #0009;text-decoration:none;animation:achievement-slide .32s ease-out both}
+.achievement-toast>div{display:grid;gap:2px}.achievement-toast small{font-size:.74rem;color:#f0ce91}.achievement-toast strong{font:800 1.4rem/1.08 Cond,sans-serif;color:#fff6df}.achievement-toast span:not(.achievement-badge){font-size:.8rem;color:#cdd7ef}
+@keyframes achievement-slide{from{opacity:0;transform:translate(-50%,-21px) scale(.97)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@media(max-width:600px){.progression-overview{grid-template-columns:1fr}.progression-title p{font-size:.8rem}.progression-title{align-items:start}.progression-overview section,.progression-recent{padding:11px}}
+@media(prefers-reduced-motion:reduce){.achievement-toast{animation:none}}

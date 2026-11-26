@@ -14,13 +14,15 @@ const bundleValue=cards=>cards.length&&cards.every(card=>Number.isFinite(card.ma
  ?tradeValue(cards.reduce((sum,card)=>sum+card.count*card.market.value,0)):'--';
 const time=ms=>'<time datetime="'+new Date(ms).toISOString()+'">'+esc(date.format(ms))+'</time>';
 const textStatus=message=>'<p class="trade-empty">'+esc(message)+'</p>';
-const accountName=person=>person.username?'@'+person.username:person.name;
+const avatar=person=>'<span class="trade-player-initial" aria-hidden="true">'+(person.avatar?'<img src="'+esc(person.avatar)+'" alt="" referrerpolicy="no-referrer">':'')+
+ esc(Array.from(person.name)[0]?.toUpperCase()||'?')+'</span>';
+const accountName=person=>person.username?'@'+person.username:'';
 const playerHandle=person=>person.username?'<small>@'+esc(person.username)+'</small>':'';
 const threshold=tier=>tier?cardCategories[tier]+(tier===cardCategories.length-1?' only':'+'):'Any difficulty';
 const finishOptions=(empty=false)=>(empty?'<option value="">All finishes</option>':'')+
  Object.entries(finishLabels).map(([id,label])=>'<option value="'+id+'">'+label+'</option>').join('');
-const difficultyOptions=(mode)=>'<option value="'+(mode==='setting'?'0':'')+'">Any difficulty</option>'+
- cardCategories.map((name,i)=>mode==='setting'&&!i?'':'<option value="'+i+'">'+(mode==='setting'?threshold(i):name)+'</option>').join('');
+const difficultyOptions=(mode,hasSecrets)=>'<option value="'+(mode==='setting'?'0':'')+'">Any difficulty</option>'+
+ cardCategories.map((name,i)=>mode==='setting'&&!i||i===cardCategories.length-1&&!hasSecrets?'':'<option value="'+i+'">'+(mode==='setting'?threshold(i):name)+'</option>').join('');
 const pagination=(page,more)=>page||more?'<div class="trade-pagination"><button type="button" class="outline" data-trade-page="-1" '+(page?'':'disabled')+'>Previous</button><span>Page '+(page+1)+'</span><button type="button" class="outline" data-trade-page="1" '+(more?'':'disabled')+'>Next</button></div>':'';
 
 export function createTrading(root,{coverSource,syncWallet}){
@@ -44,7 +46,8 @@ function createRoom(room,cover,syncWallet){
  let section='find',isOpen=true,readVersion=0,modalVersion=0,refreshing=false;
  let settings=tradePreferences(),settingsVersion=0,recentCounts='',busy=false,viewPage=0,dialogState;
  let query='',found=null,marketTerm='',marketTier='',marketFinish='standard';
- let partner,draft,available=[];
+ let partner,draft,available=[],hasSecrets=false;
+ let filterTimer=0;
  const current=request=>isOpen&&request===readVersion;
  const modalCurrent=request=>isOpen&&dialog.open&&request===modalVersion;
  const drawCards=(cards,controls=()=>'',moves=true)=>'<div class="trade-card-grid">'+cards.map(card=>tradeCardHTML(card,cover,controls(card),moves)).join('')+'</div>';
@@ -53,8 +56,8 @@ function createRoom(room,cover,syncWallet){
  };
  function drawFind(){
   content.innerHTML='<section class="trade-panel trade-find"><h2>Find player</h2>'+
-   (!settings.enabled?'<p class="trade-empty">Trading is disabled for your account. <button type="button" class="outline" data-trade-settings>Open Trade settings</button></p>':'<form class="trade-search" data-find-player><label>Discord username'+
-    '<input type="search" name="query" value="'+esc(query)+'" placeholder="Search by username or display name" autocomplete="off" autocapitalize="off" maxlength="80" required></label>'+
+   (!settings.enabled?'<p class="trade-empty">Trading is disabled for your account. <button type="button" class="outline" data-trade-settings>Open Trade settings</button></p>':'<form class="trade-search" data-find-player><label>Discord username or ID'+
+    '<input type="search" name="query" value="'+esc(query)+'" placeholder="Username, display name, or Discord ID" autocomplete="off" autocapitalize="off" maxlength="80" required></label>'+
     '<button type="submit" class="primary">Find player</button></form><div data-trade-results></div>')+'</section>';
   if(settings.enabled)drawPlayers();
  }
@@ -62,7 +65,7 @@ function createRoom(room,cover,syncWallet){
   const list=content.querySelector('[data-trade-results]');
   if(!list||found===null)return;
   list.innerHTML=found.length?'<ul class="trade-list">'+found.map(player=>'<li><button class="trade-list-row" type="button" data-trade-player="'+player.id+'">'+
-   '<span class="trade-player-initial" aria-hidden="true">'+esc(Array.from(player.name)[0].toUpperCase())+'</span><span class="trade-player-name"><strong>'+esc(player.name)+'</strong>'+playerHandle(player)+
+   avatar(player)+'<span class="trade-player-name"><strong>'+esc(player.name)+'</strong>'+playerHandle(player)+
    '</span><span class="trade-list-meta">Level '+player.level+'</span>'+ico('right')+'</button></li>').join('')+'</ul>':textStatus('No available players found.');
  }
  async function findPlayers(form){
@@ -96,7 +99,7 @@ function createRoom(room,cover,syncWallet){
  function drawComposer(){
   const {player}=partner;
   content.innerHTML='<section class="trade-composer"><div class="trade-composer-head"><div><button class="outline trade-back" type="button" data-trade-back>'+ico('left')+' Find player</button>'+
-   '<h2>Trade with '+esc(player.name)+'</h2><p>'+esc(accountName(player))+' · Level '+player.level+'</p></div></div>'+
+   '<div class="trade-partner">'+avatar(player)+'<div><h2>Trade with '+esc(player.name)+'</h2><p>'+esc(accountName(player))+(player.username?' · ':'')+'Level '+player.level+'</p></div></div></div></div>'+
    '<div class="trade-columns">'+composeSide('give','Your offer','Add your cards')+composeSide('get','Your request','Browse their cards')+'</div>'+
    '<div class="trade-send"><div><p>Training stays on each player’s account. Card availability is checked when the offer is accepted.</p><p class="trade-action-status" data-trade-status role="status"></p></div>'+
    '<button class="primary" type="button" data-propose>Propose trade</button></div></section>';
@@ -149,9 +152,9 @@ function createRoom(room,cover,syncWallet){
   const {player}=partner;
   const heading=side==='give'?'Your collection':player.name+'’s collection';
   const request=openDialog(heading);
-  dialogState={type:'picker',side,page:0,term:'',finish:''};
+  dialogState={type:'picker',side,page:0,term:'',finish:'',difficulty:''};
   body.innerHTML='<form class="trade-search trade-card-search" data-pick-filter><label>Find a card<input name="query" type="search" placeholder="Name or level ID" maxlength="80"></label>'+
-   '<label>Finish<select name="finish">'+finishOptions(true)+'</select></label><button type="submit" class="primary">Search</button></form>'+
+   '<label>Difficulty<select name="tier">'+difficultyOptions('market',hasSecrets)+'</select></label><label>Finish<select name="finish">'+finishOptions(true)+'</select></label><button type="submit" class="primary">Search</button></form>'+
    '<p class="trade-filter-note">'+esc(threshold(partner.minimum[side]))+' · <span data-picked-count></span></p><div data-picker-results></div>'+
    '<div class="trade-dialog-foot"><button class="primary" type="button" data-close-trade>Done</button></div>';
   body.querySelector('input').focus();
@@ -172,7 +175,7 @@ function createRoom(room,cover,syncWallet){
   const state=dialogState;
   body.querySelector('[data-picker-results]').innerHTML=textStatus('Loading cards…');
   try{
-   const {cards,more}=await tradeRead('collection',{id:partner.player.id,side:state.side,q:state.term,finish:state.finish,page:state.page});
+   const {cards,more}=await tradeRead('collection',{id:partner.player.id,side:state.side,q:state.term,finish:state.finish,page:state.page,...(state.difficulty?{tier:state.difficulty}:{})});
    if(modalCurrent(request)){available=cards;state.more=more;paintPicker(cards);}
   }catch(error){if(modalCurrent(request))body.querySelector('[data-picker-results]').innerHTML=textStatus(error.message);}
  }
@@ -192,9 +195,9 @@ function createRoom(room,cover,syncWallet){
    if(!trades.length&&viewPage>0){viewPage--;loadList();return;}
    const empty={incoming:'You have no incoming trades.',outgoing:'You have no outgoing trades.',history:'Your trade history is empty.'};
    const markup=(trades.length?'<ul class="trade-list">'+trades.map(trade=>'<li><button class="trade-list-row" type="button" data-trade-open="'+trade.id+'">'+
-    '<span class="trade-state" data-state="'+trade.status+'">'+statuses[trade.status]+'</span><span class="trade-player-name"><strong>'+esc(trade.player.name)+'</strong>'+
+    avatar(trade.player)+'<span class="trade-player-name"><strong>'+esc(trade.player.name)+'</strong>'+
     '<small>'+trade.giveCount+(trade.status==='completed'?' given · ':' offered · ')+trade.getCount+(trade.status==='completed'?' received':' requested')+
-    '</small></span><span class="trade-list-meta">'+time(trade.resolvedAt||trade.createdAt)+'</span>'+ico('right')+'</button></li>').join('')+'</ul>':textStatus(empty[view]))+pagination(viewPage,more);
+    '</small></span><span class="trade-state" data-state="'+trade.status+'">'+statuses[trade.status]+'</span><span class="trade-list-meta">'+time(trade.resolvedAt||trade.createdAt)+'</span>'+ico('right')+'</button></li>').join('')+'</ul>':textStatus(empty[view]))+pagination(viewPage,more);
    const focused=output.contains(document.activeElement)&&document.activeElement.dataset.tradeOpen;
    output.innerHTML=markup;
    if(focused)output.querySelector('[data-trade-open="'+focused+'"]')?.focus({preventScroll:true});
@@ -212,7 +215,7 @@ function createRoom(room,cover,syncWallet){
   const meta=status==='pending'?'Expires '+time(expiresAt):time(resolvedAt||createdAt);
   const labels=done?['You gave','You got']:status==='pending'?['You offer','You receive']:['You offered','You requested'];
   body.innerHTML='<div class="trade-receipt-banner" data-state="'+status+'"><span>'+ico(done?'check':'exchange')+'</span><div><strong>'+message+'</strong><small>'+meta+'</small></div></div>'+
-   '<div class="trade-receipt-reference">#'+trade.id.slice(0,8).toUpperCase()+playerHandle(player)+'</div>'+
+   '<div class="trade-receipt-reference">'+avatar(player)+'<div><b>'+esc(player.name)+'</b>'+playerHandle(player)+'</div><span>#'+trade.id.slice(0,8).toUpperCase()+'</span></div>'+
    '<div class="trade-columns">'+receiptSide(labels[0],trade.give)+receiptSide(labels[1],trade.get)+'</div>'+
    (status==='pending'?'<div class="trade-dialog-foot"><p class="trade-action-status" data-resolve-status role="status"></p>'+(direction==='incoming'?'<button type="button" class="outline" data-resolve="decline">Decline</button>'+
     '<button type="button" class="primary" data-resolve="accept" '+(settings.enabled?'':'disabled')+'>Accept trade</button>':'<button type="button" class="outline" data-resolve="cancel">Cancel offer</button>')+'</div>':'');
@@ -251,9 +254,9 @@ function createRoom(room,cover,syncWallet){
  }
  function drawMarket(){
   content.innerHTML='<section class="trade-panel"><div class="trade-panel-heading"><h2>Card market</h2></div>'+
-   '<p class="trade-market-note">Values use completed exchanges in the last '+marketDays+' days. A finish needs '+marketMinPairs+' different trading pairs before its value appears. Demand counts players requesting that finish.</p>'+
+   '<p class="trade-market-note">Values use completed exchanges in the last '+marketDays+' days. A value appears after '+marketMinPairs+' different trading pairs. Demand counts players requesting that finish.</p>'+
    '<form class="trade-search trade-market-search" data-market-filter><label>Find a card<input type="search" name="query" placeholder="Name or level ID" maxlength="80" value="'+esc(marketTerm)+'"></label>'+
-   '<label>Difficulty<select name="tier">'+difficultyOptions('market')+'</select></label><label>Finish<select name="finish">'+finishOptions()+'</select></label><button type="submit" class="primary">Search</button></form>'+
+   '<label>Difficulty<select name="tier">'+difficultyOptions('market',hasSecrets)+'</select></label><label>Finish<select name="finish">'+finishOptions()+'</select></label><button type="submit" class="primary">Search</button></form>'+
    '<div data-trade-results></div></section>';
   const filters=content.querySelector('form').elements;
   filters.tier.value=marketTier;filters.finish.value=marketFinish;
@@ -264,14 +267,17 @@ function createRoom(room,cover,syncWallet){
   output.innerHTML=textStatus('Loading market…');
   try{
    const data=await tradeRead('market',{q:marketTerm,finish:marketFinish,page:viewPage,...(marketTier?{tier:marketTier}:{})});
-   if(current(request))output.innerHTML=(data.cards.length?drawCards(data.cards):textStatus('No matching cards.'))+pagination(viewPage,data.more);
+   if(current(request)){
+    setSecretAccess(data.hasSecrets);
+    output.innerHTML=(data.cards.length?drawCards(data.cards,()=>'',false):textStatus('No matching cards.'))+pagination(viewPage,data.more);
+   }
   }catch(error){if(current(request))output.innerHTML=textStatus(error.message);}
  }
  function openSettings(){
   openDialog('Trade settings');
   dialogState={type:'settings'};
   body.innerHTML='<form class="trade-settings" data-save-trade-settings><label class="profile-privacy"><span><b>Allow trades</b><small>Let players find you, browse your cards, and send offers.</small></span><input type="checkbox" name="enabled" '+(settings.enabled?'checked':'')+'></label>'+
-   '<label class="trade-minimum">Minimum difficulty you receive<select name="minimum">'+difficultyOptions('setting')+'</select></label>'+
+   '<label class="trade-minimum">Minimum difficulty you receive<select name="minimum">'+difficultyOptions('setting',hasSecrets||settings.minimum===cardCategories.length-1)+'</select></label>'+
    '<div class="trade-dialog-foot"><p class="trade-action-status" data-settings-status role="status"></p><button class="primary" type="submit">Save settings</button></div></form>';
   body.querySelector('select').value=String(settings.minimum);
  }
@@ -291,10 +297,29 @@ function createRoom(room,cover,syncWallet){
   finally{busy=false;form.querySelector('button[type="submit"]').disabled=false;}
  }
  function activate(view){
-  readVersion++;section=view;viewPage=0;partner=null;draft=null;nav();
+  clearTimeout(filterTimer);readVersion++;section=view;viewPage=0;partner=null;draft=null;nav();
   if(view==='find')drawFind();
   else if(view==='market')drawMarket();
   else drawList();
+ }
+ function setSecretAccess(allowed){
+  if(typeof allowed!=='boolean'||hasSecrets===allowed)return;
+  hasSecrets=allowed;
+  const select=content.querySelector('[data-market-filter] select[name="tier"]');
+  if(!select)return;
+  select.innerHTML=difficultyOptions('market',hasSecrets);
+  if(!hasSecrets&&Number(marketTier)===cardCategories.length-1)marketTier='';
+  select.value=marketTier;
+ }
+ function marketFilter(form){
+  clearTimeout(filterTimer);
+  marketTerm=form.elements.query.value.trim();marketTier=form.elements.tier.value;marketFinish=form.elements.finish.value;viewPage=0;loadMarket();
+ }
+ function pickerFilter(form){
+  clearTimeout(filterTimer);
+  if(dialogState?.type!=='picker')return;
+  Object.assign(dialogState,{page:0,term:form.elements.query.value.trim(),finish:form.elements.finish.value,difficulty:form.elements.tier.value});
+  loadPicker();
  }
  async function refresh(){
   if(refreshing||!isOpen||document.hidden||room.closest('#gameMain')?.hidden)return;
@@ -305,6 +330,7 @@ function createRoom(room,cover,syncWallet){
    if(!isOpen)return;
    const old=settings;
    if(saved===settingsVersion)settings=latest.settings;
+   setSecretAccess(latest.hasSecrets);
    if(old.enabled!==settings.enabled&&section==='find'){
     if(dialogState?.type==='picker')dialog.close();
     readVersion++;partner=null;draft=null;found=null;drawFind();
@@ -320,19 +346,29 @@ function createRoom(room,cover,syncWallet){
   }finally{refreshing=false;}
  }
  room.addEventListener('error',event=>{
-  if(event.target.matches?.('[data-trade-cover]'))event.target.hidden=true;
+  if(event.target.matches?.('[data-trade-cover],.trade-player-initial img'))event.target.hidden=true;
  },true);
  room.addEventListener('submit',event=>{
   const form=event.target;
   event.preventDefault();
   if(form.matches('[data-find-player]'))findPlayers(form);
-  if(form.matches('[data-market-filter]')){
-   marketTerm=form.elements.query.value.trim();marketTier=form.elements.tier.value;marketFinish=form.elements.finish.value;viewPage=0;loadMarket();
-  }
-  if(form.matches('[data-pick-filter]')){
-   Object.assign(dialogState,{page:0,term:form.elements.query.value.trim(),finish:form.elements.finish.value});loadPicker();
-  }
+  if(form.matches('[data-market-filter]'))marketFilter(form);
+  if(form.matches('[data-pick-filter]'))pickerFilter(form);
   if(form.matches('[data-save-trade-settings]'))saveSettings(form);
+ });
+ room.addEventListener('change',event=>{
+  const form=event.target.form;
+  if(!event.target.matches('select'))return;
+  if(form?.matches('[data-market-filter]'))marketFilter(form);
+  if(form?.matches('[data-pick-filter]'))pickerFilter(form);
+ });
+ room.addEventListener('input',event=>{
+  const form=event.target.form;
+  if(event.target.name!=='query'||!form?.matches('[data-market-filter],[data-pick-filter]'))return;
+  clearTimeout(filterTimer);
+  filterTimer=setTimeout(()=>{
+   if(form.isConnected)(form.matches('[data-market-filter]')?marketFilter:pickerFilter)(form);
+  },230);
  });
  room.addEventListener('click',event=>{
   const button=event.target.closest('button');
@@ -367,9 +403,9 @@ function createRoom(room,cover,syncWallet){
     content.querySelector('[data-add-from="'+side+'"]')).focus({preventScroll:true});
   }
  });
- dialog.addEventListener('close',()=>{if(!dialog.open){modalVersion++;dialogState=null;}});
+ dialog.addEventListener('close',()=>{if(!dialog.open){clearTimeout(filterTimer);modalVersion++;dialogState=null;}});
  activate('find');refresh();
  const timer=setInterval(refresh,12000);
  document.addEventListener('visibilitychange',refresh);
- return {dispose(){isOpen=false;clearInterval(timer);document.removeEventListener('visibilitychange',refresh);if(dialog.open)dialog.close();},refresh};
+ return {dispose(){isOpen=false;clearInterval(timer);clearTimeout(filterTimer);document.removeEventListener('visibilitychange',refresh);if(dialog.open)dialog.close();},refresh};
 }

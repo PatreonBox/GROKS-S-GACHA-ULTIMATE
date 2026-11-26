@@ -1,3 +1,4 @@
+import {impossibleTier} from '../web/impossible-cards.js';
 import {cardCategories} from '../web/pack-engine.js';
 import {marketDays,marketMinPairs,tradeKey} from '../web/trade-rules.js';
 import {tradeCard,tradePageSize} from './trade-cards.mjs';
@@ -12,12 +13,12 @@ const demandActivity=`t.market_eligible=1 AND (t.status='completed' AND t.resolv
 const interested=`CASE WHEN i.side='offered' THEN t.recipient_id ELSE t.sender_id END`;
 
 export function tradeSamples(offered,requested){
- const total=cards=>cards.reduce((sum,card)=>sum+valueAnchor(card)*card.count,0);
+ const reference=card=>card.market?.value>0?card.market.value:valueAnchor(card);
+ const total=cards=>cards.reduce((sum,card)=>sum+reference(card)*card.count,0);
  const ratio=total(requested)/total(offered);
- const estimate=(cards,side,exchangeRate)=>cards.map(card=>{
-  const anchor=valueAnchor(card);
-  return {side,id:card.id,finish:card.finish,sample:anchor*Math.min(5,Math.max(.2,exchangeRate))};
- });
+ const estimate=(cards,side,exchangeRate)=>cards.map(card=>({
+  side,id:card.id,finish:card.finish,sample:reference(card)*Math.min(8,Math.max(.125,exchangeRate))
+ }));
  return [...estimate(offered,'offered',ratio),...estimate(requested,'requested',1/ratio)];
 }
 
@@ -27,8 +28,8 @@ function marketAverage(samples,now){
  const median=sorted.length%2?sorted[middle]:(sorted[middle]+sorted[middle-1])/2;
  let total=0,weights=0;
  for(const {sample,resolved_at} of samples){
-  const weight=2**(-(now-resolved_at)/(10*day));
-  total+=Math.min(median*2,Math.max(median/2,sample))*weight;
+  const weight=2**(-(now-resolved_at)/(6*day));
+  total+=Math.min(median*3.5,Math.max(median/3.5,sample))*weight;
   weights+=weight;
  }
  return Math.round(total/weights*10)/10;
@@ -71,21 +72,23 @@ export async function addMarketQuotes(db,cards,now){
  return cards.map(card=>({...card,market:quotes.get(tradeKey(card))}));
 }
 
-export async function browseMarket(db,getPool,{term,tier,finish,page,now}){
- const categories=tier==null?cardCategories:[cardCategories[tier]];
+export async function browseMarket(db,getPool,{term,tier,finish,page,now,secretIds}){
+ const categories=tier==null?(secretIds.length?cardCategories:cardCategories.slice(0,impossibleTier)):[cardCategories[tier]];
+ const secrets=new Set(secretIds),visible=row=>row[6]!==cardCategories[impossibleTier]||secrets.has(row[0]);
  if(!term&&tier==null&&page===0){
   const {results}=await db.prepare(`SELECT i.level_id,MAX(i.tier) AS tier ${marketRows}
-   WHERE i.finish=? AND ${demandActivity} GROUP BY i.level_id ORDER BY COUNT(DISTINCT ${interested}) DESC,i.level_id LIMIT ?`)
-   .bind(finish,now-marketDays*day,now,tradePageSize).all();
+   WHERE i.finish=? AND ${demandActivity} AND (i.tier<>? OR i.level_id IN (SELECT value FROM json_each(?)))
+   GROUP BY i.level_id ORDER BY COUNT(DISTINCT ${interested}) DESC,i.level_id LIMIT ?`)
+   .bind(finish,now-marketDays*day,now,impossibleTier,JSON.stringify(secretIds),tradePageSize).all();
   const groups=new Map(await Promise.all([...new Set(results.map(item=>item.tier))].map(async i=>
    [i,new Map((await getPool(cardCategories[i])).map(row=>[row[0],row]))])));
-  const trending=results.map(item=>groups.get(item.tier).get(item.level_id)).filter(Boolean);
+  const trending=results.map(item=>groups.get(item.tier).get(item.level_id)).filter(row=>row&&visible(row));
   if(trending.length)return {cards:await addMarketQuotes(db,trending.map(row=>tradeCard(row,finish)),now),more:false};
   const list=await getPool('Extreme Demon');
   return {cards:await addMarketQuotes(db,list.slice(0,tradePageSize).map(row=>tradeCard(row,finish)),now),more:false};
  }
  const lists=await Promise.all(categories.map(getPool)),q=term.toLowerCase();
- const found=lists.flat().filter(row=>!q||String(row[0])===q||row[1].toLowerCase().includes(q));
+ const found=lists.flat().filter(row=>visible(row)&&(!q||String(row[0])===q||row[1].toLowerCase().includes(q)));
  const end=(page+1)*tradePageSize;
  return {cards:await addMarketQuotes(db,found.slice(end-tradePageSize,end).map(row=>tradeCard(row,finish)),now),more:found.length>end};
 }

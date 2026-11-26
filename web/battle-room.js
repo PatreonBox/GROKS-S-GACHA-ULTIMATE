@@ -3,7 +3,7 @@ import {stat} from './card-economy.js';
 import {impossibleCategory} from './impossible-cards.js';
 import {bestFinish,finishClass} from './card-finishes.js';
 import {difficulties,cardCategories,readCollection,feedLevelCard} from './pack-engine.js';
-import {arenas,statsFor,saveSquad,enterArena,battleAction,equipTechnique,leaveResults,startRemix,recordRemix,enemyIntent,liveOrb,linkOrbs,liveRiposte,tacticDescription,startDrill,checkpointDrill,finishDrill} from './battle-engine.js';
+import {arenas,statsFor,saveSquad,enterArena,battleAction,equipTechnique,leaveResults,startRemix,startLimboFinale,recordRemix,enemyIntent,liveOrb,linkOrbs,liveRiposte,tacticDescription,startDrill,checkpointDrill,finishDrill} from './battle-engine.js';
 import {campaignStages,stageFor,stageCleared,stageUnlocked,stageRules} from './campaign.js';
 import {campaignView,campaignOutcome} from './campaign-view.js';
 import {arenaDeck,cardChassis,cameraTools,bindArenaCamera} from './arena-stage.js';
@@ -454,7 +454,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   if('runner'in d&&selection){
    if(runner?.open)return;
    const stage=selection;
-   runner=openRunner(stage,{sound,avatar:equippedCube(wallet),onStart:()=>startRemix(stage.id),onResult:async(token,proof)=>{const w=await recordRemix(token,proof);applyWallet(w);if(visible&&!playback)render()}});
+   runner=openRunner(stage,{sound,avatar:equippedCube(wallet),onStart:()=>startRemix(stage.id),onFinale:startLimboFinale,onResult:async(token,proof)=>{const {wallet:next,result}=await recordRemix(token,proof);applyWallet(next);if(visible&&!playback)render();return result;}});
    runner.addEventListener('close',()=>{runner=null;if(visible&&!playback)render()},{once:true});return;
   }
   if('edit'in d){draft=[...(wallet.squad||[])];picker=true;search='';page=0;feedback='';render();return}

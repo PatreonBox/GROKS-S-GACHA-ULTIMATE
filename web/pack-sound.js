@@ -20,10 +20,13 @@ export function revealSpacing(tier,rank,odds,id){
  return Math.max(280,Math.round((length+(remix?memeCues[remix.cue][1]+.06:0)+.04)*1000));
 }
 const asset='/assets/audio/arcade-v3.mp3';
-const gameSamples={arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3',ui:'/assets/audio/soft-ui-tap.mp3',
+const gameSamples={gdPlay:'/assets/audio/gd-play.mp3',gdDeath:'/assets/audio/gd-death.mp3',gdAchievement:'/assets/audio/gd-achievement.mp3',arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3',ui:'/assets/audio/soft-ui-tap.mp3',
  coin:'/assets/audio/mine-coin.mp3',coinDrop:'/assets/audio/coin-drop.mp3',
  levelSingle:'/assets/audio/player-level-up.mp3',levelMulti:'/assets/audio/player-level-multi.mp3',levelMilestone:'/assets/audio/player-level-milestone.mp3'};
 const gameCues={
+ gdPlay:[[0,1.02],'stack','gamePortal','gdPlay'],
+ gdDeath:[[0,1.83],'injury','impact','gdDeath'],
+ gdAchievement:[[0,1.82],'victory','reward','gdAchievement'],
  jump:[[.05,.26],'sweep','gameMove'],
  orb:[[.55,.36],'charged','gameMove'],
  portal:[[1.05,.76],'miniPortal','gamePortal'],
@@ -216,6 +219,8 @@ export function createPackSound(){
    if(event.button!==0)return;
    if(uiControl(event.target))prepareGame('ui');
    if(!gameBuffers.has('coinDrop'))prepareGame('coinDrop');
+   if(!gameBuffers.has('gdPlay'))prepareGame('gdPlay');
+   if(!gameBuffers.has('gdAchievement'))prepareGame('gdAchievement');
   },true);
   document.addEventListener('click',event=>{
    if(!enabled||!uiControl(event.target))return;

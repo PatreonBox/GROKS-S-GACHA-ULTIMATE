@@ -2,7 +2,7 @@ import {statsFor} from '../web/battle-engine.js';
 import {bestFinish} from '../web/card-finishes.js';
 import {schools,skillsFor} from '../web/card-skills.js';
 import {equippedCube} from '../web/cube-catalog.js';
-import {housePlan,kingdomStats} from '../web/kingdom-rules.js';
+import {forgePlan,housePlan,kingdomStats} from '../web/kingdom-rules.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {combatPower} from './player-rankings.mjs';
 
@@ -10,12 +10,12 @@ export function kingdomShowcase(wallet,clock=Date.now()){
  const plot=kingdomStats(wallet,clock);
  return {
   clock,cube:equippedCube(wallet).id,stars:plot.stars,landLevel:plot.land.level,
-  towerLevel:plot.tower.level,construction:plot.tower.construction,
+  towerLevel:plot.tower.level,construction:plot.tower.construction,removedTrees:plot.removedTrees,
   buildings:plot.buildings.map(({id,x,z,rotation,kind='house',...details})=>({
-   id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:details.level===2?2:1,
-   ...(kind==='house'&&details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt}:{})
+   id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:forgePlan(details,clock).level,
+   ...(details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt}:{})
   })),
-  visitors:discoveredVisitors(wallet,clock).map(({id,slot,cube,name})=>({id,slot,cube,name}))
+  visitors:discoveredVisitors(wallet,clock).filter(visitor=>visitor.visiting).map(({id,slot,cube,name})=>({id,slot,cube,name}))
  };
 }
 

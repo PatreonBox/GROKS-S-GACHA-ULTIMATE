@@ -62,6 +62,7 @@ export async function visitKingdom(root,plot,alias){
  function name(id){
   const building=items.get(id);
   if(building)return buildingSpecs[building.kind].name;
+  if(id?.startsWith('tree-'))return 'Tree';
   if(id==='tower')return 'Starter tower';
   if(id==='cube')return cube.name+' · Resident';
   return visitors.find(guest=>'visitor:'+guest.id===id)?.name;
@@ -83,7 +84,7 @@ export async function visitKingdom(root,plot,alias){
   tooltip.style.top=Math.max(33,point.y)+'px';
  }});
  function paint(){
-  world.setPlot([...items.values()],visitors,towerLevel,plot.landLevel,construction);
+  world.setPlot([...items.values()],visitors,towerLevel,plot.landLevel,construction,plot.removedTrees);
   rating.textContent=number.format(stars)+' / 5';
   inspect(selected);
  }
@@ -92,12 +93,12 @@ export async function visitKingdom(root,plot,alias){
   daylight.dataset.night=String(night);
   daylight.querySelector('b').textContent=night?'Night':'Day';
   let changed=false;
-  if(construction&&now>=construction.endsAt){construction=null;towerLevel=2;changed=true}
+  if(construction&&now>=construction.endsAt){towerLevel=construction.level??2;construction=null;changed=true}
   for(const building of items.values()){
    if(!(building.upgradeEndsAt<=now))continue;
    building.level=2;
    delete building.upgradeEndsAt;
-   stars=Math.min(5,Math.round((stars+houseUpgrade.stars)*100)/100);
+   if(building.kind==='house')stars=Math.min(5,Math.round((stars+houseUpgrade.stars)*100)/100);
    changed=true;
   }
   if(changed)paint();

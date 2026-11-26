@@ -1,6 +1,7 @@
 import {statsFor} from '../web/battle-engine.js';
 import {skillsFor} from '../web/card-skills.js';
 import {finishOrder} from '../web/card-finishes.js';
+import {impossibleTier} from '../web/impossible-cards.js';
 import {cardCategories} from '../web/pack-engine.js';
 import {copiesByFinish,tradeCardLimit,tradeKey} from '../web/trade-rules.js';
 import {combatPower} from './player-rankings.mjs';
@@ -55,7 +56,7 @@ export function snapshotBundle(bundle,cards,wallet,minimum,now){
  });
 }
 
-export async function browseCollection(db,playerId,wallet,{term,minimum,finish,page,now}){
+export async function browseCollection(db,playerId,wallet,{term,minimum,difficulty,finish,page,now,secretIds}){
  const tier="CASE json_extract(card,'$.row[6]') "+cardCategories.map((name,i)=>"WHEN '"+name+"' THEN "+i).join(' ')+' ELSE -1 END';
  const copies="CAST(json_extract(card,'$.copies') AS INTEGER)",holo="COALESCE(json_extract(card,'$.holoCopies'),0)";
  const anti="COALESCE(json_extract(card,'$.antimatterCopies'),0)";
@@ -65,11 +66,12 @@ export async function browseCollection(db,playerId,wallet,{term,minimum,finish,p
  if(finish==='antimatter')filters.push(anti+'>0');
  const {results}=await db.prepare(`WITH owned AS (
   SELECT card,level_id,${tier} AS tier FROM game_cards WHERE player_id=? AND ${filters.join(' AND ')}
- ) SELECT card FROM owned WHERE tier>=? AND (instr(lower(json_extract(card,'$.row[1]')),lower(?))>0
+ ) SELECT card FROM owned WHERE tier>=? AND (? IS NULL OR tier=?)
+  AND (tier<>? OR level_id IN (SELECT value FROM json_each(?))) AND (instr(lower(json_extract(card,'$.row[1]')),lower(?))>0
   OR instr(lower(json_extract(card,'$.row[2]')),lower(?))>0 OR CAST(level_id AS TEXT)=?)
  ORDER BY tier DESC,CASE WHEN tier>=10 THEN json_extract(card,'$.row[10]') END ASC,
   json_extract(card,'$.row[1]') COLLATE NOCASE,level_id LIMIT ? OFFSET ?`)
-  .bind(playerId,minimum,term,term,term,tradePageSize+1,page*tradePageSize).all();
+  .bind(playerId,minimum,difficulty,difficulty,impossibleTier,JSON.stringify(secretIds),term,term,term,tradePageSize+1,page*tradePageSize).all();
  const cards=results.slice(0,tradePageSize).flatMap(({card:saved})=>{
   const card=JSON.parse(saved),locked=lockedForTrade(wallet,card.id,now);
   return Object.entries(copiesByFinish(card)).filter(([type,count])=>count>0&&(!finish||type===finish)).map(([type,owned])=>

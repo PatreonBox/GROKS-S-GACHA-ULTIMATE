@@ -85,9 +85,9 @@ export function makeTowerConstruction(loader){
   hammer.rotation.z=.19*Math.sin(strike*turn);
 
   const crossing=reduced ? .27 : .5-.5*Math.cos(time*.68);
-  carrier.resident.position.set(-1.24+2.51*crossing,.34,2.27);
+  carrier.resident.position.set(-.38+1.54*crossing,.34,2.27);
   carrier.resident.rotation.y=Math.sin(time*.68)>=0?Math.PI/2:-Math.PI/2;
-  poseKingdomCube(carrier.body,'trot',time*.72,reduced);
+  poseKingdomCube(carrier.body,crossing>.85?'wobble':'trot',time*.72,reduced);
   boards.position.set(carrier.resident.position.x,.75+carrier.body.position.y*.52,2.27);
   boards.rotation.z=.10*Math.sin(time*5);
 

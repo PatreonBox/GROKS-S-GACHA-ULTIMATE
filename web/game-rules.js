@@ -6,13 +6,14 @@ import {settleMine,mineTapPower,mineTapBatch,buyMineMachine,buyMineSkill,mineMac
 import {combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
+import {limboChoiceAt,limboPattern} from './limbo-keys.js';
 import {findRemix} from './remixes.js';
 import {armyMaps,armyLimit} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix} from './game-replay.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildForge,buildHouse,collectForge,expandLand,settleHouseUpgrades,settleTower,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
+import {buildForge,buildHouse,clearKingdomTree,collectForge,expandLand,placeKingdomBuilding,settleForgeUpgrades,settleHouseUpgrades,settleTower,skipTower,storeKingdomBuilding,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
 import {validTradeMinimum} from './trade-rules.js';
 
 export function newWallet() {
@@ -30,9 +31,10 @@ const gatedActions={
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
  'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom',
  'kingdom.house.upgrade':'kingdom','kingdom.forge.upgrade':'kingdom','kingdom.construction.finish':'kingdom',
+ 'kingdom.tower.skip':'kingdom','kingdom.building.store':'kingdom','kingdom.building.place':'kingdom','kingdom.tree.clear':'kingdom',
  'trade.settings':'trading',
  'upgrade.buy':'upgrades','card.feed':'training','drill.begin':'training',
- 'card.merge':'merge','remix.begin':'arcade','army.begin':'army'
+ 'card.merge':'merge','remix.begin':'arcade','remix.finale':'arcade','army.begin':'army'
 };
 const randomUnit = () => randomBelow(0x100000000)/0x100000000;
 async function allPools(getPool,categories) {
@@ -167,6 +169,15 @@ const rules={
  'kingdom.forge.upgrade':{run:({w,args,now})=>({forge:upgradeForge(w,args.id,args.level,now)})},
  'kingdom.collect':{run:({w,args,now})=>collectForge(w,args.id,now)},
  'kingdom.expand':{run:({w,args})=>expandLand(w,args.level)},
+ 'kingdom.building.store':{run:({w,args,now})=>storeKingdomBuilding(w,args.id,now)},
+ 'kingdom.building.place':{run:({w,args,now})=>placeKingdomBuilding(w,args,now)},
+ 'kingdom.tree.clear':{run:({w,args,now})=>clearKingdomTree(w,args.id,now)},
+ 'kingdom.tower.skip':{run:({w,args,now,finishedTower})=>{
+  if(finishedTower)return {tower:finishedTower};
+  const tower=skipTower(w,args.maxGems,now);
+  awardPlayerXp(w,30+20*tower.level);
+  return {tower};
+ }},
  'profile.privacy':{run:({w,args})=>{
   const setting={hidden:'profileHidden',shareKingdom:'shareKingdom',shareBestCard:'shareBestCard'};
   const entries=Object.entries(args);
@@ -188,7 +199,7 @@ const rules={
   requireRule(!w.kingdom?.towerConstruction,'Your tower upgrade is still under construction.');
   return {tower:finishedTower};
  }},
- 'kingdom.construction.finish':{run:({finishedTower,finishedHouses})=>({tower:finishedTower,houses:finishedHouses})},
+ 'kingdom.construction.finish':{run:({finishedTower,finishedHouses,finishedForges})=>({tower:finishedTower,houses:finishedHouses,forges:finishedForges})},
  'pack.buy':{cards:true,prepare:async ({packId,quantity},getPool)=>{
   const pack=packs.find(item=>item.id===packId);
   requireRule(pack&&packQuantities.includes(quantity),'Choose a valid pack and quantity.');
@@ -313,20 +324,36 @@ const rules={
  }},
  'remix.begin':{run:({w,args:{id},now})=>{
   requireRule(levelId(id)&&findRemix(id),'Choose a featured level.');
-  const token=crypto.randomUUID(),keyIndex=randomBelow(3);
-  w.remixRun={id,token,key:keyIndex,start:now};
-  return {token,key:keyIndex};
+  const token=crypto.randomUUID();
+  w.remixRun={id,token,start:now,keyVersion:id===86084399?2:0};
+  return {token};
+ }},
+ 'remix.finale':{run:({w,args:{token,proof},now})=>{
+  const run=w.remixRun;
+  requireRule(run?.id===86084399&&run.token===token,'Start a new LIMBO attempt.');
+  if(!run.finale){
+   replayRemix(findRemix(run.id),run,proof,now,{finale:true});
+   run.keyVersion=2;
+   run.finale={seed:randomBelow(0x100000000),start:now};
+  }
+  return {seed:run.finale.seed};
  }},
  'remix.finish':{run:({w,args:{token,proof},now})=>{
   const run=w.remixRun;
   requireRule(key(token)&&run?.token===token,'Start a new arcade attempt.');
-  const percent=replayRemix(findRemix(run.id),run,proof,now);
+  const finale=run.id===86084399&&run.finale;
+  let percent;
+  if(finale){
+   requireRule(within(proof?.key,0,7)&&now-finale.start>=limboChoiceAt-250,'Wait for the keys to finish shuffling.');
+   percent=proof.key===limboPattern(finale.seed).answer?100:99;
+  }else percent=replayRemix(findRemix(run.id),run,proof,now);
   w.remixBest??={};
-  const prior=w.remixBest[run.id]||0;
+  const prior=w.remixBest[run.id]||0,playerXpEarned=finale&&percent===100?100:Math.max(0,Math.floor((percent-prior)*.3));
   w.remixBest[run.id]=Math.max(prior,percent);
-  if(percent>prior)awardPlayerXp(w,Math.floor((percent-prior)*.3)+(percent===100?25:0));
+  if(finale&&percent===100)w.limboKeysCleared=true;
+  awardPlayerXp(w,playerXpEarned);
   delete w.remixRun;
-  return {percent};
+  return {percent,playerXpEarned};
  }},
  'army.begin':{cards:true,prepare:armySetup,run:({w,records,args:{map,chapter,tier,ids},prepared,now})=>{
   const {series,rivals,starterRows}=prepared;
@@ -353,11 +380,11 @@ export async function prepareGameAction(name,args,getPool,hasArt=()=>true){
  const prepared=await rule.prepare?.(args,getPool,hasArt);
  return {cards:rule.cards,apply(w,records,changes,now,online){
   const finishedTower=settleTower(w,now);
-  const finishedHouses=settleHouseUpgrades(w,now);
+  const finishedHouses=settleHouseUpgrades(w,now),finishedForges=settleForgeUpgrades(w,now);
   if(finishedTower)awardPlayerXp(w,30+20*finishedTower.level);
   const feature=Object.hasOwn(gatedActions,name)?features[gatedActions[name]]:null;
   if(feature)requireLevel(w,feature.level,feature.name);
   const income=settleMine(w,now);
-  return rule.run({w,records,changes,args,prepared,now,online,income,finishedTower,finishedHouses})??null;
+  return rule.run({w,records,changes,args,prepared,now,online,income,finishedTower,finishedHouses,finishedForges})??null;
  }};
 }

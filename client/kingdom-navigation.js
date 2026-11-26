@@ -109,5 +109,5 @@ export function kingdomNavigation(bounds,buildings,trees,construction){
   path.points.push(approach);
   return path;
  }
- return {route,homeRoute,targets};
+ return {route,homeRoute,targets,clear};
 }

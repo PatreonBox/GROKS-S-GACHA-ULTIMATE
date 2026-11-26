@@ -68,7 +68,7 @@ export function replayDrill(session,proof,now) {
  const {random:next,event,...state}=run;
  return {run:state,axis,ticks:proof.ticks,seed:next.state()};
 }
-export function replayRemix(remix,session,proof,now) {
+export function replayRemix(remix,session,proof,now,{finale=false}={}) {
  const course=makeCourse(remix),runner=newAttempt(course);
  const result=replay(proof,{
   duration:now-session.start,step:STEP,maxSeconds:180,
@@ -76,6 +76,10 @@ export function replayRemix(remix,session,proof,now) {
   advance(){const status=advanceRunner(runner,course,remix,STEP);return status==='running'?null:status;}
  });
  if (!result) throw Error('Finish the attempt before saving it.');
- if (result==='clear'&&(remix.mark!=='KEY'||proof.key===session.key)) return 100;
+ if(finale){
+  if(result!=='clear')throw Error('Reach the key chamber first.');
+  return true;
+ }
+ if (result==='clear'&&(remix.mark!=='KEY'||proof.key===session.key&&session.keyVersion!==2)) return 100;
  return Math.min(remix.finish?remix.finish-1:99,Math.floor((remix.finish||100)*runner.x/course.end));
 }

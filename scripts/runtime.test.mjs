@@ -470,26 +470,31 @@ test('Competing offers cannot exchange the same copy twice and unresolved offers
  assert.equal((await f.read(loser,'detail',{id:expired.id})).trade.status,'expired');
 });
 
-test('Market prices need three trading pairs, count demand once per player, and stay separate by finish',async t=>{
- const f=tradeFixture(t),sender=f.player('market_seller'),buyers=['alex','blair','casey'].map(name=>f.player(name));
- const [card]=await tradePool('Extreme Demon'),[offers]=await tradePool('Insane Demon');
- f.card(sender,card,4);for(const buyer of buyers)f.card(buyer,offers,2);
- const exchange=async buyer=>{
-  const {trade}=await f.send(buyer,'propose',{player:sender.id,offered:[tradeLine(offers)],requested:[tradeLine(card)]});
+test('Market prices need five trading pairs, respond to overpayment, and stay separate by finish',async t=>{
+ const f=tradeFixture(t),sender=f.player('market_seller'),buyers=['alex','blair','casey','dara','elliot','frank'].map(name=>f.player(name));
+ const card=(await tradePool('Extreme Demon')).at(-1),[offers]=await tradePool('Insane Demon');
+ f.card(sender,card,7);for(const buyer of buyers)f.card(buyer,offers,20);
+ const exchange=async(buyer,count=1)=>{
+  const {trade}=await f.send(buyer,'propose',{player:sender.id,offered:[tradeLine(offers,'standard',count)],requested:[tradeLine(card)]});
   return (await f.send(sender,'accept',{id:trade.id})).trade;
  };
  const quote=()=>f.read(sender,'quotes',{id:card[0]}).then(result=>result.quotes);
  await exchange(buyers[0]);await exchange(buyers[0]);await exchange(buyers[1]);
  assert.deepEqual((await quote()).standard,{value:null,demand:2,samples:2});
- const receipt=await exchange(buyers[2]);
+ await exchange(buyers[2]);await exchange(buyers[3]);
+ assert.deepEqual((await quote()).standard,{value:null,demand:4,samples:4});
+ const receipt=await exchange(buyers[4]);
  assert.equal(receipt.give[0].market.value,null);
  const {standard,holo}=await quote();
  assert.ok(standard.value>0);
- assert.equal(standard.demand,3);
- assert.equal(standard.samples,3);
+ assert.equal(standard.demand,5);
+ assert.equal(standard.samples,5);
  assert.deepEqual(holo,{value:null,demand:0,samples:0});
  const search=await f.read(sender,'market',{q:card[0],finish:'standard'});
  assert.equal(search.cards[0].market.value,standard.value);
+ await exchange(buyers[5],12);
+ assert.ok((await quote()).standard.value>standard.value);
+ assert.ok((await f.json(sender)).wallet.achievements['trade-first']);
  f.sqlite.prepare("UPDATE game_trades SET resolved_at=? WHERE status='completed'").run(Date.now()-31*86_400_000);
  assert.deepEqual((await quote()).standard,{value:null,demand:0,samples:0});
  assert.equal((await f.read(sender,'detail',{id:receipt.id})).trade.give[0].market.value,null);
@@ -524,4 +529,23 @@ test('Only the configured owner can set another player’s level and coins or ba
  assert.equal((await change(owner,a.id,'unban')).player.bannedAt,null);
  assert.equal((await f.json(a)).wallet.coins,7620);
  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS count FROM game_admin_player_actions').get().count,4);
+});
+
+test('Trade search supports exact Discord IDs and hides each unowned Impossible card',async t=>{
+ const f=tradeFixture(t),player=f.player('searcher'),partner=f.player('collector'),[one,two]=await tradePool('Impossible');
+ const hash='1234567890abcdef1234567890abcdef';
+ f.sqlite.prepare('UPDATE game_discord_profiles SET avatar_hash=? WHERE discord_id=?').run(hash,partner.discord);
+ f.card(partner,one,1);f.card(partner,two,1);
+ const results=await f.read(player,'find',{q:partner.discord});
+ assert.equal(results.players[0].id,partner.id);
+ assert.equal(results.players[0].avatar,'https://cdn.discordapp.com/avatars/'+partner.discord+'/'+hash+'.webp?size=64');
+ assert.deepEqual(await f.read(player,'market',{tier:11}),{cards:[],more:false,hasSecrets:false});
+ await f.read(player,'quotes',{id:one[0]},404);
+ assert.deepEqual((await f.read(player,'collection',{id:partner.id,side:'get'})).cards,[]);
+ f.card(player,one,1);
+ const allowed=await f.read(player,'market',{tier:11});
+ assert.deepEqual(allowed.cards.map(card=>card.id),[one[0]]);
+ assert.deepEqual((await f.read(player,'collection',{id:partner.id,side:'get'})).cards.map(card=>card.id),[one[0]]);
+ await f.read(player,'quotes',{id:one[0]});
+ await f.read(player,'quotes',{id:two[0]},404);
 });

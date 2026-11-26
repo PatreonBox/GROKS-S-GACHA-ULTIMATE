@@ -94,12 +94,12 @@ function grainMap(width,height,draw){
  return texture;
 }
 
-function makeGround(loader){
+function makeGround(loader,bounds){
  const texture=loader.load('/assets/kingdom/grass.webp');
  texture.colorSpace=THREE.SRGBColorSpace;
  texture.wrapS=texture.wrapT=THREE.MirroredRepeatWrapping;
  texture.repeat.set(17,28);texture.anisotropy=8;
- const geometry=new THREE.PlaneGeometry(174,174,86,86);
+ const geometry=new THREE.PlaneGeometry(174,174,128,128);
  geometry.rotateX(-Math.PI/2);
  const positions=geometry.getAttribute('position'),colors=new Float32Array(positions.count*3);
  const a=new THREE.Color('#d8e8ae'),b=new THREE.Color('#b9cf82'),mix=new THREE.Color();
@@ -107,7 +107,9 @@ function makeGround(loader){
   const x=positions.getX(i),z=positions.getZ(i);
   positions.setY(i,groundHeight(x,z));
   const blend=.5+.23*Math.sin(z*.47+x*.32)+.18*Math.sin(x*.24-z*.53);
-  mix.copy(a).lerp(b,blend).toArray(colors,i*3);
+  const edgeDistance=Math.min(x-bounds.left,bounds.right-x,z-bounds.back,bounds.front-z);
+  const owned=THREE.MathUtils.smoothstep(edgeDistance,-1.2,.85);
+  mix.copy(a).lerp(b,blend).multiplyScalar(.82+.18*owned).toArray(colors,i*3);
  }
  geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
  geometry.computeVertexNormals();
@@ -195,22 +197,13 @@ function leafSpray(){
  return geometry;
 }
 
-function treeGrove(group,bounds){
+function treeGrove(group,trees){
  const random=randomFor(2011),matrix=new THREE.Object3D(),up=vertex(0,1,0),out=vertex(0,0,1);
  const limbParts=[],crownParts=[],leaves=[];
  const palettes=[
   ['#365b35','#597737','#9cac4e'],['#2f533b','#457a57','#85ae67'],
   ['#426b42','#649049','#abc06d'],['#304f43','#457360','#79a47b']
  ].map(list=>list.map(color=>new THREE.Color(color)));
- const trees=[];
- for(let i=0;i<56;i++){
-  const angle=i/56*tau+(random()-.5)*.21,x=Math.cos(angle),z=Math.sin(angle);
-  const edge=Math.min((x<0?-bounds.left:bounds.right)/Math.abs(x),(z<0?-bounds.back:bounds.front)/Math.abs(z));
-  const radius=edge+2.3+random()*23;
-  trees.push([x*radius,z*radius,2.7+random()*3.80,Math.floor(random()*palettes.length)]);
- }
- trees.push([bounds.left-2,-5.1,5,0],[10,bounds.back-2.1,5.3,1],[-11.9,bounds.back-3,5.7,2],
-  [bounds.right+2,-4.6,4.3,3],[bounds.right+2.3,6.4,3.9,0],[bounds.left-2.4,8.8,4.45,1]);
  function limb(a,b,radius){
   const delta=b.clone().sub(a);
   matrix.position.copy(a).lerp(b,.5);
@@ -218,7 +211,7 @@ function treeGrove(group,bounds){
   matrix.scale.set(radius,delta.length(),radius);matrix.updateMatrix();
   limbParts.push(matrix.matrix.clone());
  }
- for(const [x,z,h,shade] of trees){
+ for(const {x,z,height:h,shade} of trees){
   const earth=groundHeight(x,z),angle=random()*tau,c=Math.cos(angle),s=Math.sin(angle);
   const place=(dx,dy,dz)=>vertex(x+h*(dx*c+dz*s),earth+h*dy,z+h*(-dx*s+dz*c));
   const near=Math.hypot(x,z)<28,fork=place(.022,.34,.010),top=place(-.008,.79,-.027);
@@ -269,11 +262,10 @@ function treeGrove(group,bounds){
  trunks.castShadow=true;trunks.receiveShadow=true;
  crowns.castShadow=true;crowns.receiveShadow=true;
  group.add(trunks,crowns,sprouts);
- return trees;
 }
 
-function vegetation(group,bounds){
- const trees=treeGrove(group,bounds);
+function vegetation(group,trees,bounds){
+ treeGrove(group,trees);
  const random=randomFor(2015),matrix=new THREE.Object3D();
  const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),material('#ffffff',{flatShading:true}),39);
  for(let i=0;i<rocks.count;i++){
@@ -287,7 +279,7 @@ function vegetation(group,bounds){
  const points=[],tints=[];
  const grassColors=['#739654','#6a8b4c','#90a965','#557d4a','#99ad60'].map(c=>new THREE.Color(c));
  for(let i=0;i<780;i++){
-  const radius=2.8+random()*19,angle=random()*tau,x=Math.cos(angle)*radius,z=Math.sin(angle)*radius;
+  const radius=2.8+random()*(bounds.right+5),angle=random()*tau,x=Math.cos(angle)*radius,z=Math.sin(angle)*radius;
   if(Math.hypot(x+2.65,z)<1.7||Math.abs(radius-5)<.63)continue;
   const floor=groundHeight(x,z),color=grassColors[i%grassColors.length];
   for(let j=0;j<3;j++){
@@ -301,14 +293,13 @@ function vegetation(group,bounds){
  geometry.setAttribute('color',new THREE.Float32BufferAttribute(tints,3));
  const grass=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide,vertexColors:true}));
  group.add(grass);
- return trees;
 }
 
-export function makeLandscape(loader,path,bounds){
+export function makeLandscape(loader,path,bounds,trees){
  const ground=new THREE.Group();
- const surface=makeGround(loader);
+ const surface=makeGround(loader,bounds);
  ground.add(surface,makeTrail(path));
- const trees=vegetation(ground,bounds);
+ vegetation(ground,trees,bounds);
  const random=randomFor(371),hills=['#6f9f99','#6e9b97','#7a9e96','#89adab'].map(color=>material(color,{flatShading:true}));
  const geometry=new THREE.IcosahedronGeometry(1,2);
  for(let i=0;i<20;i++){
@@ -421,6 +412,14 @@ export function makeTower(){
   meshAt(tower,new THREE.BoxGeometry(.13,.18,.13),glow,x,1.5,1.16);
   const shade=meshAt(tower,new THREE.ConeGeometry(.11,.11,4),iron,x,1.63,1.16);
   shade.rotation.y=Math.PI/4;
+ }
+ const crest=new THREE.Group();
+ crest.name='tower-upgraded-trim';crest.visible=false;tower.add(crest);
+ for(const y of [2.22,4.41])cylinder(crest,1.17,1.17,.105,gold,0,y,0);
+ for(const side of [-1,1]){
+  const banner=meshAt(crest,new THREE.BoxGeometry(.35,.85,.035),teal,side*.58,3.10,.95);
+  banner.rotation.y=side*.44;
+  meshAt(banner,new THREE.OctahedronGeometry(.10),gold,0,.17,.05,false).scale.set(1,1.3,.28);
  }
  for(let i=0;i<3;i++){
   meshAt(tower,new THREE.BoxGeometry(1.31-i*.13,.104,1.24-i*.23),i===0?base:trim,0,.06+i*.10,1.22);

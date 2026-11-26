@@ -34,7 +34,7 @@ async function fillPlayerPower(db,adminOwner,discordOnly,inventory){
   await db.batch(changes);
  }
 }
-function avatar(row){
+export function discordAvatar(row){
  if(!/^\d{17,20}$/.test(row.discord_id||''))return null;
  if(/^(?:a_)?[a-f0-9]{32}$/.test(row.avatar_hash||''))return 'https://cdn.discordapp.com/avatars/'+row.discord_id+'/'+row.avatar_hash+'.webp?size=64';
  return 'https://cdn.discordapp.com/embed/avatars/'+(row.default_avatar_index??Number((BigInt(row.discord_id)>>22n)%6n))+'.png';
@@ -58,7 +58,7 @@ async function selectRanked(db,{adminOwner,discordOnly,inventory},query,...args)
  return results;
 }
 const rankedRow=row=>({id:row.player_id,place:row.place,alias:row.alias,level:playerProgress(row.xp).level,power:row.power,
- avatar:avatar(row),mine:Boolean(row.mine),profileHidden:Boolean(row.profile_hidden)});
+ avatar:discordAvatar(row),mine:Boolean(row.mine),profileHidden:Boolean(row.profile_hidden)});
 
 export async function playerRank(db,options){
  const results=await selectRanked(db,options,' SELECT place FROM ranked WHERE player_id=?',options.playerId);

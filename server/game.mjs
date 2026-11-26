@@ -8,10 +8,12 @@ import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,r
 import {playerProgress} from '../web/player-progression.js';
 import {featureLevel} from '../web/level-access.js';
 import {tradeLevelNotice} from '../web/trade-rules.js';
-import {discoveredVisitors} from './kingdom-visitors.mjs';
+import {kingdomVisitors} from './kingdom-visitors.mjs';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
+import {trainingLevels,updateAchievements} from '../web/progression-rules.js';
+import {seedAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
 
 const guestCookie='__Host-gdlb-save';
@@ -94,7 +96,7 @@ async function profile(db,owner,create){
 function visibleWallet(wallet){
  const {tapLimit,minePlayerXp,drills,remixRun,armyRun,armyReceipt,...review}=wallet;
  const now=Date.now();
- return {...review,kingdomClock:now,...(wallet.kingdom?.towerConstruction?{towerClock:now}:{}),discoveredVisitors:discoveredVisitors(wallet,now)};
+ return {...review,kingdomClock:now,...(wallet.kingdom?.towerConstruction?{towerClock:now}:{}),...kingdomVisitors(wallet,now)};
 }
 async function inventory(db,id){
  const {results}=await db.prepare('SELECT card FROM game_cards WHERE player_id=?').bind(id).all();
@@ -187,10 +189,10 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    const current=await profile(db,session.owner,false);
    if(!current)reject('Reload the page to reconnect to your save.',401);
    if(current.banned_at!==null)reject(banMessage,403,{banned:true});
-   return {wallet:visibleWallet(JSON.parse(current.wallet)),saveRevision:current.revision,result:JSON.parse(previous.result)};
+   return {wallet:visibleWallet(await seedAchievements(db,current.player_id,JSON.parse(current.wallet),Date.now())),saveRevision:current.revision,result:JSON.parse(previous.result)};
   }
   const changes=new Map(),now=Date.now();
-  const trainingVersion=wallet.trainingRevision;
+  const trainingVersion=wallet.trainingRevision,battleWasActive=wallet.battle?.status==='active',trainingAction=['card.feed','drill.finish'].includes(action);
   let result,records;
   if(reset){
    const legacyTransfer=wallet.legacyTransfer;
@@ -198,14 +200,19 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    if(legacyTransfer)wallet.legacyTransfer=legacyTransfer;
    result={reset:true};
   }else if(admin){
+   await seedAchievements(db,record.player_id,wallet,now);
    settleMine(wallet,now);
    result=adjustAdminWallet(wallet,args);
   }else{
    try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
    if(prepared.cards)records=await inventory(db,record.player_id);
+   await seedAchievements(db,record.player_id,wallet,now,records);
+   const lastTraining=trainingAction?trainingLevels(wallet):0;
    try{result=prepared.apply(wallet,records||[],changes,now,true);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
+   updateAchievements(wallet,{cards:changes.values(),wins:Number(action==='arena.move'&&battleWasActive&&wallet.battle?.status==='won'),
+    trained:trainingAction?Math.max(0,trainingLevels(wallet)-lastTraining):0},now);
   }
   let power=record.collection_power;
   if(reset)power=0;
@@ -237,7 +244,9 @@ async function transferSave(db,session,body,getPool){
   try{prepared??=await prepareSaveTransfer(body,getPool);}
   catch(error){reject(error.message);}
   const records=await inventory(db,record.player_id),now=Date.now();
+  await seedAchievements(db,record.player_id,wallet,now,records);
   const {changes,result}=applySaveTransfer(wallet,records,prepared,now);
+  updateAchievements(wallet,{cards:changes.values(),train:true},now);
   wallet.legacyTransfer={id:transferId,...result};
   if(JSON.stringify(wallet).length>1700000)reject('This browser save is too large to transfer.',413);
   const power=collectionPower(records,wallet,changes);
@@ -353,7 +362,8 @@ export function gameRoutes(readJson,hasArt){
    if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt,admin),...account});
    const record=await profile(db,session.owner,initial);
    if(!record)reject('Open the game to start your save.',401);
-   if(view==='wallet')return json({wallet:visibleWallet(normalizeWallet(JSON.parse(record.wallet))),saveRevision:record.revision,...account},200,session.cookie);
+   if(view==='wallet')return json({wallet:visibleWallet(await seedAchievements(db,record.player_id,normalizeWallet(JSON.parse(record.wallet)),Date.now())),saveRevision:record.revision,...account},200,session.cookie);
+   if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
    if(view==='gacha-activity')return json({activity:await gachaActivity(db,record)});
    if(view==='profile')return json({profile:await profileStats(db,record,await getCollectibleIds(),{adminOwner,discordOnly:requiresSignIn,admin})});

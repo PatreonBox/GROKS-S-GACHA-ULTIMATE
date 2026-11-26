@@ -18,6 +18,7 @@ import {createCubeShop} from './cube-shop.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {createCoinMine} from './coin-mine.js';
 import {createKingdom} from './kingdom.js';
+import {createProgression} from './progression.js';
 import {createTrading} from './trading.js';
 import {packPlayerXp,packXpAllowance,packXpLimit,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels} from './level-access.js';
@@ -87,6 +88,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  cubeRoot.id='cubeShop';
  const cubes=createCubeShop({root:cubeRoot,applyWallet,sound,announce});
  const kingdom=createKingdom(byId('kingdomRoom'),sound,applyWallet,rewards);
+ const progressionRoom=createProgression(root);
  const trade=createTrading(root,{coverSource,syncWallet:sync});
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
  const locked=id=>playerLevel<featureLevel(id);
@@ -108,8 +110,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    markKingdomNav();
    setLevelLock(byId('walletLink'),featureLevel('mine'),playerLevel);
    setLevelLock(byId('gemLink'),featureLevel('upgrades'),playerLevel);
-   if(view&&routeLocked!==locked(view))page(view,routePack);
+   if(view&&routeLocked!==locked(view==='achievements'?'progression':view))page(view,routePack);
   }
+  progressionRoom.setWallet(w);
   cubes.setWallet(w);
   kingdom.setWallet(w);
   if(view==='collection'&&collectionSort==='rarity'&&oldLuck!==w.luck&&byId('binderResults'))binder();
@@ -241,8 +244,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  }
  function page(next,packId){
   if(view!==next){stopTimers();rewards.clear()}
-  stations.leave();coinMine.leave();trade.leave();version++;view=next;routePack=packId;
-  routeLocked=locked(next);
+  stations.leave();coinMine.leave();trade.leave();progressionRoom.leave();version++;view=next;routePack=packId;
+  const progression=['progression','achievements'].includes(next),feature=progression?'progression':next;
+  routeLocked=locked(feature);
   const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom',trading=next==='trading';
   root.hidden=!view||!routeLocked&&(combat||home);
   battle.show(classic&&!routeLocked,next==='training'&&!routeLocked,next==='arcade'&&!routeLocked);
@@ -251,6 +255,11 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(home&&!routeLocked){markGuide(newAreas.kingdom);markKingdomNav()}
   if(reveal.open)reveal.close();
   if(trading){trade.show(routeLocked);return routeLocked;}
+  if(progression){
+   if(routeLocked)root.innerHTML='<div class="arc-heading"><h1>Progression</h1></div>'+lockedPage(features.progression,playerLevel,'#gacha');
+   else progressionRoom.show(next==='achievements'?'achievements':'overview');
+   return routeLocked;
+  }
   if(routeLocked){
    const heading=combat?'Battle mode':home?'Kingdom':'Gacha';
    root.innerHTML='<div class="arc-heading"><h1>'+heading+'</h1>'+(!combat&&!home?'<div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div>':'')+

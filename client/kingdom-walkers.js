@@ -5,9 +5,9 @@ const moveCycle=['walk','trot','roll','vault','skip'];
 const destinations=['production','tree','housing','trail','tower','meadow'];
 const speed={walk:2.7,trot:3.55,roll:3.15,vault:3.2,skip:2.95};
 const arrival={
- production:['inspect','cheer','spin'],tree:['look','stretch','rest'],
- trail:['wave','spin','stretch'],
- tower:['salute','cheer'],meadow:['rest','wave','spin']
+ production:['inspect','sneeze','spin'],tree:['look','sneeze','pancake','rest'],
+ trail:['wave','breakdance','backflip','stretch'],
+ tower:['salute','cheer','backflip'],meadow:['rest','pancake','breakdance','spin']
 };
 const wave=(t,frequency)=>Math.sin(t*turn*frequency);
 const hop=(t,frequency)=>Math.abs(wave(t,frequency));
@@ -30,7 +30,12 @@ export const kingdomCubeAnimations={
  peek:t=>[.17*pulse(t,1.1),.14*wave(t,1.1),.48*pulse(t,1.1),-.42*wave(t,.75)],
  enter:t=>[.065*hop(t,1.8),.095*wave(t,1.8),0,.055*wave(t,1.8)],
  wave:t=>[.09*hop(t,1.8),0,.20*wave(t,.9),.46*wave(t,1.8)],
- salute:t=>[.14*pulse(t,1.05),-.39*pulse(t,1.05),.14*wave(t,.62),.18*pulse(t,1.05)]
+ salute:t=>[.14*pulse(t,1.05),-.39*pulse(t,1.05),.14*wave(t,.62),.18*pulse(t,1.05)],
+ sneeze:t=>[.27*pulse(t,1.45),-.69*pulse(t,1.45)+.24*wave(t,1.45),0,.08*wave(t,5),1.10,.91],
+ pancake:t=>[-.18*pulse(t,1.08),0,.18*wave(t,.71),.08,1+.36*pulse(t,1.08),1-.40*pulse(t,1.08)],
+ breakdance:t=>[.10+.24*hop(t,1.8),.47*wave(t,.8),turn*t*1.22,.68*wave(t,.8),1.03,.96],
+ backflip:t=>{const p=Math.min(1,t/.82);return [.76*Math.sin(Math.PI*p),-turn*p,0,.14*Math.sin(Math.PI*p)];},
+ wobble:t=>[.06*hop(t,2.7),.22*wave(t,2.9),0,.26*wave(t,3.8),1.05,.94]
 };
 const neutral=[0,0,0,0];
 export function poseKingdomCube(body,action,time,reduced){
@@ -42,15 +47,23 @@ export function poseKingdomCube(body,action,time,reduced){
 
 export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set()){
  let x=spawn.x,z=spawn.z,heading=0,turnIndex=seed,stepIndex=seed,choiceIndex=seed,seen;
- let route=[],goal,mode='look',time=0,waiting=.2+(seed%6)*.18,visit,heldHome,seekHome=false,wasNight=false;
+ let route=[],goal,mode='look',time=0,waiting=.2+(seed%6)*.18,visit,heldHome,seekHome=false,wasNight=false,jammed=0,avoiding=false;
+ let openStep=()=>true;
  const face=target=>{
   const dx=target.x-x,dz=target.z-z;
   return Math.hypot(dx,dz)>.025?Math.atan2(dx,dz):heading;
  };
- function move(point,stride){
-  const distance=Math.hypot(point.x-x,point.z-z);
-  if(distance<=stride){({x,z}=point);return true}
-  x+=(point.x-x)*stride/distance;z+=(point.z-z)*stride/distance;
+ function move(point,stride,nav){
+  const dx=point.x-x,dz=point.z-z,distance=Math.hypot(dx,dz);
+  const fraction=distance<=stride?1:stride/distance;
+  const next={x:x+dx*fraction,z:z+dz*fraction};
+  avoiding=!openStep(next);
+  if(!avoiding){
+   ({x,z}=next);jammed=0;return fraction===1;
+  }
+  if(!nav||distance<.001)return false;
+  const sideways={x:x+dz*stride*.84/distance,z:z-dx*stride*.84/distance};
+  if(nav.clear({x,z},sideways)&&openStep(sideways)){({x,z}=sideways);jammed=0;}
   return false;
  }
  function releaseHome(){
@@ -77,6 +90,7 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set())
    }
    if(!path)continue;
    if(target.home){heldHome=target.home;occupied.add(heldHome.id)}
+   if(path.recovery&&!openStep(path.recovery)){releaseHome();continue;}
    if(path.recovery)({x,z}=path.recovery);
    goal={category,target};route=path.points;
    mode=moveCycle[stepIndex++%moveCycle.length];time=0;
@@ -118,9 +132,14 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set())
   }
   return angle;
  }
- function update(nav,dt,floor,reduced,hit,night=false){
+ function update(nav,dt,floor,reduced,hit,night=false,canStep=()=>true){
+  openStep=canStep;avoiding=false;
   if(seen!==nav){
    route=[];goal=null;seen=nav;
+   if(visit&&!nav.targets.housing.some(target=>target.home.id===visit.home.id&&target.home.building.x===visit.home.building.x&&
+      target.home.building.z===visit.home.building.z&&target.home.building.rotation===visit.home.building.rotation)){
+    visit=null;waiting=0;
+   }
    if(!visit)releaseHome();
   }
   if(night&&!wasNight&&!visit&&!heldHome)seekHome=true;
@@ -137,9 +156,11 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set())
    const point=route[0];
    if(point){
     targetAngle=face(point);
-    if(move(point,dt*speed[mode])){
+    if(move(point,dt*speed[mode],nav)){
      route.shift();
      if(!route.length)arrive();
+    }else if(avoiding&&(jammed+=dt)>1.05){
+     route=[];goal=null;releaseHome();jammed=0;mode='wobble';waiting=.23+seed%4*.16;
     }
    }
   }
@@ -155,9 +176,9 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set())
   model.resident.rotation.y=heading;
   const hidden=visit?.phase==='rest';
   model.resident.visible=!hidden;hit.userData.inactive=hidden;
-  poseKingdomCube(model.body,mode,time,reduced);
+  poseKingdomCube(model.body,avoiding&&!visit?'wobble':mode,time,reduced);
   hit.position.copy(model.resident.position);hit.position.y+=model.body.position.y*scale;
   return visit&&!hidden?visit.home.id:null;
  }
- return {update,releaseHome};
+ return {update,releaseHome,get position(){return {x,z,hidden:visit?.phase==='rest'};}};
 }

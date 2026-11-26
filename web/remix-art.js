@@ -316,12 +316,7 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
   }
   ctx.restore();
  }
- function backdropKey(s,key){
-  if(remix.mark!=='KEY'||s.x>course.end*.30)return;
-  label(ctx,'REMEMBER',W-178,33,13,'#aab5de');
-  label(ctx,['◆','●','▲'][key],W-92,74,36,'#8affce');
- }
- return function draw(s,{phase,key,particles,reduced,width,height}){
+ return function draw(s,{phase,particles,reduced,width,height}){
   if(width!==W||height!==viewHeight){
    W=width;viewHeight=height;top=(height-H)*.49;player=Math.min(154,width*.23);
    sky=ctx.createLinearGradient(0,0,0,height);sky.addColorStop(0,'#0b1021');sky.addColorStop(.73,'#181b32');sky.addColorStop(1,tint+'66');
@@ -337,7 +332,6 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
    if(obstacle.kind==='bank'||obstacle.kind==='roof')ledge(obstacle);
    else shard(obstacle);
   }
-  gateMarks(s,reduced);orbs(s,reduced);backdropKey(s,key);
   const clock=reduced?0:s.time;
   if(course.miniAt)portal(drawX(course.miniAt),126,'#ffa0fc',clock,miniPortal,16);
   portal(drawX(course.end),course.mode==='cube'?FLOOR-46:127,'#ffd58c',clock,exitPortal,19);

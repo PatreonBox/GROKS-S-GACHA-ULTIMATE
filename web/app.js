@@ -12,6 +12,7 @@ import {setGuideProgress} from './guide-progress.js';
 import {playerBoard} from './player-board.js';
 import {sectionGuideId} from './section-guides.js';
 import {setupLevelUps} from './level-up.js';
+import {setupAchievementBanners} from './progression.js';
 import {levelMarketDetails} from './trade-card-view.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -36,6 +37,7 @@ const ranks=playerBoard($('podrows'),$('playersPage'),id=>localImages.has(id)?'/
 const sound=createPackSound();
 sound.listenForUiTaps();
 setupLevelUps($('levelUp'),sound);
+setupAchievementBanners(sound);
 document.querySelectorAll('[data-icon]').forEach(i=>i.innerHTML=ico(i.dataset.icon));
 function storeRows(rows){for(const r of rows)if(!r[15])rowMap.set(r[0],r)}
 function announce(s){const t=document.querySelector('.toast');t.textContent=s;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),1600)}
@@ -64,7 +66,7 @@ function drawTierNav() {
    return '<a class="tier-link standard-'+slug+(active?' selected':'')+'" href="#stars/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/'+slug+'.webp" alt=""><span><strong>'+tier.name+'</strong><small>'+range+' '+(range==='1'?'star':'stars')+'</small></span></a>';
   }).join('');
  }
- const nav=$('tierNav');nav.hidden=playerRanks()||['saved','gacha','battle','kingdom','trading'].includes(section)||isStarList();
+ const nav=$('tierNav');nav.hidden=playerRanks()||['saved','gacha','battle','kingdom','trading','progression'].includes(section)||isStarList();
  if(nav.hidden)return;
  nav.innerHTML=Object.entries(tierNames).map(([slug, label])=>{
   const meta=seed.demonTiers?.[slug],active=section==='demons'&&activeTier===slug;
@@ -80,10 +82,10 @@ function setSection(route){
  document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===section);if(b.dataset.tab===section)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
  $('showcase').hidden=section!=='leaderboard'||playerRanks();drawTierNav();
  ranks.show(section==='leaderboard'?(playerRanks()?'full':'spotlight'):null);
- const inArcade=['gacha','battle','kingdom','trading'].includes(section);
+ const inArcade=['gacha','battle','kingdom','trading','progression'].includes(section);
  document.querySelector('.board').hidden=inArcade||playerRanks();
  const blocked=arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null,selected.pack);
- guides.select(blocked||section==='trading'?false:sectionGuideId(section,activeTier));
+ guides.select(blocked||['trading','progression'].includes(section)?false:sectionGuideId(section,activeTier));
  if(inArcade||playerRanks()){serial++;queryAbort?.abort();return}
  $('sectiontag').textContent=isStarList()?'STAR LEVELS':section==='demons'?'DEMON LISTS':section==='saved'?'YOUR COLLECTION':'GEOMETRY DASH';
  $('boardTitle').textContent=isStarList()?starTiers[activeTier].name+' levels':section==='demons'?tierNames[activeTier]+' Demons':section==='saved'?'Saved levels':'Level leaderboard';
@@ -284,7 +286,7 @@ $('pageJump').onsubmit=event=>{
 };
 function changePage(delta){if(delta>0&&!nextPage||page+delta<0)return;if(section==='leaderboard'&&!offline&&delta>0)cursors[page+1]=nextPage;page+=delta;loadPage();if(document.querySelector('.board').getBoundingClientRect().top<0)document.querySelector('.board').scrollIntoView({block:'start'})}
 $('nextPage').onclick=()=>changePage(1);$('prevPage').onclick=()=>changePage(-1);
-document.addEventListener('keydown',e=>{if(e.key==='/'&&!playerRanks()&&!['gacha','battle','kingdom','trading'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!playerRanks()&&!['gacha','battle','kingdom','trading','progression'].includes(section)&&!document.querySelector('dialog[open]')&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus()}});
 window.addEventListener('hashchange',()=>seed&&setSection(location.hash.slice(1)));
 async function init(){try{const r=await fetch('/data/start.json');if(!r.ok)throw Error('init');seed=await r.json();localImages=new Set(seed.images);initialRows=seed.top;storeRows(initialRows);storeRows(seed.featured.map(x=>x.row));storeRows([...saved.values()].filter(r=>!rowMap.has(r[0])));featured();refreshSaves();changeLayout(layout==='grid'?'grid':'list');if(!location.hash||location.hash==='#leaderboard'){render(initialRows.slice(0,20),seed.indexed,true,'index');$('retry').hidden=true}setSection(location.hash.slice(1));demons().catch(()=>{})}catch{$('resultMeta').textContent='Could not open the index.';$('results').innerHTML='<button class="outline" id="retryInit">Retry</button>';$('retryInit').onclick=init}}
 async function start(){
