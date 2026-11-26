@@ -48,10 +48,12 @@ body:not([data-account="ready"]) :is(.headwrap nav,.head-tools,.save-status,foot
  color:#f1faff;
  font:800 clamp(20px,1.9vw,26px)/1.05 Cond,sans-serif;
 }
-@media(min-width:1321px){
- .headwrap{gap:16px}
- .headwrap nav{gap:10px}
+@media(min-width:1701px){
+ .headwrap{gap:clamp(12px,1vw,18px)}
+ .headwrap nav{gap:clamp(7px,.6vw,11px)}
  .headwrap nav .tab{gap:5px;font-size:14px}
+ .headwrap .brand{min-width:0}
+ .brand-name{overflow:hidden;text-overflow:ellipsis}
 }
 @media(max-width:680px){
  .headwrap .brand img.brand-emblem{width:46px;height:46px}

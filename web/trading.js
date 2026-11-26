@@ -29,13 +29,20 @@ export function createTrading(root,{coverSource,syncWallet}){
  let active;
  return {show(locked){
   active?.dispose();
+  if(locked){
+   active=null;
+   root.innerHTML='<section class="trade-room" aria-labelledby="tradeTitle"><h1 id="tradeTitle">Trading</h1>'+
+    '<div class="level-gate"><span class="level-gate-icon">'+ico('lock')+'</span><div><p>'+tradeLevelNotice+'</p>'+
+    '<a class="primary" href="#gacha">Keep playing</a></div></div></section>';
+   return;
+  }
   root.innerHTML='<section class="trade-room" aria-labelledby="tradeTitle"><div class="trade-title"><div><h1 id="tradeTitle">Trading</h1><p>'+tradeLevelNotice+'</p></div>'+
-   (locked?'':'<button class="outline trade-settings-button" type="button" data-trade-settings>'+ico('spark')+' Trade settings</button>')+'</div>'+
-   (locked?'':'<nav class="trade-tabs" aria-label="Trading sections">'+tabs.map(([key,title])=>'<button type="button" data-trade-tab="'+key+'" aria-pressed="false">'+title+
+   '<button class="outline trade-settings-button" type="button" data-trade-settings>'+ico('spark')+' Trade settings</button></div>'+
+   '<nav class="trade-tabs" aria-label="Trading sections">'+tabs.map(([key,title])=>'<button type="button" data-trade-tab="'+key+'" aria-pressed="false">'+title+
     (key==='incoming'||key==='outgoing'?'<span data-trade-count="'+key+'" hidden></span>':'')+'</button>').join('')+'</nav>'+
     '<div class="trade-content" data-trade-content></div><dialog class="player-dialog trade-dialog" aria-labelledby="tradeDialogTitle">'+
-    '<div class="player-dialog-head"><h2 id="tradeDialogTitle"></h2><button class="iconbtn" data-close-trade type="button" aria-label="Close">'+ico('x')+'</button></div><div class="player-dialog-body" data-trade-dialog></div></dialog>')+'</section>';
-  active=locked?null:createRoom(root.querySelector('.trade-room'),coverSource,syncWallet);
+    '<div class="player-dialog-head"><h2 id="tradeDialogTitle"></h2><button class="iconbtn" data-close-trade type="button" aria-label="Close">'+ico('x')+'</button></div><div class="player-dialog-body" data-trade-dialog></div></dialog></section>';
+  active=createRoom(root.querySelector('.trade-room'),coverSource,syncWallet);
  },leave(){active?.dispose();active=null;},refresh(){active?.refresh();}};
 }
 

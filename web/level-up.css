@@ -4,6 +4,7 @@
 }
 .level-lock svg,.arc-nav a .level-lock svg,.combat-links .feature-shortcut .level-lock svg{display:block;width:11px;height:11px;flex:none;color:inherit}
 [data-level-locked]{cursor:not-allowed}
+[data-level-locked]:hover{filter:none}
 .arc-nav a[data-level-locked],.pack-choice[data-level-locked],.qty-options button[data-level-locked],.tab[data-level-locked],
 .combat-links a[data-level-locked],.battle-tabs button[data-level-locked],.arena-mast a[data-level-locked],.wallet-link[data-level-locked],.outline[data-level-locked]{
  color:#b2a8c0;border-color:#52435f;background:#1a1722;

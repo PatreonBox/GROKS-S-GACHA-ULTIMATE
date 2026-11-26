@@ -44,8 +44,8 @@ const battleShortcuts={training:{name:'Training zone',route:'training',style:'tr
 function battleShortcut(key,level,inArena=false){
  const {name,route,style,icon}=battleShortcuts[key];
  const required=featureLevel(route),locked=level<required,label=locked?name+' · Level '+required+' required':name;
- return '<a class="outline feature-shortcut '+style+'-shortcut'+(inArena?' arena-activity':'')+'" href="#battle/'+route+'"'+
-  lockAttributes(required,level)+' aria-label="'+label+'" title="'+label+'">'+ico(icon)+'<span class="feature-label">'+name+'</span>'+
+ return '<a class="outline feature-shortcut '+style+'-shortcut'+(inArena?' arena-activity':'')+'"'+
+  lockAttributes(required,level,'#battle/'+route)+' aria-label="'+label+'" title="'+label+'">'+ico(icon)+'<span class="feature-label">'+name+'</span>'+
   (locked?lockBadge(required):newAreas[key]?newBadge(newAreas[key]):'')+'</a>';
 }
 

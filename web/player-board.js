@@ -1,5 +1,6 @@
 import {stat} from './card-economy.js';
 import {showBestCard,visitKingdom} from './player-showcase.js';
+import {rankingRefresh} from './ranking-refresh.js';
 
 const full=n=>n.toLocaleString('en-US');
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -21,33 +22,49 @@ async function getPlayers(query=''){
  return result;
 }
 export function playerBoard(spotlight,standings,localCover){
- let view=null,revision=0,profileRevision=0,showcaseRevision=0,profile,disposeVisit;
+ let view=null,profileRevision=0,showcaseRevision=0,profile,disposeVisit,rankings;
  const panel=standings.querySelector('[data-player-rows]');
+ const reload=standings.querySelector('[data-reload-ranks]'),status=standings.querySelector('[data-rank-status]');
+ const main=standings.closest('main'),rendered=new Map();
  const dialog=document.getElementById('rankedProfile'),profileBody=dialog.querySelector('[data-ranked-body]');
+ const refresh=rankingRefresh(30_000,()=>Boolean(view&&!main.hidden),load);
  document.addEventListener('error',event=>{
   if(event.target.matches?.('.rank-avatar img'))event.target.hidden=true;
  },true);
- standings.querySelector('[data-reload-ranks]').onclick=()=>load('full');
- function drawTop(rows){
-  spotlight.innerHTML=rows.length?rows.slice(0,3).map(row=>'<button class="podrow rank-row ranked-entry"'+entry(row)+'><span class="rank-place" data-place="'+row.place+'">#'+row.place+'</span>'+avatar(row)+
+ reload.onclick=()=>refresh.run();
+ function render(slot,html){
+  if(rendered.get(slot)===html)return;
+  const active=document.activeElement,focused=slot.contains(active)?active.dataset.rankedProfile:null;
+  slot.innerHTML=html;rendered.set(slot,html);
+  if(focused)slot.querySelector('[data-ranked-profile="'+CSS.escape(focused)+'"]')?.focus({preventScroll:true});
+ }
+ function paintRanks(){
+  if(!rankings||dialog.open)return;
+  const {rows,privateProfile,legacyProgress}=rankings;
+  render(spotlight,rows.length?rows.slice(0,3).map(row=>'<button class="podrow rank-row ranked-entry"'+entry(row)+'><span class="rank-place" data-place="'+row.place+'">#'+row.place+'</span>'+avatar(row)+
    '<span class="podname"><strong>'+player(row)+'</strong><small>Level '+row.level+'</small></span>'+
-   '<span class="rank-power">'+power(row)+'<small>Power</small></span></button>').join(''):emptyRanks;
- }
- function drawFull({rows,privateProfile,legacyProgress}){
+   '<span class="rank-power">'+power(row)+'<small>Power</small></span></button>').join(''):emptyRanks);
   const message=privateProfile?'Your profile is private on player rankings.':legacyProgress?'Imported browser saves are private on player rankings.':'';
-  panel.innerHTML=(message?'<p class="rank-private">'+message+'</p>':'')+(rows.length?table(rows):emptyRanks);
+  render(panel,(message?'<p class="rank-private">'+message+'</p>':'')+(rows.length?table(rows):emptyRanks));
  }
- async function load(mode){
-  const request=++revision,slot=mode==='full'?panel:spotlight;
-  slot.setAttribute('aria-busy','true');
+ async function load(){
+  if(!rankings)for(const slot of [panel,spotlight])slot.setAttribute('aria-busy','true');
+  reload.setAttribute('aria-busy','true');
+  let message='Updates every 30 seconds';
   try{
    const data=await getPlayers();
-   if(request!==revision)return;
-   drawTop(data.rows);
-   if(mode==='full')drawFull(data);
+   if(!Array.isArray(data.rows))throw Error('Rankings unavailable');
+   rankings=data;
+   paintRanks();
+   status.title='Last checked '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit',second:'2-digit'});
   }catch{
-   if(request===revision)slot.textContent='Player rankings could not load.';
-  }finally{slot.removeAttribute('aria-busy')}
+   if(!rankings)for(const slot of [panel,spotlight])render(slot,'<p class="rank-empty">Player rankings could not load.</p>');
+   message=rankings?'Showing last results · retrying':'Retrying automatically';
+   status.removeAttribute('title');
+  }finally{
+   if(status.textContent!==message)status.textContent=message;
+   for(const slot of [panel,spotlight,reload])slot.removeAttribute('aria-busy');
+  }
  }
  function drawProfile(row,stats,showcases){
   profile=row;
@@ -118,6 +135,7 @@ export function playerBoard(spotlight,standings,localCover){
   clearVisit();profile=null;
   delete dialog.dataset.profileView;
   profileBody.replaceChildren();
+  paintRanks();
  });
  document.addEventListener('click',async event=>{
   const entry=event.target.closest('[data-ranked-profile]');
@@ -134,6 +152,7 @@ export function playerBoard(spotlight,standings,localCover){
   standings.hidden=mode!=='full';
   if(mode===view)return;
   view=mode;
-  if(mode)load(mode);else revision++;
+  if(mode)refresh.run();
+  else refresh.schedule();
  }};
 }

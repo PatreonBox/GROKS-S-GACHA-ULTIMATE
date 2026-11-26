@@ -10,6 +10,7 @@ import {gameSession,gameCommand} from './game-client.js';
 import {createSectionGuides} from './game-introduction.js';
 import {setGuideProgress} from './guide-progress.js';
 import {playerBoard} from './player-board.js';
+import {rankingRefresh} from './ranking-refresh.js';
 import {sectionGuideId} from './section-guides.js';
 import {setupLevelUps} from './level-up.js';
 import {setupAchievementBanners} from './progression.js';
@@ -30,10 +31,14 @@ const isStarList=()=>section==='stars';
 const isExtremeList=()=>section==='demons'&&activeTier==='extreme';
 const isTierList=()=>section==='demons'&&activeTier!=='extreme';
 let section='leaderboard',layout=stored('gdlb.view','list'),page=0,focusSlide=0,serial=0,timer,toastTimer,queryAbort,localWorker,offline=false,nextPage=null,cursors=[null],liveTotal=null;
-let seed,localImages=new Set(),initialRows=[],rankRows=new Map(),demonRecords=[],demonLoading=null,liveDemonTime=0,current=[],currentDetails=null,statusMode='archive';
+let seed,localImages=new Set(),initialRows=[],rankRows=new Map(),demonRecords=[],demonLoading=null,current=[],currentDetails=null,statusMode='archive';
 const pageSize=20, rowMap=new Map(),sourceDate='22 Nov 2026';
 let arcade,guides;
 const ranks=playerBoard($('podrows'),$('playersPage'),id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'');
+const isArchiveBoard=()=>section==='leaderboard'&&!playerRanks();
+const gameVisible=()=>Boolean(seed&&!$('gameMain').hidden);
+const archiveRefresh=rankingRefresh(180_000,()=>gameVisible()&&isArchiveBoard(),refreshArchive);
+const demonRefresh=rankingRefresh(180_000,()=>gameVisible()&&isExtremeList(),refreshDemons);
 const sound=createPackSound();
 sound.listenForUiTaps();
 setupLevelUps($('levelUp'),sound);
@@ -47,13 +52,29 @@ function savedBtn(id){const yes=saved.has(id);return '<button class="bookmark '+
 function refreshSaves(){const n=saved.size;$('saveCount').textContent=n?String(n):'';document.querySelectorAll('[data-save]').forEach(b=>{let yes=saved.has(Number(b.dataset.save));if(b.classList.contains('bookmark')){b.classList.toggle('set',yes);b.title=b.ariaLabel=yes?'Remove saved level':'Save level';b.setAttribute('aria-pressed',yes)}else b.innerHTML=ico(yes?'check':'bookmark')+(yes?'Saved':'Save level')})}
 function toggle(id){const row=current.find(r=>r[0]===id)||rowMap.get(id)||saved.get(id);const r=row?.[15]?row.slice(0,11):row;if(!r)return;if(saved.has(id)){saved.delete(id);announce('Removed from saved levels')}else{saved.set(id,r);announce('Level saved')}write('gdlb.bookmarks',[...saved.values()]);refreshSaves();if(section==='saved')loadPage()}
 function featured(delta=0){focusSlide=(focusSlide+delta+seed.featured.length)%seed.featured.length;const s=seed.featured[focusSlide],r=s.row;$('featureArt').style.backgroundImage='url(/assets/shots/hero-'+r[0]+'.avif)';$('featureName').textContent=r[1];$('featureCreator').textContent='by '+author(r);$('featureDifficulty').innerHTML=badge(r[6]);$('slideDots').innerHTML=seed.featured.map((_,i)=>'<b class="'+(i===focusSlide?'on':'')+'"></b>').join('');$('featureOpen').dataset.id=r[0]}
-function fromDemon(d){const old=rowMap.get(d.id)||saved.get(d.id);const [player,downloads,likes,stars,length,coins]=d.stats||[0,null,null,10,'',null];return old||[d.id,d.name,d.publisher||'',player,downloads,likes,'Extreme Demon',stars,length,coins,d.status==='MainList'?d.position:0]}
-async function demons(live=false){
+function fromDemon(d){
+ const old=rowMap.get(d.id)||saved.get(d.id),[player,downloads,likes,stars,length,coins]=d.stats||[0,null,null,10,'',null];
+ const r=old?.slice()??[d.id,d.name,d.publisher||'',player,downloads,likes,'Extreme Demon',stars,length,coins,0];
+ r[1]=d.name;r[10]=d.status==='MainList'?d.position:0;
+ return r;
+}
+async function demons(){
  if(!demonLoading)demonLoading=(async()=>{const r=await fetch('/data/demons.json');if(!r.ok)throw Error('Demon list unavailable');demonRecords=await r.json();indexDemons()})().catch(e=>{demonLoading=null;throw e});
  await demonLoading;
- if(!live||Date.now()-liveDemonTime<180000)return;
- liveDemonTime=Date.now();
- try{const r=await fetch('/api/demons',{signal:AbortSignal.timeout(12500)});if(!r.ok)return;const fresh=await r.json();if(!Array.isArray(fresh)||!fresh.length)return;const old=new Map(demonRecords.map(d=>[d.uuid,d]));demonRecords=fresh.map(d=>({...old.get(d.uuid),...d}));indexDemons();if(isExtremeList())loadPage()}catch{}
+}
+async function refreshDemons(){
+ try{
+  await demons();
+  if(!isExtremeList()||document.hidden)return;
+  const response=await fetch('/api/demons',{signal:AbortSignal.timeout(12500)});
+  if(!response.ok)return;
+  const fresh=await response.json();
+  if(!Array.isArray(fresh)||!fresh.length)return;
+  const old=new Map(demonRecords.map(d=>[d.uuid,d]));
+  demonRecords=fresh.map(d=>({...old.get(d.uuid),...d}));
+  indexDemons();
+  if(isExtremeList()&&gameVisible()&&!pageIsLoading())withBoardPosition(()=>drawDemons(boardFilters(),true));
+ }catch{/* The current demon list stays visible until the next check. */}
 }
 function indexDemons(){demonRecords.sort((a,b)=>(a.status==='MainList'?0:1)-(b.status==='MainList'?0:1)||(a.position??1e9)-(b.position??1e9));rankRows.clear();for(const d of demonRecords){if(!rankRows.has(d.id)||(!d.twoPlayer&&d.status==='MainList'))rankRows.set(d.id,d)}}
 const selectOpts=(a)=>a.map(([v,l])=>'<option value="'+esc(v)+'">'+esc(l)+'</option>').join('');
@@ -82,6 +103,7 @@ function setSection(route){
  document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===section);if(b.dataset.tab===section)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
  $('showcase').hidden=section!=='leaderboard'||playerRanks();drawTierNav();
  ranks.show(section==='leaderboard'?(playerRanks()?'full':'spotlight'):null);
+ archiveRefresh.schedule();demonRefresh.schedule();
  const inArcade=['gacha','battle','kingdom','trading','progression'].includes(section);
  document.querySelector('.board').hidden=inArcade||playerRanks();
  const blocked=arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null,selected.pack);
@@ -114,7 +136,6 @@ function setSection(route){
  $('difficulty').innerHTML=selectOpts(filters);$('difficulty').setAttribute('aria-label',filterLabel);
  $('sort').innerHTML=selectOpts(sorts);
  restart();
- if(isExtremeList())demons(true).catch(()=>{});
 }
 function restart(){page=0;cursors=[null];liveTotal=null;nextPage=null;offline=false;loadPage()}
 function sourceLabel(t){$('sourceLabel').innerHTML=ico('database')+'<span>'+esc(t)+'</span>'}
@@ -164,14 +185,63 @@ function render(rows,total,next,mode,extra='',ranks=[]){
  $('results').innerHTML='<div class="tablewrap"><table class="leveltable"><thead><tr>'+headers+'</tr></thead><tbody>'+body+'</tbody></table></div>';
 
 }
-let currentDemonRows=[],workCounter=0;const waiting=new Map();
+let currentDemonRows=[],currentDemonTotal=0,workCounter=0;const waiting=new Map();
 function indexed(q,diff,sort,p){
  if(!q&&diff==='All'&&sort==='downloads'&&p===0)return Promise.resolve({rows:initialRows.slice(0,20),total:seed.indexed,next:seed.indexed>20});
  if(!localWorker){localWorker=new Worker('/index-worker.js');localWorker.onmessage=({data})=>{const job=waiting.get(data.id);if(job){waiting.delete(data.id);data.error?job.reject():job.resolve(data)}};localWorker.onerror=()=>{for(const j of waiting.values())j.reject();waiting.clear();localWorker.terminate();localWorker=null}}
  return new Promise((resolve,reject)=>{const id=++workCounter;waiting.set(id,{resolve,reject});localWorker.postMessage({id,q,diff,sort,page:p})})
 }
+const boardFilters=()=>({q:$('search').value.trim(),diff:$('difficulty').value,s:$('sort').value});
+const pageIsLoading=()=>$('results').getAttribute('aria-busy')==='true';
+function drawDemons({q,diff,s},updating=false){
+ const query=q.toLowerCase(),exact=/^\d+$/.test(q);
+ const rows=demonRecords.filter(d=>(diff==='legacy'?d.status==='Legacy':d.status==='MainList')&&
+  (!query||(exact?d.id===Number(q):(d.name+' '+(d.publisher||'')).toLowerCase().includes(query))));
+ if(s==='name')rows.sort((a,b)=>a.name.localeCompare(b.name));
+ const results=rows.slice(page*pageSize,(page+1)*pageSize),next=(page+1)*pageSize<rows.length;
+ const cards=results.map(fromDemon);
+ if(updating&&statusMode==='demons'&&rows.length===currentDemonTotal&&JSON.stringify(results)===JSON.stringify(currentDemonRows)&&JSON.stringify(cards)===JSON.stringify(current))return;
+ currentDemonRows=results;currentDemonTotal=rows.length;
+ render(cards,rows.length,next,'demons');
+}
+async function readArchive({q,diff,s},after,signal){
+ const params=new URLSearchParams({q,difficulty:diff,sort:s});
+ if(after)params.set('after',after);
+ const timeout=AbortSignal.timeout(17_000);
+ const response=await fetch('/api/levels?'+params,{signal:signal?AbortSignal.any([signal,timeout]):timeout});
+ if(!response.ok)throw Error('archive');
+ const data=await response.json();
+ if(!Array.isArray(data.rows))throw Error('archive');
+ return data;
+}
+function withBoardPosition(paint){
+ const results=$('results'),active=document.activeElement;
+ const focus=results.contains(active)?active:null,left=results.querySelector('.tablewrap')?.scrollLeft??0;
+ paint();
+ const table=results.querySelector('.tablewrap');
+ if(table&&left)table.scrollLeft=left;
+ if(!focus||focus.isConnected)return;
+ const key=focus.dataset.open?'open':focus.dataset.save?'save':null;
+ if(!key)return;
+ const buttons=results.querySelectorAll('[data-'+key+']');
+ [...buttons].find(button=>button.dataset[key]===focus.dataset[key]&&button.dataset.uuid===focus.dataset.uuid)?.focus({preventScroll:true});
+}
+async function refreshArchive(){
+ if(pageIsLoading()||offline&&page)return;
+ const revision=serial,requestedPage=page;
+ try{
+  const data=await readArchive(boardFilters(),cursors[requestedPage],queryAbort?.signal);
+  if(revision!==serial||!isArchiveBoard()||!gameVisible())return;
+  const total=requestedPage?liveTotal:data.total;
+  if(statusMode==='archive'&&total===liveTotal&&data.next===nextPage&&JSON.stringify(data.rows)===JSON.stringify(current))return;
+  offline=false;liveTotal=total;
+  withBoardPosition(()=>render(data.rows,liveTotal,data.next,'archive'));
+ }catch{/* Keep the last results visible during a temporary outage. */}
+}
 async function loadPage(){
- if(!seed)return;const n=++serial;queryAbort?.abort();queryAbort=new AbortController();const abort=queryAbort,q=$('search').value.trim(),diff=$('difficulty').value,s=$('sort').value;
+ if(!seed)return;const n=++serial;queryAbort?.abort();queryAbort=new AbortController();
+ const abort=queryAbort,filters=boardFilters(),{q,diff,s}=filters;
+ if(isArchiveBoard())archiveRefresh.checked();
  searching(true);$('resultMeta').textContent='Searching…';$('retry').hidden=true;
  try{
   if(isStarList()){
@@ -192,10 +262,10 @@ async function loadPage(){
    const summary={rating:'Highest GDDL tier first',placement:meta.rankSource+' placements',downloads:'Ranked by downloads',likes:'Ranked by likes',newest:'Newest ID first',name:'Name A–Z'}[s];
    render(data.rows,data.total,data.next,'tier',summary+' · '+seed.demonTierDate,data.ranks);return;
   }
-  if(isExtremeList()){await demons();if(n!==serial)return;let ds=demonRecords.filter(d=>(diff==='legacy'?d.status==='Legacy':d.status==='MainList')&&(!q||(/^\d+$/.test(q)?d.id===Number(q):(d.name+' '+(d.publisher||'')).toLowerCase().includes(q.toLowerCase()))));if(s==='name')ds.sort((a,b)=>a.name.localeCompare(b.name));currentDemonRows=ds.slice(page*20,page*20+20);render(currentDemonRows.map(fromDemon),ds.length,(page+1)*20<ds.length,'demons');return}
+  if(isExtremeList()){await demons();if(n===serial)drawDemons(filters);return}
   if(section==='saved'){let arr=[...saved.values()].filter(r=>(diff==='All'||(diff==='All demons'?r[6].endsWith('Demon'):r[6]===diff))&&(!q||(/^\d+$/.test(q)?r[0]===Number(q):(r[1]+' '+author(r)).toLowerCase().includes(q.toLowerCase()))));const k=s==='downloads'?4:s==='likes'?5:0;const order=['Unrated','Auto','Easy','Normal','Hard','Harder','Insane','Demon','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'];arr.sort((a,b)=>s==='tier'?order.indexOf(b[6])-order.indexOf(a[6])||b[0]-a[0]:(b[k]??-Infinity)-(a[k]??-Infinity));page=Math.min(page,Math.max(0,Math.ceil(arr.length/20)-1));render(arr.slice(page*20,page*20+20),arr.length,(page+1)*20<arr.length,'saved');return}
   if(!offline){
-   try{const params=new URLSearchParams({q,difficulty:diff,sort:s});if(cursors[page])params.set('after',cursors[page]);const res=await fetch('/api/levels?'+params,{signal:abort.signal});if(!res.ok)throw Error('archive');const data=await res.json();if(!Array.isArray(data.rows))throw Error('archive');if(n!==serial)return;if(!page)liveTotal=data.total;render(data.rows,liveTotal,data.next,'archive');return}
+   try{const data=await readArchive(filters,cursors[page],abort.signal);if(n!==serial)return;if(!page)liveTotal=data.total;render(data.rows,liveTotal,data.next,'archive');return}
    catch{if(n!==serial||abort.signal.aborted)return;offline=true;if(page){page=0;cursors=[null]}}
   }
   const data=await indexed(q,diff,s,page);if(n===serial)render(data.rows,data.total,data.next,'index')
@@ -256,10 +326,8 @@ function showSecretDetails(row){
 function about(){currentDetails=null;$('detail').innerHTML='<div class="modalbody aboutbody"><h2 id="modalTitle">About the rankings</h2><h3>Level leaderboard</h3><p>The live board searches GDHistory’s archive across all difficulties. Deleted entries are filtered out. A rank is the position in your current sort and filters. Downloads and likes are counts observed by the archive.</p><h3>Star levels</h3><p>Each of the six lists holds 600 classic rated levels. The default order uses play-tested tiers from the <a class="sourcelink" href="'+esc(seed.starSources.tiers)+'" target="_blank" rel="noopener">Underrated Non-Demons List</a>. Higher tiers come first. Levels in the same tier share a rank and appear alphabetically. Unranked levels follow. The selection prioritizes documented levels and includes popular levels at each star value. Hard through Insane each include 300 levels per star value.</p><p>The <a class="sourcelink" href="'+esc(seed.starSources.harder)+'" target="_blank" rel="noopener">Hardest Harders</a> and <a class="sourcelink" href="'+esc(seed.starSources.insane)+'" target="_blank" rel="noopener">Hardest Insanes</a> sorts show published positions for matching versions. Checked on '+seed.starDate+'.</p><h3>Demon lists</h3><p>Easy, Medium, Hard and Insane each have a full catalogue, including classic and platformer levels. The GDDL difficulty sort uses community average tiers, highest first. Entries awaiting a score follow the scored levels. Choose a community list under the sort menu for its top 150. A level’s in-game difficulty can differ from the list that ranks it. The four catalogues were checked on '+seed.demonTierDate+'.</p><h3>Extreme Demons</h3><p>AREDL ranks rated Extreme Demons by difficulty. Main-list ranks are preserved when filtering. Two-player variants have separate list entries.</p><h3>Thumbnails and availability</h3><p>Images come from the Level Thumbnails community, AREDL, and linked verification videos. A level without a submitted image shows “No thumbnail.”</p><h3>Gacha</h3><p>Each card rolls its difficulty first and draws a level within it. Higher-ranked Extreme Demons have lower individual odds. All eight packs can draw any difficulty. The odds in the shop include your luck upgrade. At maximum luck each card gets the better of two difficulty rolls. The card index and merge station award gems. Every drawn card has an independent 2% holo chance. Online saves keep your coins, gems, upgrades and cards on the server. A browser with an older local save offers a one-time transfer. The pack room uses edited paper, coin and arcade recordings from <a class="sourcelink" href="https://mixkit.co/free-sound-effects/" target="_blank" rel="noopener">Mixkit</a> under its <a class="sourcelink" href="https://mixkit.co/license/modal/sfxFree/" target="_blank" rel="noopener">Sound Effects Free License</a>. Pack icons, the gem and the gold secret coin use Geometry Dash artwork from <a class="sourcelink" href="https://github.com/tzt345/GDBrowser" target="_blank" rel="noopener">GDBrowser</a>.</p><h3>Backup index</h3><p>If the archive is unavailable, you can browse '+num(seed.indexed)+' indexed levels. This collection combines 2024–2026 releases with records refreshed on '+sourceDate+'. Saved levels stay in this browser.</p><p><a class="sourcelink" target="_blank" rel="noopener" href="https://history.geometrydash.eu/">GDHistory</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://aredl.net/">AREDL</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://gdladder.com/">GD Demon Ladder</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://levelthumbs.prevter.me/">Level Thumbnails</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://huggingface.co/datasets/yusp48/geometry-dash-levels">Level dataset</a> · <a class="sourcelink" target="_blank" rel="noopener" href="https://github.com/jozsefsallai/GDBrowser">Difficulty icons</a></p></div>';openModal()}
 $('close').onclick=()=>dlg.close();dlg.addEventListener('click',e=>{if(e.target===dlg){const r=dlg.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dlg.close()}});
 document.addEventListener('click',e=>{
- const locked=e.target.closest('[data-level-locked]');
- if(!locked)return;
- e.preventDefault();e.stopPropagation();
- announce('Available at Level '+locked.dataset.levelLocked+'.');
+ if(!e.target.closest('[data-level-locked]'))return;
+ e.preventDefault();e.stopImmediatePropagation();
 },true);
 document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||!seed)return;if(b.dataset.save){toggle(Number(b.dataset.save));return}if(b.dataset.open){showDetails(Number(b.dataset.open),b.dataset.uuid);return}if(b.dataset.tab)navigate(b.dataset.tab)});
 $('sources').onclick=$('footerSources').onclick=()=>seed&&about();$('featureOpen').onclick=()=>showDetails(Number($('featureOpen').dataset.id));

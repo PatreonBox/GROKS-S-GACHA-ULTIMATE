@@ -1,0 +1,78 @@
+:is(.holo-card,[data-finish="holo"]){
+ --finish-edge:linear-gradient(123deg,#ff90c9,#ffd585 19%,#b2f38c 34%,#81f7e8 48%,#90b8ff 64%,#d5a4ff 80%,#ff94cc);
+ --finish-body:linear-gradient(150deg,#483451,#242739 49%,#172e3a 76%,#3c2d50);
+ --finish-shadow:0 0 14px #a8c6ff40,inset 0 0 16px #aaaaff25;
+}
+:is(.antimatter-card,[data-finish="antimatter"]){
+ --finish-edge:conic-gradient(from 208deg,#361b64,#8b6bfb,#daf3ff,#1d1c47,#302050,#eeadff,#5ca4e8,#361b64);
+ --finish-body:radial-gradient(ellipse at 67% -3%,#372450,#151329 48%,#070910 77%,#100c25);
+ --finish-shadow:0 0 15px #9165ed55,inset 0 0 18px #a682ef32;
+}
+:is(.level-card,.fighter.full-card,.merge-result,.trade-card):is(.holo-card,.antimatter-card,[data-finish="holo"],[data-finish="antimatter"]),
+.profile-best-card:is([data-finish="holo"],[data-finish="antimatter"]) :is(.profile-card-face,.profile-card-back){
+ border-color:transparent;
+ background:var(--finish-body) padding-box,var(--finish-edge) border-box;
+ box-shadow:var(--finish-shadow);
+}
+.profile-best-card:is([data-finish="holo"],[data-finish="antimatter"]) :is(.profile-card-face,.profile-card-back){
+ box-shadow:0 13px 28px #02040cb7,var(--finish-shadow);
+}
+:is(.holo-card,.antimatter-card,[data-finish="holo"],[data-finish="antimatter"]) :is(.card-art,.combat-art,.trade-card-art,.profile-card-art){
+ position:relative;isolation:isolate;
+}
+:is(.holo-card,.antimatter-card,[data-finish="holo"],[data-finish="antimatter"]) :is(.card-art,.combat-art,.trade-card-art,.profile-card-art)::after{
+ content:"";position:absolute;inset:0;z-index:1;pointer-events:none;border-radius:inherit;
+}
+.full-card .combat-art>small{z-index:2}
+
+:is(.holo-card,[data-finish="holo"]) :is(.card-art,.combat-art,.trade-card-art,.profile-card-art)::after{
+ background-image:repeating-linear-gradient(116deg,#d7e3ff16 0 1px,transparent 1px 5px),
+  linear-gradient(116deg,#f08cde83,#ffbfa95c 19%,#fff29185 33%,#65ffcda1 46%,#78b3ffb2 62%,#b9a0ff78 77%,#ff9fd699 100%);
+ background-size:auto,142% 100%;
+ background-position:center,calc(50% + var(--foil-reflection,0%)) 50%;
+ mix-blend-mode:screen;
+}
+.profile-best-card[data-finish="holo"] .profile-card-viewport{
+ background:radial-gradient(ellipse at 28% 31%,#84538d66,transparent 56%),
+  radial-gradient(ellipse at 75% 56%,#4fbe9a49,transparent 60%),#131c30;
+}
+.profile-best-card[data-finish="holo"] :is(.profile-card-face,.profile-card-back)::before{
+ content:"";position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(123deg,transparent 34%,#e5e1ff48 45%,#b1ffe742 49%,#e5b9ff26 53%,transparent 62%);
+ background-size:220% 100%;background-position:calc(50% + var(--foil-reflection,0%)) center;
+ mix-blend-mode:screen;animation:showcase-foil-shine 5.5s ease-in-out infinite alternate;
+}
+@keyframes showcase-foil-shine{from{opacity:.42}to{opacity:.94}}
+@media(prefers-reduced-motion:reduce){
+ .profile-best-card[data-finish="holo"] :is(.profile-card-face,.profile-card-back)::before{animation:none}
+}
+.profile-best-card[data-finish="holo"] .profile-card-back>img{
+ filter:drop-shadow(-6px 1px 10px #ffa0d577) drop-shadow(6px 2px 10px #90f8d68c);
+}
+.profile-best-card[data-finish="holo"] .profile-card-finish,.trade-card[data-finish="holo"] .trade-card-kind b{
+ color:#171938;background:linear-gradient(115deg,#ffe0b4,#adf4e6 48%,#e9bbff);
+}
+
+:is(.antimatter-card,[data-finish="antimatter"]) :is(.card-art,.combat-art,.trade-card-art,.profile-card-art)::after{
+ --void-center:calc(69% + var(--foil-reflection,0%) * .46);
+ background:
+  radial-gradient(ellipse 35% 70% at var(--void-center) 49%,#020207 22%,#070313 28%,#351650ef 34%,
+   #e6a9fbd9 36%,#9887ffd1 39%,#572bbbae 45%,#17143da1 60%,transparent 82%),
+  radial-gradient(ellipse 92% 80% at 46% 5%,#582a8f46,transparent 73%),
+  linear-gradient(115deg,#0c152a2e,#04030b75 66%,#040309b0);
+}
+:is(.antimatter-card,[data-finish="antimatter"]) :is(.scene-shot,.unit-art,[data-trade-cover],.profile-card-cover){
+ filter:saturate(.79) contrast(1.12);
+}
+.profile-best-card[data-finish="antimatter"] .profile-card-viewport{
+ background:radial-gradient(ellipse at 48% 49%,#332254 0%,#1d1232 43%,#090a16 78%);
+}
+.profile-best-card[data-finish="antimatter"] .profile-card-back::before{
+ content:"";position:absolute;inset:9% 0 14%;pointer-events:none;transform:rotate(-24deg) scale(1.13);
+ background:radial-gradient(ellipse 48% 37% at 50% 50%,#020108 37%,#1f0d3f 48%,#c887ffdd 52%,#7754d3ac 60%,#28155980 75%,transparent 94%);
+}
+.profile-best-card[data-finish="antimatter"] .profile-card-back>*{position:relative}
+.profile-best-card[data-finish="antimatter"] .profile-card-back img{filter:drop-shadow(0 0 12px #a86ce7c0)}
+.profile-best-card[data-finish="antimatter"] .profile-card-finish,.trade-card[data-finish="antimatter"] .trade-card-kind b{
+ color:#f1d5ff;border:1px solid #8d70ba;background:linear-gradient(110deg,#231844,#110d24 58%,#263762);
+}

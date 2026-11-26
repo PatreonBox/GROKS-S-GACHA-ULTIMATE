@@ -64,16 +64,6 @@ dialog.rare-reveal{
 .rare-replay select{min-width:0;max-width:min(100%,240px);padding:8px;border:1px solid #4d4161;border-radius:6px;background:#201a2c;color:#f0e6ff;font:inherit;font-size:.87rem}
 .hand-grid>.level-card[data-unseen]{visibility:hidden}
 
-/* Antimatter uses an obsidian foil with thin, colored highlights. */
-.level-card.antimatter-card,.merge-result.antimatter-card{
- border:2px solid transparent;
- background:linear-gradient(142deg,#1b1734,#070711 52%,#0c2330) padding-box,
- conic-gradient(from 216deg,#66edf3,#39327b,#140e29,#e1a4ff,#eeceaa,#0f1150,#66edf3) border-box;
- box-shadow:0 0 16px #9e65ff4d,inset 0 0 20px #4ab6fa1a;
-}
-.level-card.antimatter-card .scene-shot{filter:saturate(.80) contrast(1.15)}
-.level-card.antimatter-card:hover{box-shadow:0 0 24px #bd89ff72,inset 0 0 26px #4aaefc2c}
-.fighter.antimatter-card{border-color:#bf93ff;box-shadow:inset 0 0 14px #5f2fbc86,0 0 14px #7c60b05e}
 .level-card.impossible-card{--card-color:#d9a2ff;border-color:#a670f0;background-color:#181025}
 .level-card.impossible-card .card-type{color:#ebbcff}.level-card.impossible-card .card-stats{color:#f2caff;background:#190c2de8}
 .level-card.impossible-card:not(.antimatter-card):not(.holo-card){background:linear-gradient(140deg,#2c1a45,#131021 60%,#201735);box-shadow:inset 0 0 18px #7d43983d}

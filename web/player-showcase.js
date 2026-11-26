@@ -15,13 +15,14 @@ const controls=[['pan','pan','Pan camera'],['out','zoomOut','Zoom out'],['in','z
 export function showBestCard(root,card,localCover){
  if(!card){root.textContent='No cards to showcase yet.';return}
  const image=impossibleCover(card.id)||localCover(card.id)||'/api/thumbnail/'+card.id+'/small';
- const face=cardFace(card.difficulty),finish=finishLabels[card.finish]||finishLabels.standard;
+ const mode=Object.hasOwn(finishLabels,card.finish)?card.finish:'standard';
+ const face=cardFace(card.difficulty),finish=finishLabels[mode],mark=mode==='holo'?'✧ ':mode==='antimatter'?'◈ ':'';
  const move=(data,label)=>'<article class="profile-move">'+moveArt(data.art)+'<div><small>'+label+'</small><h4>'+escape(data.name)+'</h4>'+
   '<p>'+escape(data.detail)+'</p>'+(data.charge?'<small>'+data.charge+' charge · '+data.cooldown+' turns to recharge</small>':'')+'</div></article>';
  const stats=[['HP',card.maxHp],['ATK',card.attack],['Power',card.power]];
- root.innerHTML='<section class="profile-best-card" aria-label="Best card showcase" data-finish="'+escape(card.finish)+'">'+
+ root.innerHTML='<section class="profile-best-card" aria-label="Best card showcase" data-finish="'+mode+'">'+
   '<div class="profile-card-viewport"><div class="profile-card-figure package-float" aria-hidden="true">'+
-  '<div class="profile-card-face"><span>GD KINGDOM <b>'+escape(finish)+'</b></span><div class="profile-card-art"><img src="'+face+'" alt="">'+
+  '<div class="profile-card-face"><span>GD KINGDOM <b class="profile-card-finish">'+mark+finish+'</b></span><div class="profile-card-art"><img src="'+face+'" alt="">'+
   '<img class="profile-card-cover" src="'+escape(image)+'" alt=""></div><small>'+escape(card.difficulty)+(card.rank?' · #'+number.format(card.rank):'')+
   '</small><strong>'+escape(card.title)+'</strong><span>Level '+card.level+'</span></div>'+
   '<div class="profile-card-back"><img src="/assets/gd-kingdom-castle-icon.png" alt=""><b>GD KINGDOM</b></div></div>'+

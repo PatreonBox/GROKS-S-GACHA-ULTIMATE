@@ -93,11 +93,19 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
  const locked=id=>playerLevel<featureLevel(id);
  const kingdomTab=byId('kingdomNew').parentElement;
- kingdomTab.insertAdjacentHTML('beforeend',lockBadge(featureLevel('kingdom'),false));
+ const navLocks=[['kingdom',kingdomTab],['trading',byId('tradingTab')],['progression',byId('progressionTab')]];
+ for(const [feature,control] of navLocks)control.insertAdjacentHTML('beforeend',lockBadge(featureLevel(feature),false));
+ function paintNavLocks(){
+  for(const [feature,control] of navLocks){
+   const required=featureLevel(feature),name=features[feature].name;
+   setLevelLock(control,required,playerLevel);
+   control.setAttribute('aria-label',locked(feature)?name+' · Level '+required+' required':name);
+   control.title=locked(feature)?'Requires Level '+required:'';
+  }
+ }
  const markKingdomNav=()=>{
   const badge=byId('kingdomNew'),visited=seenGuide(newAreas.kingdom)||locked('kingdom');
   badge.hidden=visited;
-  setLevelLock(kingdomTab,featureLevel('kingdom'),playerLevel);
   if(visited)badge.parentElement.removeAttribute('aria-describedby');
   else badge.parentElement.setAttribute('aria-describedby',badge.id);
  };
@@ -107,6 +115,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   wallet=w;walletError='';refreshId++;
   playerLevel=playerProgress(w.playerXp).level;
   if(first||previousLevel!==playerLevel){
+   paintNavLocks();
    markKingdomNav();
    setLevelLock(byId('walletLink'),featureLevel('mine'),playerLevel);
    setLevelLock(byId('gemLink'),featureLevel('upgrades'),playerLevel);
@@ -282,7 +291,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(view==='cubes'){byId('arcBody').append(cubeRoot);cubes.show(true)}
   if(view==='upgrades')renderUpgrades();
   if(view==='collection'){
-   byId('arcBody').innerHTML='<div class="collection-head"><h2>My cards</h2><a class="outline" href="#gacha/merge" data-merge-link'+lockAttributes(featureLevel('merge'),playerLevel)+'>Merge duplicates '+lockBadge(featureLevel('merge'),locked('merge'))+'</a><span id="ownedTotal"></span></div><div class="collection-tools"><input id="cardSearch" type="search" placeholder="Search your cards" aria-label="Search your cards" maxlength="80"><select id="cardCategory" aria-label="Card difficulty"><option value="all">All difficulties</option>'+cardCategories.map(d=>'<option>'+d+'</option>').join('')+'</select><select id="cardSort" aria-label="Sort your cards"><option value="recent">Recently pulled</option><option value="difficulty">Difficulty · hardest first</option><option value="rarity">Rarest first</option><option value="copies">Most copies</option></select><select id="rarityPack" aria-label="Pack used for rarity" hidden><option value="all">All packs equally</option>'+packs.map(p=>'<option value="'+p.id+'">'+p.name+' pack</option>').join('')+'</select></div><p id="rarityHint" class="rarity-hint" hidden>Odds use your current luck and rarest owned finish. All packs equally averages the odds across packs.</p><div id="binderResults"></div>';
+   byId('arcBody').innerHTML='<div class="collection-head"><h2>My cards</h2><a class="outline" data-merge-link'+lockAttributes(featureLevel('merge'),playerLevel,'#gacha/merge')+'>Merge duplicates '+lockBadge(featureLevel('merge'),locked('merge'))+'</a><span id="ownedTotal"></span></div><div class="collection-tools"><input id="cardSearch" type="search" placeholder="Search your cards" aria-label="Search your cards" maxlength="80"><select id="cardCategory" aria-label="Card difficulty"><option value="all">All difficulties</option>'+cardCategories.map(d=>'<option>'+d+'</option>').join('')+'</select><select id="cardSort" aria-label="Sort your cards"><option value="recent">Recently pulled</option><option value="difficulty">Difficulty · hardest first</option><option value="rarity">Rarest first</option><option value="copies">Most copies</option></select><select id="rarityPack" aria-label="Pack used for rarity" hidden><option value="all">All packs equally</option>'+packs.map(p=>'<option value="'+p.id+'">'+p.name+' pack</option>').join('')+'</select></div><p id="rarityHint" class="rarity-hint" hidden>Odds use your current luck and rarest owned finish. All packs equally averages the odds across packs.</p><div id="binderResults"></div>';
    byId('cardSearch').value=filter;byId('cardCategory').value=category;byId('cardSort').value=collectionSort;
    byId('rarityPack').value=rarityPack;
    byId('rarityPack').onchange=e=>{rarityPack=e.target.value;collectionPage=0;binder()};
