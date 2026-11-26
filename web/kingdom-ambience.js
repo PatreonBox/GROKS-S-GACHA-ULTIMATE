@@ -21,7 +21,7 @@ export function kingdomAmbience(sound,canvas){
   cancelAnimationFrame(frame);
   const old=tracks[1-Number(night)],starts=[target.volume,old.volume],start=performance.now();
   function blend(now){
-   const t=Math.min(1,(now-start)/1300);
+   const t=Math.max(0,Math.min(1,(now-start)/1300));
    target.volume=starts[0]+(.30-starts[0])*t;old.volume=starts[1]*(1-t);
    if(t===1){old.pause();frame=0;}else frame=requestAnimationFrame(blend);
   }
