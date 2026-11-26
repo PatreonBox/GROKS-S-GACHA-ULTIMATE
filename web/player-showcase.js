@@ -5,6 +5,7 @@ import {moveArt} from './combat-arts.js';
 import {cubeCatalog,equippedCube} from './cube-catalog.js';
 import {ico} from './icons.js';
 import {buildingSpecs,forgePlan,gemMine,houseStars,kingdomDaylight} from './kingdom-rules.js';
+import {spikeKind,spikePlan} from './kingdom-defences.js';
 
 const number=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const skins=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
@@ -73,8 +74,9 @@ export async function visitKingdom(root,plot,alias){
   const upgrading=tower?construction:building?.upgradeEndsAt;
   const mine=building?.kind==='gem-mine';
   const extras=building?.kind==='forge'?' · '+forgePlan(building,clock()).rate+' Mana/s':
-   mine?' · 1 gem every '+gemMine.interval/60_000+' min':upgrading?' · Upgrading to Level '+(tower?(construction.level??2):(building.upgradeLevel??2)):'';
-  selection.textContent=name(id)+(tower||building&&!mine?' · Level '+(tower?towerLevel:building.level):'')+extras;
+   mine?' · 1 gem every '+gemMine.interval/60_000+' min':building?.kind===spikeKind?' · '+spikePlan(building).damage+' damage per shot':'';
+  const status=upgrading?' · Upgrading to Level '+(tower?(construction.level??2):(building.upgradeLevel??2)):'';
+  selection.textContent=name(id)+(tower||building&&!mine?' · Level '+(tower?towerLevel:building.level):'')+extras+status;
   world.select(id);
  }
  const world=createKingdomWorld({canvas,cube,clock,onSelect:inspect,onHover(id,point){

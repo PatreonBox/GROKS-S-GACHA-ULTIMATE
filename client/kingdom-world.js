@@ -4,7 +4,9 @@ import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,resi
 import {createBuildingPreview} from './building-preview.js';
 import {makeResourceBubble,makeManaForge} from './mana-forge-model.js';
 import {makeGemMine} from './gem-mine-model.js';
+import {makeSpikeProjectile,makeSpikeShooter,makeSpikeTarget} from './spike-shooter-model.js';
 import {buildingSpecs,forgeMinimum,forgeStored,gemMinePlan,housePlan,kingdomBounds,kingdomDaylight,manaIcon,manorHeight,plotTrees,visitorSlots,visitorWelcomeMs} from '../web/kingdom-rules.js';
+import {spikeIcon,spikeKind,spikePlan} from '../web/kingdom-defences.js';
 import {kingdomNavigation} from './kingdom-navigation.js';
 import {createKingdomWalker} from './kingdom-walkers.js';
 import {treeWithin} from '../web/kingdom-forest.js';
@@ -79,7 +81,7 @@ function release(root){
  parts.forEach(item=>item.dispose());
 }
 
-export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect}){
+export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect,onSpikeHit}){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'low-power'});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -105,7 +107,9 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  let lastLight=-1;
  const loader=new THREE.TextureLoader();
  const path=residentPath(),tower=makeTower(),owner=makeResident(loader);
- const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine()};
+ const spikeTexture=loader.load(spikeIcon);spikeTexture.colorSpace=THREE.SRGBColorSpace;
+ const defences=[1,2,3,4].map(level=>makeSpikeShooter(level,spikeTexture));
+ const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine(),[spikeKind]:defences[0]};
  const improvedModels={house:makeHouse(2),forge:makeManaForge(2)},manor=makeHouse(3),windows=new Set();
  for(const model of [models.house,improvedModels.house,manor]){
   model.traverse(part=>{if(part.material?.name==='Cottage lights')windows.add(part.material)});
@@ -119,6 +123,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   'gem-mine':{key:'gems',bubble:bubbleFor('/assets/packs/gem.png'),lift:4.10,amount:(mine,now)=>gemMinePlan(mine,now).stored,minimum:1}
  };
  const bursts=[];
+ const projectile=makeSpikeProjectile(spikeTexture),testTarget=makeSpikeTarget();
+ projectile.visible=testTarget.visible=false;
+ scene.add(projectile,testTarget);
+ let testShot=null;
  let land=0,bounds=kingdomBounds(),forest=plotTrees([]),forestKey=forest.map(tree=>tree.id).join('/');
  let landscape=makeLandscape(loader,path,bounds,forest),grid=buildGrid(bounds);
  let nav,navKey='',worksite;
@@ -204,7 +212,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  }
  function floorAt(building){
   const level=groundHeight(building.x,building.z);
-  if(!resources[building.kind])return level;
+  if(!resources[building.kind]&&building.kind!==spikeKind)return level;
   return Math.max(level,...foundationOutline(building,16).map(([x,z])=>groundHeight(x,z)))+.033;
  }
  function productionBase(building,level){
@@ -235,21 +243,26 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const buildingIds=new Set(buildings.map(house=>house.id));
   const visitorIds=new Set(visitors.map(guest=>guest.id));
   for(const [id,structure] of structures)if(!buildingIds.has(id)){
+   if(testShot?.id===id)endTestShot();
    structure.model.removeFromParent();structure.bubble?.removeFromParent();
    if(structure.base){structure.base.removeFromParent();structure.base.geometry.dispose();}
    removePicker(structure.key);structures.delete(id);
   }
   for(const building of buildings){
    const {id,x,z,rotation,kind='house'}=building,{size,height}=buildingSpecs[kind],key=kind+':'+id;
-   const level=kind==='house'?housePlan(building,clock()).level:building.level===2?2:1,existing=structures.get(id);
+   const level=kind===spikeKind?spikePlan(building,clock()).level:
+    kind==='house'?housePlan(building,clock()).level:building.level===2?2:1,existing=structures.get(id);
    const tall=kind==='house'&&level===3?manorHeight:height;
    if(existing?.level===level&&existing.building.x===x&&existing.building.z===z&&existing.building.rotation===rotation){
     existing.building=building;continue;
    }
-   const model=(level===3?manor:(level===2&&improvedModels[kind])||models[kind]).clone(),floor=floorAt(building);
+   if(testShot?.id===id)endTestShot();
+   const template=kind===spikeKind?defences[level-1]:level===3?manor:(level===2&&improvedModels[kind])||models[kind];
+   const model=template.clone(),floor=floorAt(building);
    model.position.set(x,floor,z);model.rotation.y=rotation*Math.PI/2;
    scene.add(model);
-   const resource=resources[kind],door=model.getObjectByName('house-door'),base=resource?productionBase(building,floor):null;
+   const resource=resources[kind],door=model.getObjectByName('house-door');
+   const base=resource||kind===spikeKind?productionBase(building,floor):null;
    if(base)scene.add(base);
    const hit=existing?picked.get(key).mesh:hitBox(key,size.width,height,size.depth,Math.max(size.width,size.depth)/2+.34);
    hit.position.copy(model.position);hit.position.y+=tall/2;hit.scale.y=tall/height;hit.rotation.y=model.rotation.y;
@@ -328,6 +341,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   for(const [kind,ghost] of Object.entries(ghosts))ghost.visible=Boolean(build?.kind===kind&&build.spot);
   canvas.dataset.building=String(Boolean(build));
   if(starting){hover(null);reset()}
+  if(starting&&testShot)endTestShot();
   if(!build?.spot)return;
   const ghost=ghosts[build.kind];
   const {x,z,rotation}=build.spot;
@@ -462,6 +476,75 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const point=productionPoint(id);
   if(point)burstAt(point);
  }
+ const spikeDirection=new THREE.Vector3(),spikeFacing=new THREE.Vector3(),spikeSide=new THREE.Vector3(),spikeBasis=new THREE.Matrix4();
+ const shotCameraPoint=new THREE.Vector3(),shotCameraShift=new THREE.Vector3();
+ function shotFocus(start,goal){
+  camera.updateMatrixWorld();
+  const nearEdge=[start,goal].some(point=>{
+   shotCameraPoint.copy(point).project(camera);
+   return Math.abs(shotCameraPoint.x)>.80||Math.abs(shotCameraPoint.y)>.69||Math.abs(shotCameraPoint.z)>=1;
+  });
+  return nearEdge?{from:controls.target.clone(),to:start.clone().lerp(goal,.5)}:null;
+ }
+ function centerShot(focus,ratio){
+  shotCameraPoint.lerpVectors(focus.from,focus.to,ratio*ratio*(3-2*ratio));
+  camera.position.add(shotCameraShift.subVectors(shotCameraPoint,controls.target));
+  controls.target.copy(shotCameraPoint);
+  controls.update();
+ }
+ function endTestShot(){
+  const {barrel}=testShot;
+  barrel.position.z=barrel.rotation.x=0;
+  projectile.visible=testTarget.visible=false;
+  testShot=null;
+ }
+ function fireSpike(id){
+  const structure=structures.get(id),building=structure?.building;
+  if(building?.kind!==spikeKind||build||testShot)return false;
+  const model=structure.model,barrel=model.getObjectByName('spike-barrel');
+  const start=model.localToWorld(new THREE.Vector3(0,1.19,1.20));
+  const goal=model.localToWorld(new THREE.Vector3(0,1.19,4.1));
+  goal.y=Math.max(start.y,groundHeight(goal.x,goal.z)+1.08);
+  const damage=spikePlan(building,clock()).damage,focus=shotFocus(start,goal),lead=focus&&!motion?.23:0;
+  testShot={id,barrel,start,goal,damage,focus,lead,at:elapsed,hit:false};
+  projectile.position.copy(start);projectile.visible=!lead;
+  testTarget.position.copy(goal);testTarget.visible=true;
+  return true;
+ }
+ function animateSpike(){
+  if(!testShot)return;
+  const {id,barrel,start,goal,damage,focus,lead,at}=testShot,age=elapsed-at;
+  if(focus){
+   const ratio=lead?clamp(age/lead,0,1):1;
+   centerShot(focus,ratio);
+   testTarget.quaternion.copy(camera.quaternion);
+   if(ratio<1)return;
+   testShot.focus=null;
+  }
+  const time=Math.max(0,age-lead);
+  const progress=clamp(time/.34,0,1);
+  const recoil=motion?0:Math.max(0,1-time/.29)**2;
+  barrel.position.z=-.23*recoil;barrel.rotation.x=-.14*recoil;
+  testTarget.quaternion.copy(camera.quaternion);
+  testTarget.scale.setScalar(time<.34?.85+progress*.15:Math.max(.02,1-(time-.34)/.46));
+  if(!testShot.hit){
+   projectile.visible=true;
+   projectile.position.lerpVectors(start,goal,progress);
+   projectile.position.y+=.16*Math.sin(Math.PI*progress);
+   spikeDirection.subVectors(goal,start).normalize();
+   spikeFacing.subVectors(camera.position,projectile.position);
+   spikeFacing.addScaledVector(spikeDirection,-spikeFacing.dot(spikeDirection)).normalize();
+   if(spikeFacing.lengthSq()<.001)spikeFacing.set(0,1,0);
+   spikeSide.crossVectors(spikeDirection,spikeFacing).normalize();
+   spikeFacing.crossVectors(spikeSide,spikeDirection);
+   projectile.quaternion.setFromRotationMatrix(spikeBasis.makeBasis(spikeSide,spikeDirection,spikeFacing));
+   if(progress===1){
+    testShot.hit=true;projectile.visible=false;
+    burstAt(goal);onSpikeHit?.(id,damage);
+   }
+  }
+  if(time>=.8)endTestShot();
+ }
  function animateProduction(now){
   for(const {bubble,building,model,resource} of structures.values()){
    if(!bubble)continue;
@@ -523,6 +606,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const delta=last?Math.min(.05,(now-last)/1000):0;
   last=now;elapsed+=delta;
   controls.update(delta);
+  animateSpike();
   sky.position.copy(camera.position);
   const timestamp=clock(),{light,night}=kingdomDaylight(timestamp);
   lightPlot(light);birds.animate(motion?0:elapsed,light);
@@ -561,10 +645,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
   preview?.dispose();
-  scene.add(...Object.values(models),...Object.values(improvedModels),manor,...Object.values(resources).map(resource=>resource.bubble));
+  scene.add(...Object.values(models),...Object.values(improvedModels),manor,...defences,...Object.values(resources).map(resource=>resource.bubble));
   release(scene);foundationMaterial.dispose();
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();
  }
- return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,productionOrigin,popProduction,panMode,zoom,reset,dispose};
+ return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,productionOrigin,popProduction,fireSpike,panMode,zoom,reset,dispose};
 }

@@ -1,6 +1,7 @@
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
 import {gemTenths} from './card-economy.js';
 import {awardPlayerXp} from './player-progression.js';
+import {spikeInvestment,spikeKind,spikePlan,spikePrice} from './kingdom-defences.js';
 
 export const housePrice=50_000;
 export const houseSize={width:3.15,depth:2.72};
@@ -11,6 +12,7 @@ export const gemMine={towerLevel:2,coins:150_000,mana:800,interval:300_000,capac
 export const visitorWelcomeMs=20_000;
 export const houseUpgrades=[{mana:30,buildMs:10_000,stars:.02},
  {coins:1_000_000,mana:200,buildMs:30_000,stars:.03,towerLevel:2}];
+const houseHp=[150,220,310];
 export const houseStars=level=>(30+houseUpgrades.slice(0,level-1).reduce((sum,tier)=>sum+Math.round(tier.stars*100),0))/100;
 export const forgeUpgrade={coins:1_000_000,mana:300,buildMs:30_000,towerLevel:2};
 export const towerUpgradeMana=500;
@@ -19,7 +21,8 @@ export const manaIcon='/assets/kingdom/mana-orbs.webp';
 export const buildingSpecs={
  house:{name:'GD House',size:houseSize,height:houseHeight,price:housePrice},
  forge:{name:'The Mana Forge',size:{width:3.20,depth:3.20},height:3.65,price:forgePrice},
- 'gem-mine':{name:'Gem Mine',size:{width:4.15,depth:3.60},height:3.55,price:gemMine.coins}
+ 'gem-mine':{name:'Gem Mine',size:{width:4.15,depth:3.60},height:3.55,price:gemMine.coins},
+ [spikeKind]:{name:'Spike Shooter',size:{width:2.55,depth:2.65},height:1.86,price:spikePrice}
 };
 export const plotBounds={left:-14,right:14,back:-13,front:14};
 export const lastLandLevel=5;
@@ -40,13 +43,14 @@ export const visitorSlots=[
 ].map(([rarity,stars],slot)=>({slot,rarity,stars}));
 export const maxTowerLevel=3;
 const towerTiers=[
- {limit:2,price:0},{limit:3,price:500_000,mana:towerUpgradeMana,buildMs:60_000,xp:150},
- {limit:4,price:1_000_000,mana:2_500,buildMs:180_000,xp:600},
- {limit:13,price:10_000_000,mana:towerUpgradeMana},{limit:17,price:75_000_000,mana:towerUpgradeMana}
+ {limit:2,price:0,hp:1000},{limit:3,price:500_000,mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
+ {limit:4,price:1_000_000,mana:2_500,buildMs:180_000,xp:600,hp:2200},
+ {limit:13,price:10_000_000,mana:towerUpgradeMana,hp:3000},{limit:17,price:75_000_000,mana:towerUpgradeMana,hp:4000}
 ];
 export const towerExperience=level=>towerTiers[level-1]?.xp||0;
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
 export const kingdomForges=wallet=>wallet?.kingdom?.forges||[];
+export const kingdomDefences=wallet=>wallet?.kingdom?.defences||[];
 const kingdomGemMines=wallet=>wallet?.kingdom?.gemMines||[];
 export const kingdomStorage=wallet=>wallet?.kingdom?.storage||[];
 const phaseDuration=360_000;
@@ -70,7 +74,8 @@ export function towerPlan(wallet,now=Date.now()){
  const valid=schedule&&target===built+1&&towerTiers[built];
  const construction=valid&&now<schedule.endsAt?{...schedule,level:target}:null;
  const level=valid&&!construction?target:built;
- return {level,limit:towerTiers[level-1].limit,next:level<maxTowerLevel?towerTiers[level]:null,construction};
+ const {limit,hp}=towerTiers[level-1];
+ return {level,limit,hp,defenceLimit:Math.min(level,maxTowerLevel),next:level<maxTowerLevel?towerTiers[level]:null,construction};
 }
 export function housePlan(house,now=Date.now()){
  const built=house.level===3?3:house.level===2?2:1;
@@ -78,7 +83,7 @@ export function housePlan(house,now=Date.now()){
  const valid=site&&target===built+1&&houseUpgrades[built-1];
  const construction=valid&&now<site.endsAt?{...site,level:target}:null;
  const level=valid&&!construction?target:built;
- return {level,construction,next:houseUpgrades[level-1]??null};
+ return {level,hp:houseHp[level-1],construction,next:houseUpgrades[level-1]??null};
 }
 function forgeStoredAt(forge,until,rate,capacity){
  return Math.min(capacity,(forge.storedMana||0)+elapsedForgeSeconds(forge,until)*rate);
@@ -102,19 +107,21 @@ export function kingdomRating(houses,now){
  return Math.min(500,houses.reduce((sum,house)=>sum+Math.round(houseStars(housePlan(house,now).level)*100),0))/100;
 }
 export function kingdomStats(wallet,now=Date.now()){
- const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),gemMines=kingdomGemMines(wallet),storage=kingdomStorage(wallet);
- const buildings=[...houses,...forges,...gemMines],removedTrees=wallet?.kingdom?.removedTrees||[];
+ const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),gemMines=kingdomGemMines(wallet),defences=kingdomDefences(wallet),storage=kingdomStorage(wallet);
+ const buildings=[...houses,...forges,...gemMines,...defences],removedTrees=wallet?.kingdom?.removedTrees||[];
  const tower=towerPlan(wallet,now),land=landPlan(wallet);
  const houseLots=houses.length+storage.filter(item=>(item.kind||'house')==='house').length;
+ const defenceLots=defences.length+storage.filter(item=>item.kind===spikeKind).length;
  const stars=kingdomRating(houses,now);
  const value=[...buildings,...storage].reduce((sum,building)=>{
   const kind=building.kind||'house';
   return sum+(building.price??buildingSpecs[kind].price)+
    (kind==='forge'&&(building.level===2||building.upgrade)?forgeUpgrade.coins:0)+
-   (kind==='house'&&(building.level===3||building.upgrade?.level===3)?houseUpgrades[1].coins:0);
+   (kind==='house'&&(building.level===3||building.upgrade?.level===3)?houseUpgrades[1].coins:0)+
+   (kind===spikeKind?spikeInvestment(building):0);
  },0)+towerTiers.slice(0,tower.level).reduce((sum,tier)=>sum+tier.price,0)+
   (tower.construction?towerTiers[tower.construction.level-1].price:0)+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
- return {houses,forges,gemMines,storage,buildings,tower,land,stars,value,houseLots,removedTrees,
+ return {houses,forges,gemMines,defences,storage,buildings,tower,land,stars,value,houseLots,defenceLots,removedTrees,
   trees:plotTrees(buildings,removedTrees,land.bounds),mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houseLots};
 }
 
@@ -161,8 +168,15 @@ export function settleForgeUpgrades(wallet,now){
 }
 export function settleKingdomConstruction(wallet,now){
  const tower=settleTower(wallet,now),houses=settleHouseUpgrades(wallet,now),forges=settleForgeUpgrades(wallet,now);
+ const defences=[];
+ for(const defence of kingdomDefences(wallet)){
+  if(!defence.upgrade||now<defence.upgrade.endsAt)continue;
+  defence.level=defence.upgrade.level;
+  delete defence.upgrade;
+  defences.push(defence.id);
+ }
  if(tower)awardPlayerXp(wallet,towerExperience(tower.level));
- return {tower,houses,forges};
+ return {tower,houses,forges,defences};
 }
 
 export const towerSkipCost=(site,now=Date.now())=>site?Math.max(0,Math.ceil((site.endsAt-now)/15_000)):0;
@@ -287,6 +301,25 @@ export function buildForge(wallet,args,now){
  wallet.kingdom={...wallet.kingdom,forges:[...plot.forges,forge],mana:plot.mana+forgeWelcomeMana};
  return forge;
 }
+export function buildSpikeShooter(wallet,args,now){
+ const plot=kingdomStats(wallet,now);
+ if(plot.defenceLots>=plot.tower.defenceLimit)throw Error('All your defence slots are claimed.');
+ const building={...buildAt(wallet,plot,args,spikeKind,spikePrice),level:1};
+ wallet.kingdom={...wallet.kingdom,defences:[...plot.defences,building]};
+ return building;
+}
+export function upgradeSpikeShooter(wallet,id,expectedLevel,now){
+ const defence=kingdomDefences(wallet).find(item=>item.id===id);
+ if(!defence)throw Error('Choose one of your Spike Shooters.');
+ const {level,construction,next}=spikePlan(defence,now);
+ if(construction)throw Error('This Spike Shooter is already under construction.');
+ if(!next)throw Error('This Spike Shooter is at its highest level.');
+ if(level!==expectedLevel)throw Error('Your Spike Shooter level changed. Review its next upgrade.');
+ if(towerPlan(wallet,now).level<next.towerLevel)throw Error('Requires Tower Level '+next.towerLevel+'.');
+ payUpgrade(wallet,next.mana,next.coins);
+ defence.upgrade={level:level+1,startedAt:now,endsAt:now+next.buildMs};
+ return {id,level:level+1,construction:defence.upgrade};
+}
 function elapsedForgeSeconds(forge,now){
  return Math.max(0,Math.floor((now-(forge.collectedAt??now))/1000));
 }
@@ -353,6 +386,7 @@ export function collectGemMine(wallet,id,now){
 function buildingRecords(kingdom,kind){
  if(kind==='forge')return kingdom.forges??=[];
  if(kind==='gem-mine')return kingdom.gemMines??=[];
+ if(kind===spikeKind)return kingdom.defences??=[];
  return kingdom.houses??=[];
 }
 export function storeKingdomBuilding(wallet,id,now){
@@ -382,7 +416,7 @@ export function placeKingdomBuilding(wallet,args,now){
  const problem=buildingPlacementError(plot.buildings.filter(entry=>entry.id!==id),spot,plot.land.bounds,plot.trees);
  if(problem)throw Error(problem);
  const building={...item,...spot};
- if(mode==='restore'&&kind!=='house')building.collectedAt=now;
+ if(mode==='restore'&&(kind==='forge'||kind==='gem-mine'))building.collectedAt=now;
  const kingdom=wallet.kingdom,records=buildingRecords(kingdom,kind);
  if(mode==='restore'){
   kingdom.storage=plot.storage.filter(entry=>entry.id!==id);

@@ -1,11 +1,12 @@
 import {buildingSpecs,forgePlan,forgeUpgrade,gemMine,housePlan} from './kingdom-rules.js';
 import {towerPlayerLevel} from './level-access.js';
+import {spikeKind,spikePlan,spikePrice} from './kingdom-defences.js';
 
 const need=(value,goal,unit)=>({value,goal,unit});
 const number=new Intl.NumberFormat('en-US');
 
 export function kingdomSuggestions(plot,coins,playerLevel,now){
- const {houses,forges,gemMines,storage,tower,land,houseLots}=plot,rows=[];
+ const {houses,forges,gemMines,defences,storage,tower,land,houseLots}=plot,rows=[];
  const budget=(price,mana)=>[
   ...(price?[need(coins,price,'coins')]:[]),...(mana?[need(plot.mana,mana,'Mana')]:[])
  ];
@@ -45,6 +46,14 @@ export function kingdomSuggestions(plot,coins,playerLevel,now){
   add('forge:'+forge.id,'Upgrade Mana Forge to Lv. 2',{object:'forge:'+forge.id},[
    need(tower.level,forgeUpgrade.towerLevel,'tower level'),...budget(forgeUpgrade.coins,forgeUpgrade.mana)
   ],forgePlan(forge,now).construction);
+ }
+ if(!defences.length)build(spikeKind,spikePrice);
+ const shooter=defences.find(item=>spikePlan(item,now).construction)||defences.find(item=>spikePlan(item,now).next);
+ if(shooter){
+  const {level,next,construction}=spikePlan(shooter,now),target=level+1;
+  add('spike:'+shooter.id+':'+target,'Upgrade Spike Shooter to Lv. '+target,{object:spikeKind+':'+shooter.id},[
+   need(tower.level,next.towerLevel,'tower level'),...budget(next.coins,next.mana)
+  ],construction);
  }
  if(land.nextPrice!==null)add('land:'+land.level,'Expand your land',{mode:'expand'},budget(land.nextPrice));
  return rows;

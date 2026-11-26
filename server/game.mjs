@@ -9,7 +9,7 @@ import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progr
 import {featureLevel} from '../web/level-access.js';
 import {tradeLevelNotice} from '../web/trade-rules.js';
 import {kingdomVisitors,settleKingdomVisitors} from './kingdom-visitors.mjs';
-import {kingdomForges,kingdomHouses,maxTowerLevel,settleKingdomConstruction} from '../web/kingdom-rules.js';
+import {kingdomDefences,kingdomForges,kingdomHouses,maxTowerLevel,settleKingdomConstruction} from '../web/kingdom-rules.js';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
@@ -190,7 +190,7 @@ function adjustAdminWallet(wallet,args){
 }
 
 function finishAdminConstruction(wallet,now){
- const sites=[wallet.kingdom?.towerConstruction,...kingdomHouses(wallet).map(item=>item.upgrade),...kingdomForges(wallet).map(item=>item.upgrade)].filter(Boolean);
+ const sites=[wallet.kingdom?.towerConstruction,...[...kingdomHouses(wallet),...kingdomForges(wallet),...kingdomDefences(wallet)].map(item=>item.upgrade)].filter(Boolean);
  if(!sites.length)reject('Start a Kingdom upgrade first.');
  for(const site of sites)site.endsAt=Math.min(site.endsAt,now);
  return settleKingdomConstruction(wallet,now);

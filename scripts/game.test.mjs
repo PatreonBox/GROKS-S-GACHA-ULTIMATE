@@ -20,7 +20,8 @@ import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/ca
 import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
 import {playerProgress,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
-import {buildingFootprint,forgePlan,gemMine,gemMinePlan,housePlacementError,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {buildingFootprint,forgePlan,gemMine,gemMinePlan,housePlacementError,housePlan,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
 import {achievements,achievementProgress} from '../web/progression-rules.js';
@@ -994,6 +995,65 @@ test('An arriving cube walks in from the plot edge and waves on the trail',()=>{
  }
  assert.equal(furthest,4);
  assert.equal(welcomed,true);
+});
+
+test('Spike Shooter capacity, upgrades and hidden structure health follow server-owned levels',async t=>{
+ const start=Date.now();
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),owner=await f.open('shooter-owner'),viewer=await f.open('shooter-viewer');
+ const spot={x:8,z:7,rotation:.5,expectedPrice:spikePrice};
+ const other={...spot,x:-8};
+ const command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
+ assert.equal((await command(spikeKind,spot)).status,400);
+ f.store(owner.id,w=>{w.playerXp=playerXpAt(8);w.coins=1_000_000;w.kingdom={mana:2000};});
+ const orders=await Promise.all([command(spikeKind,spot),command(spikeKind,other)]);
+ assert.deepEqual(orders.map(res=>res.status).sort(),[200,400]);
+ const created=await orders.find(res=>res.ok).json(),id=created.result.building.id;
+ assert.equal(created.wallet.coins,1_000_000-spikePrice);
+ assert.equal(created.result.building.rotation,.5);
+ const args={id,level:1},receipt=crypto.randomUUID();
+ for(const response of await Promise.all([command(spikeKind+'.upgrade',args,receipt),command(spikeKind+'.upgrade',args,receipt)])){
+  assert.equal(response.status,200);
+  const {wallet}=await response.json(),plan=spikePlan(wallet.kingdom.defences[0]);
+  assert.deepEqual([plan.level,plan.damage,plan.hp,plan.construction.level],[1,10,200,2]);
+  assert.equal(wallet.kingdom.mana,1970);
+ }
+ assert.equal((await command('building.store',{id})).status,400);
+ t.mock.timers.setTime(start+10_000);
+ const first=await (await command('construction.finish',{})).json();
+ assert.deepEqual(first.result.defences,[id]);
+ assert.deepEqual([spikePlan(first.wallet.kingdom.defences[0]).damage,spikePlan(first.wallet.kingdom.defences[0]).hp],[15,250]);
+ const blocked=await command(spikeKind+'.upgrade',{id,level:2});
+ assert.match((await blocked.json()).error,/Tower Level 2/);
+ assert.equal((await command('building.store',{id})).status,200);
+ assert.equal((await command(spikeKind,other)).status,400);
+ const restored=await (await command('building.place',{...spot,mode:'restore',id})).json();
+ assert.equal(restored.result.building.level,2);
+ assert.equal(restored.wallet.coins,first.wallet.coins);
+ f.store(owner.id,w=>{w.kingdom.towerLevel=2;});
+ assert.equal(kingdomStats(await f.wallet(owner)).tower.defenceLimit,2);
+ assert.equal((await command(spikeKind,other)).status,200);
+ assert.equal((await command(spikeKind,{...spot,x:-8,z:-7})).status,400);
+ const third=await command(spikeKind+'.upgrade',{id,level:2});
+ assert.equal(third.status,200);
+ t.mock.timers.setTime(start+30_000);
+ const middle=await (await command('construction.finish',{})).json(),plan=spikePlan(middle.wallet.kingdom.defences[0]);
+ assert.deepEqual([plan.damage,plan.hp],[22,320]);
+ assert.match((await (await command(spikeKind+'.upgrade',{id,level:3})).json()).error,/Tower Level 3/);
+ f.store(owner.id,w=>{w.kingdom.towerLevel=3;});
+ assert.equal((await command(spikeKind+'.upgrade',{id,level:3})).status,200);
+ t.mock.timers.setTime(start+60_000);
+ const final=await (await command('construction.finish',{})).json(),max=spikePlan(final.wallet.kingdom.defences[0]);
+ assert.deepEqual([max.level,max.hp,max.damage,max.next],[4,410,28,null]);
+ assert.equal(spikeDamage[4],36);
+ assert.equal((await command(spikeKind+'.upgrade',{id,level:4})).status,400);
+ assert.equal(kingdomStats(final.wallet).tower.hp,2200);
+ assert.equal(kingdomStats(final.wallet).tower.defenceLimit,3);
+ assert.deepEqual([1,2,3].map(level=>housePlan({level}).hp),[150,220,310]);
+ const {kingdom}=await (await f.call('/api/players?player='+owner.id+'&view=kingdom',viewer)).json();
+ const publicShooter=kingdom.buildings.find(item=>item.id===id);
+ assert.deepEqual(publicShooter,{id,x:8,z:7,rotation:.5,kind:spikeKind,level:4});
+ assert.equal(Object.hasOwn(kingdom,'hp'),false);
 });
 
 test('A Gem Mine unlocks at Tower Level 2, banks offline production, and caps and collects exactly once',async t=>{
