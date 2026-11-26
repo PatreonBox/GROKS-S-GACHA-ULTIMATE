@@ -51,7 +51,7 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,rareMusic:1};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
@@ -90,13 +90,16 @@ export function createPackSound(){
  function fadeOut(voice){
   if(voice.stopping)return;
   voice.stopping=true;
-  const now=ctx.currentTime,end=now+.014;
+  const now=ctx.currentTime,end=now+(voice.lane==='rareMusic'?.095:.014);
   const level=voice.gain.gain;
   if(typeof level.cancelAndHoldAtTime==='function')level.cancelAndHoldAtTime(now);
   else{level.cancelScheduledValues(now);level.setValueAtTime(level.value,now)}
   level.linearRampToValueAtTime(0,end);voice.source.stop(end+.002);
  }
- function stopScore(){stopRare?.();stopRare=null}
+ function stopScore(){
+  stopRare?.();stopRare=null;
+  for(const voice of voices)if(voice.lane==='rareMusic')fadeOut(voice);
+ }
  function score(tier,impact,duration){
   stopScore();
   if(enabled&&ctx&&!document.hidden)stopRare=startRareScore(ctx,master,tier,impact,duration);
@@ -114,6 +117,13 @@ export function createPackSound(){
   if(active.length>=limits[lane])fadeOut(active[0]);
   const source=ctx.createBufferSource(),gain=ctx.createGain();
   source.buffer=track;source.playbackRate.value=rate;gain.gain.value=level;
+  const start=ctx.currentTime;
+  if(lane==='rareMusic'){
+   gain.gain.setValueAtTime(.0001,start);
+   gain.gain.linearRampToValueAtTime(level,start+.07);
+   gain.gain.setValueAtTime(level,start+length-.20);
+   gain.gain.linearRampToValueAtTime(.0001,start+length);
+  }
   const stereo=ctx.createStereoPanner?.();
   source.connect(gain);
   if(stereo){stereo.pan.value=pan;gain.connect(stereo);stereo.connect(master)}
@@ -121,13 +131,13 @@ export function createPackSound(){
   const voice={source,gain,lane,stopping:false};
   voices.add(voice);
   source.onended=()=>{voices.delete(voice);source.disconnect();gain.disconnect();stereo?.disconnect()};
-  source.start(ctx.currentTime,offset,length);
+  source.start(start,offset,length);
  }
  function emit(name,rate,pan,level){emitClip(buffer,cues[name],channels[name],rate,pan,level)}
- function preloadGame(bank){
-  if(!enabled||gameBuffers.has(bank))return;
+ function preloadGame(bank,src=gameSamples[bank]){
+  if(!enabled||!src||gameBuffers.has(bank))return;
   if(!gameFiles.has(bank)){
-   const file=fetch(gameSamples[bank]).then(response=>{
+   const file=fetch(src).then(response=>{
     if(!response.ok)throw Error('Extra audio unavailable');
     return response.arrayBuffer();
    }).catch(()=>{gameFiles.delete(bank);return null});
@@ -135,16 +145,27 @@ export function createPackSound(){
   }
   return gameFiles.get(bank);
  }
- function prepareGame(bank='arcade'){
+ function prepareGame(bank='arcade',src=gameSamples[bank]){
   unlock();
-  if(!enabled||!ctx||gameBuffers.has(bank))return;
+  if(!enabled||!ctx||!src||gameBuffers.has(bank))return;
   if(!gameLoading.has(bank)){
-   const loading=preloadGame(bank).then(data=>data&&ctx.decodeAudioData(data))
+   const loading=preloadGame(bank,src).then(data=>data&&ctx.decodeAudioData(data))
     .then(decoded=>{if(decoded)gameBuffers.set(bank,decoded)})
     .catch(()=>{}).finally(()=>{gameLoading.delete(bank);gameFiles.delete(bank)});
    gameLoading.set(bank,loading);
   }
   return gameLoading.get(bank);
+ }
+ function prepareRevealTrack(src){
+  const loading=prepareGame(src,src);
+  if(loading||resuming)return Promise.all([loading,resuming]);
+ }
+ function playRevealTrack(src,offset,seconds){
+  const track=gameBuffers.get(src),length=Math.min(seconds,(track?.duration??0)-offset);
+  if(!enabled||ctx?.state!=='running'||document.hidden||length<.35)return false;
+  stopScore();
+  emitClip(track,[offset,length],'rareMusic',1,0,.58);
+  return true;
  }
  function playGame(name,{rate=1,pan=0,level=1}={}){
   if(!enabled||!ctx||document.hidden||!Object.hasOwn(gameCues,name))return;
@@ -255,5 +276,5 @@ export function createPackSound(){
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll()});
  window.addEventListener('pagehide',stopAll);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack};
 }

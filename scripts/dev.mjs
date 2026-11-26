@@ -7,13 +7,13 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {api} from '../server/api.mjs';
 import {mediaResponse} from '../server/media-range.mjs';
-import {kingdomBundle} from './kingdom-bundle.mjs';
+import {sceneBundles} from './scene-bundles.mjs';
 process.chdir(fileURLToPath(new URL('../',import.meta.url)));
 restoreAssets(new URL('../',import.meta.url));
 const types={'.mp3':'audio/mpeg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.svg':'image/svg+xml','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.woff2':'font/woff2'};
 const flag=process.argv.indexOf('--port'),port=Number(process.env.PORT||(flag>=0&&process.argv[flag+1])||4173);
 const {DB}=createGameDatabase();
-const kingdomJs=await kingdomBundle();
+const scenes=await sceneBundles();
 const game=gameRoutes(
  path=>JSON.parse(fs.readFileSync('web'+path,'utf8')),
  id=>['webp','avif'].some(ext=>fs.existsSync('web/assets/shots/'+id+'.'+ext))
@@ -37,7 +37,7 @@ http.createServer(async(req,res)=>{
    res.end(Buffer.from(await response.arrayBuffer()));return;
   }
   if(u.pathname.startsWith('/api/')){const r=await api(new Request(u));res.writeHead(r.status,Object.fromEntries(r.headers));res.end(Buffer.from(await r.arrayBuffer()));return}
-  if(u.pathname==='/kingdom-world.js'){res.writeHead(200,{'Content-Type':'text/javascript'}).end(kingdomJs);return}
+  if(scenes.has(u.pathname)){res.writeHead(200,{'Content-Type':'text/javascript'}).end(scenes.get(u.pathname));return}
   let p=path.resolve('web','.'+(u.pathname==='/'?'/index.html':u.pathname));
   if(!p.startsWith(path.resolve('web')+path.sep)){res.writeHead(404).end();return}
   if(p.endsWith('.webp')&&!fs.existsSync(p))p=p.slice(0,-5)+'.avif';

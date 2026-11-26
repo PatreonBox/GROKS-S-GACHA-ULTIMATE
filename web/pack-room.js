@@ -3,7 +3,7 @@ import {cardStations} from './card-stations.js';
 import {stat,extremeTable,extremeOdds,extremeBandOdds,bandNames,stageNames,extremeStage,compareMergeStrength} from './card-economy.js';
 import {packs,packQuantities,difficulties,cardCategories,oddsFor,mostLikelyDifficulty,mythicExtremeCap,godlyExtremeTickets,inventoryOdds,readWallet,readCollection,buyPack,collectMineIncome,redeemCoinCode,advanceOpening,onOtherTab,upgrades,quoteUpgrade,bonusChance,purchaseUpgrade,orderedPull,pool} from './pack-engine.js';
 import {ico,ratingLabel} from './icons.js';
-import {playRareReveal,revealTier} from './rare-reveal.js';
+import {playRareReveal,prepareRareReveal,revealTier} from './rare-reveal.js';
 import {impossibleCategory,impossibleCover} from './impossible-cards.js';
 import {antimatterPercent,holoPercent,bestFinish,finishClass,finishLabels} from './card-finishes.js';
 import {findRemix} from './remixes.js';
@@ -70,12 +70,12 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   for(const event of ['pointerdown','keydown','click'])surface.addEventListener(event,sound.unlock,true);
  }
  function speaker(id){
-  return '<button '+(id?'id="packSound"':'data-reveal-sound')+' class="iconbtn" aria-label="Pack sounds" aria-pressed="'+sound.enabled+'" title="'+(sound.enabled?'Mute sound effects':'Enable sound effects')+'">'+ico(sound.enabled?'volume':'muted')+'</button>';
+  return '<button '+(id?'id="packSound"':'data-reveal-sound')+' class="iconbtn" aria-label="Pack audio" aria-pressed="'+sound.enabled+'" title="'+(sound.enabled?'Mute pack audio':'Enable pack audio')+'">'+ico(sound.enabled?'volume':'muted')+'</button>';
  }
  function toggleSound(){
   sound.toggle();
   for(const el of document.querySelectorAll('#packSound,[data-reveal-sound]')){
-   el.setAttribute('aria-pressed',String(sound.enabled));el.title=sound.enabled?'Mute sound effects':'Enable sound effects';
+   el.setAttribute('aria-pressed',String(sound.enabled));el.title=sound.enabled?'Mute pack audio':'Enable pack audio';
    el.innerHTML=ico(sound.enabled?'volume':'muted');
   }
  }
@@ -543,7 +543,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  }
  function begin(pending){
   if(!pending)return;
-  run=pending;preparePullOdds(pending);packIndex=pending.opened;stage='sealed';stopTimers();
+  run=pending;packIndex=pending.opened;stage='sealed';stopTimers();
+  preparePullOdds(pending).then(()=>{
+   if(run===pending)prepareRareReveal(pullCards(pending),sound);
+  });
   if(!reveal.open)reveal.showModal();drawReveal();
  }
  function preparePullOdds(pull){
@@ -570,7 +573,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(!tier)return null;
   activeRare?.scene.close();sound.stop();
   const scene=playRareReveal({
-   tier,cardHTML:card(item.row,{deal:true,finish:item.finish}),
+   tier,levelId:item.row[0],cardHTML:card(item.row,{deal:true,finish:item.finish}),
    title:item.row[1],odds:oneIn(item.percent),oddsLabel:rarityLabel(item),sound,toggleSound,observeArt,hold,skipAll
   });
   activeRare={scene,drawIndex:item.drawIndex};
@@ -593,6 +596,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const p=packs.find(v=>v.id===last.packId),bonuses=entries.filter(x=>x.bonus).length;
   const bestRank=best.tier===10&&best.row[10]?'#'+number(best.row[10])+' ':best.tier>10?'ILL #'+best.row[10]+' ':'';
   const rare=entries.map((item,i)=>({item,i})).filter(x=>revealTier(x.item.percent));
+  prepareRareReveal(rare.map(({item})=>item),sound);
   const replay=rare.length?'<div class="rare-replay">'+(rare.length>1?'<select id="rareReplayPick" aria-label="Choose a rare pull to replay">'+
    rare.map(({item,i})=>'<option value="'+i+'">'+enc(item.row[1]+' · '+rarityLabel(item)+' · '+rarityValue(item))+'</option>').join('')+'</select>':'')+
    '<button class="outline" data-rare-replay>'+ico('spark')+' Replay rare reveal</button></div>':
@@ -663,7 +667,17 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
     actions.innerHTML=revealActions();
     actions.querySelector('[data-next]').focus({preventScroll:true});
    }
-   if(quick){if(hand[0])landPull(hand[0],0,0);finishHand();return}
+   if(quick){
+    const featured=hand.find(item=>revealTier(item.percent));
+    if(featured){
+     const scene=openRare(featured,{skipAll:()=>progress(true)});
+     scene.done.then(()=>{if(current())finishHand()});
+    }else{
+     if(hand[0])landPull(hand[0],0,0);
+     finishHand();
+    }
+    return;
+   }
    for(const el of cards){el.dataset.unseen='';el.disabled=true}
    function dealNext(i){
     if(!current())return;

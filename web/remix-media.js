@@ -9,10 +9,11 @@ export const remixTracks={
  reverie:'Reverie · EspiDev'
 };
 export const griefPoster='/assets/arcade/grief-finish.webp';
+export const remixTrackSource=track=>'/assets/audio/remix/'+track+'.mp3';
 
 export function remixMusic(track,sound,button,isRunning){
  if(!track)return null;
- const player=new Audio('/assets/audio/remix/'+track+'.mp3');
+ const player=new Audio(remixTrackSource(track));
  player.preload='auto';player.volume=.48;
  let enabled=true;
  try{enabled=localStorage.getItem('gdlb.arcadeMusic')!=='off'}catch{}

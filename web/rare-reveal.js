@@ -1,12 +1,13 @@
 import {ico} from './icons.js';
+import {remixTracks,remixTrackSource} from './remix-media.js';
 
 export const rareTiers=[
- {n:5000,name:'First light',effect:'slit',ink:'#9beaff',flare:'#147eef',hit:840,ms:2050},
- {n:20000,name:'Prism break',effect:'prism',ink:'#e9b1ff',flare:'#9151ff',hit:1060,ms:2400},
+ {n:5000,name:'First Light',effect:'slit',ink:'#9beaff',flare:'#147eef',hit:840,ms:2050},
+ {n:20000,name:'Prism Break',effect:'prism',ink:'#e9b1ff',flare:'#9151ff',hit:1060,ms:2400},
  {n:100000,name:'Starfall',effect:'starfall',ink:'#ffe5ac',flare:'#ef6faa',hit:1390,ms:2840},
  {n:500000,name:'Eclipse',effect:'eclipse',ink:'#ffa6bb',flare:'#f42682',hit:2000,ms:3600},
  {n:1000000,name:'Singularity',effect:'singularity',ink:'#a9f3ff',flare:'#6d5dff',hit:2500,ms:4350},
- {n:10000000,name:'Event horizon',effect:'horizon',ink:'#fff1b9',flare:'#7b69ff',hit:3140,ms:5440}
+ {n:10000000,name:'Event Horizon',effect:'horizon',ink:'#fff1b9',flare:'#7b69ff',hit:3140,ms:5440}
 ];
 export function revealTier(percent){
  if(!(percent>0&&Number.isFinite(percent)))return null;
@@ -14,197 +15,183 @@ export function revealTier(percent){
  return null;
 }
 
-const clamp=(n,lo=0,hi=1)=>Math.min(hi,Math.max(lo,n));
-const tau=Math.PI*2;
-const tint=(hex,alpha)=>hex+Math.round(clamp(alpha)*255).toString(16).padStart(2,'0');
-const entrances=[
- [0,72,-160,12,180,0,.68],
- [-110,55,-230,27,218,-24,.64],
- [140,-120,-280,42,224,27,.70],
- [0,75,-480,67,192,0,.72],
- [-70,-24,-340,46,247,-23,.54],
- [0,5,-650,-64,253,71,.55]
-];
-
-function pose(x,y,z,rx,ry,rz,scale){
- return `translate3d(${x}px,${y}px,${z}px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg) scale(${scale})`;
+const newgroundsSongs={'speed-of-light':467339,epilogue:723714,carnivores:690265,reverie:787986};
+const songsByLevel={
+ 3979721:'speed-of-light',    // Cataclysm
+ 10565740:'speed-of-light',   // Bloodbath
+ 25610878:'speed-of-light',   // aftermath
+ 42584142:'speed-of-light',   // Bloodlust
+ 61079355:'epilogue',         // Acu
+ 37456092:'carnivores',       // Digital Descent
+ 75867791:'reverie'           // poocu
+};
+const reducedMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+let worldRequest;
+function loadWorld(){
+ if(!worldRequest)worldRequest=import('/rare-reveal-world.js').catch(()=>{worldRequest=null;return null});
+ return worldRequest;
+}
+export function prepareRareReveal(items,sound){
+ const rare=items.filter(item=>revealTier(item.percent));
+ if(!rare.length)return;
+ if(!reducedMotion())loadWorld();
+ if(!sound.enabled)return;
+ const tracks=new Set(rare.map(item=>songsByLevel[item.row[0]]).filter(Boolean));
+ for(const clip of tracks)sound.prepareRevealTrack(remixTrackSource(clip));
 }
 
-function windowEffects(canvas,tier){
- const ctx=canvas.getContext('2d'),rank=rareTiers.indexOf(tier),stars=[];
- if(!ctx)return ()=>{};
- let seed=384077+rank;
- const next=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/0x100000000);
- for(let i=0;i<40+rank*24;i++)stars.push([next(),next(),next(),next()]);
- const size={w:0,h:0};
- function path(points,fill,stroke,width=1){
-  ctx.beginPath();for(const [i,[x,y]] of points.entries()){if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y)}
-  if(fill){ctx.fillStyle=fill;ctx.fill()}
-  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke()}
- }
- function oval(x,y,r,s,angle,color,width=1){
-  ctx.beginPath();ctx.ellipse(x,y,Math.max(1,r),Math.max(1,s),angle,0,tau);
-  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();
- }
- function polygon(x,y,r,edges,rotation,ink){
-  const pts=Array.from({length:edges+1},(_,i)=>{
-   const a=i*tau/edges+rotation;
-   return [x+Math.cos(a)*r,y+Math.sin(a)*r];
-  });
-  path(pts,null,ink);
- }
- return age=>{
-  const {clientWidth:w,clientHeight:h}=canvas,dpr=Math.min(1.75,devicePixelRatio||1);
-  if(!w||!h)return;
-  if(size.w!==w||size.h!==h||size.dpr!==dpr){
-   size.w=w;size.h=h;size.dpr=dpr;
-   canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-  ctx.clearRect(0,0,w,h);
-  const x=w/2,y=h*.50,short=Math.min(w,h),p=clamp(age/tier.hit),after=Math.max(0,age-tier.hit);
-  const pulse=after?Math.exp(-after/660):0,scale=1+after/2400;
-  const glow=ctx.createRadialGradient(x,y,short*.015,x,y,short*.55);
-  glow.addColorStop(0,tint(tier.flare,(p*.16+(.24+rank*.016)*pulse)));
-  glow.addColorStop(.5,tint(tier.flare,(p*.075+.115*pulse)));
-  glow.addColorStop(1,tint(tier.flare,0));
-  ctx.fillStyle=glow;ctx.fillRect(0,0,w,h);
-  if(rank===0){
-   const slit=short*(.01+.51*p**2)*scale;
-   path([[x-slit,y],[x+slit,y]],null,tint(tier.ink,p*.70),1.6+pulse);
-   path([[x,y-slit*.66],[x,y+slit*.66]],null,tint(tier.flare,p*.45),1);
-  }else if(rank===1){
-   for(let i=0;i<6;i++)polygon(x,y,short*(.06+i*.047)*p*scale,3,i*.55+age/1900,tint(i%2?tier.ink:tier.flare,p*(.60-i*.054)));
-  }else if(rank===2){
-   for(let i=0;i<11;i++){
-    const a=i*tau/11+age/2900,r=short*(.07+p*.29)*scale;
-    path([[x+Math.cos(a)*r,y+Math.sin(a)*r],[x+Math.cos(a+.25)*r*.81,y+Math.sin(a+.25)*r*.81],
-     [x+Math.cos(a)*r*.55,y+Math.sin(a)*r*.55]],null,tint(tier.ink,p*(.48+.39*pulse)),1.2);
-   }
-   polygon(x,y,short*(.19+p*.11)*scale,5,-age/3500,tint(tier.flare,.55*p));
-  }else{
-   const eclipse=short*(.1+.22*p)*scale;
-   const count=rank===3?3:rank===4?7:11;
-   ctx.fillStyle=tint('#000000',.83*p);
-   ctx.beginPath();ctx.arc(x,y,eclipse*.55,0,tau);ctx.fill();
-   for(let i=0;i<count;i++){
-    const r=eclipse*(.73+i*.087),f=rank===3?.94:.36+(i%3)*.13;
-    const slope=rank===3?0:((i%2)?-.62:.58)+age*(rank>=5?.00042:.00029);
-    oval(x,y,r,r*f,slope,tint(i%2?tier.flare:tier.ink,p*(.57-i*.028)+pulse*.25),1.1+pulse*2);
-   }
-   if(after&&after<1200){
-    const rings=rank-1;
-    for(let i=0;i<rings;i++){
-     const wave=clamp((after-i*95)/1000),alpha=Math.sin(wave*Math.PI)*(1-wave)*.49;
-     if(alpha>0)oval(x,y,short*(.095+wave*.66),short*(.08+wave*.56),-.12,tint(tier.ink,alpha),1.4+pulse*3);
-    }
-   }
-   if(rank===5){
-    const stretch=short*.71*p*scale;
-    path([[x-stretch,y+.36*stretch],[x,y],[x+stretch,y-.36*stretch]],null,tint(tier.ink,p*.69+pulse*.24),2+3*pulse);
-    for(let i=0;i<9;i++)polygon(x,y,eclipse*(1.3+i*.085),4,i*.17-age/6500,tint(tier.flare,(.35-i*.024)*p));
-   }
-  }
-  for(const [pos,size,feed,spin] of stars){
-   const a=pos*tau+age*.00012*(rank+1)*(spin-.4),near=short*(.03+size*.53);
-   const r=after?near*(.25+after/900*(.33+feed*.35)):near*(1.35-p*.83);
-   const tail=rank>=2?(3+feed*13)*(p+pulse)*.8:2.25;
-   const dx=Math.cos(a),dy=Math.sin(a);
-   const cx=x+dx*r*(rank>=4?1.34:1.05),cy=y+dy*r;
-   path([[cx,cy],[cx-dx*tail,cy-dy*tail]],null,tint(feed>.45?tier.ink:tier.flare,p*(.14+feed*.59)),.7+size*(rank/3));
-  }
-  if(after>0&&after<1300){
-   const burst=after/1300,reach=1-(1-burst)**2,alpha=(1-burst)**2;
-   const wave=short*(.14+reach*(.36+rank*.044));
-   oval(x,y,wave*1.48,wave*.76,-.16,tint(tier.ink,alpha*.65),.8+alpha*2);
-   for(let i=0;i<20+rank*12;i++){
-    const [pos,size,feed,spin]=stars[i],angle=pos*tau;
-    const dx=Math.cos(angle),dy=Math.sin(angle);
-    const distance=short*(.05+reach*(.24+size*.58));
-    const cx=x+dx*distance*1.46,cy=y+dy*distance+short*burst*burst*.19;
-    const chip=(3+feed*(8+rank*1.7))*(1-burst*.64),tilt=angle+spin*burst*12;
-    const c=Math.cos(tilt)*chip,s=Math.sin(tilt)*chip;
-    path([[cx+c,cy+s],[cx-s*.47,cy+c*.47],[cx-c*.56,cy-s*.56],[cx+s*.52,cy-c*.52]],
-     tint(feed>.47?tier.ink:tier.flare,alpha*(.55+size*.4)),null);
-   }
-  }
- };
+const motions={
+ slit:[[0,74,-164,17,180,3,.72],[0,7,-20,7,164,1,.94],[0,-4,16,-3,-7,-1,1.03]],
+ prism:[[-138,30,-180,10,-224,-26,.67],[-16,-3,-25,8,-161,7,.90],[5,0,27,-4,11,-4,1.04]],
+ starfall:[[115,-156,-258,-30,193,31,.63],[6,13,-42,16,152,8,.93],[0,-7,32,-8,-12,-3,1.045]],
+ eclipse:[[-30,105,-342,44,-178,-11,.61],[-8,5,-33,19,-151,-7,.93],[2,-4,28,-6,9,-1,1.035]],
+ singularity:[[-111,-48,-416,-27,242,-45,.59],[-12,-8,-45,-15,151,-9,.90],[0,4,34,8,-13,2,1.06]],
+ horizon:[[0,15,-602,38,-208,50,.51],[2,2,-57,8,-147,4,.87],[0,-6,44,-5,12,0,1.065]]
+};
+function pose([x,y,z,rx,ry,rz,scale]){
+ return 'translate3d('+x+'px,'+y+'px,'+z+'px) rotateX('+rx+'deg) rotateY('+ry+'deg) rotateZ('+rz+'deg) scale('+scale+')';
+}
+function turnCard(deck,tier){
+ const [entry,ready,landed]=motions[tier.effect];
+ const direction=Math.sign(ready[4]),turn=.17*tier.hit+135;
+ return deck.animate([
+  {opacity:0,transform:pose(entry),easing:'cubic-bezier(.18,.68,.31,1)'},
+  {offset:(tier.hit-turn)/tier.ms,opacity:1,transform:pose(ready),easing:'cubic-bezier(.52,.03,.79,.52)'},
+  {offset:tier.hit/tier.ms,opacity:1,transform:pose([0,0,9,2,90*direction,0,.98]),easing:'cubic-bezier(.10,.71,.27,1)'},
+  {offset:(tier.hit+turn)/tier.ms,opacity:1,transform:pose(landed),easing:'cubic-bezier(.23,.67,.37,1)'},
+  {offset:(tier.hit+turn+475)/tier.ms,opacity:1,transform:pose([0,0,0,0,0,0,1])},
+  {opacity:1,transform:pose([0,0,0,0,0,0,1])}
+ ],{duration:tier.ms,fill:'forwards'});
 }
 
-export function playRareReveal({tier,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,hold=false,skipAll}){
- const effect=rareTiers.indexOf(tier),reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,hold=false,skipAll}){
+ const effect=rareTiers.indexOf(tier),reduce=reducedMotion()||!Element.prototype.animate;
+ const clip=songsByLevel[levelId],song=newgroundsSongs[clip],src=song&&remixTrackSource(clip);
  const dialog=document.createElement('dialog'),prior=document.activeElement;
  dialog.className='rare-reveal';dialog.dataset.effect=tier.effect;
  dialog.setAttribute('aria-label','Rare card reveal');
  dialog.style.setProperty('--rarity',tier.ink);dialog.style.setProperty('--flare',tier.flare);
  dialog.style.setProperty('--charge',tier.hit+'ms');
- dialog.innerHTML='<div class="rare-sky" aria-hidden="true"><img alt="" class="rare-hero"></div><canvas aria-hidden="true"></canvas>'+
+ dialog.innerHTML='<div class="rare-sky" aria-hidden="true"><img alt="" class="rare-hero"></div>'+
+  '<div class="rare-environment" aria-hidden="true"></div><canvas aria-hidden="true"></canvas>'+
+  '<div class="rare-impact" aria-hidden="true"></div>'+
   '<div class="rare-head" aria-hidden="true"><span>'+tier.name+'</span><strong>'+odds+'</strong><small>'+oddsLabel+' · per card</small></div>'+
-  '<div class="rare-stage" aria-hidden="true" inert><div class="rare-deck"><i class="rare-edge"></i><div class="rare-back">'+
-  '<span class="rare-crest"><img src="/assets/player-cube.png" alt=""></span></div><div class="rare-front">'+cardHTML+'</div></div></div>'+
-  '<p class="rare-live" role="status" aria-live="polite"></p><div class="rare-controls">'+
+  '<div class="rare-stage" aria-hidden="true" inert><div class="rare-deck"><i class="rare-edge"></i>'+
+  '<div class="rare-back"><span class="rare-crest"><img src="/assets/player-cube.png" alt=""></span></div>'+
+  '<div class="rare-front">'+cardHTML+'</div></div></div>'+
+  '<p class="rare-live" role="status" aria-live="polite"></p><div class="rare-footer">'+
+  (song?'<a class="rare-track" href="https://www.newgrounds.com/audio/listen/'+song+'" target="_blank" rel="noopener noreferrer" tabindex="-1">'+
+   '<span>'+remixTracks[clip]+'</span>'+ico('external')+'</a>':'')+
+  '<div class="rare-controls">'+
   (skipAll?'<button type="button" class="outline" data-rare-all>Skip opening</button>':'')+
-  '<button type="button" class="outline" data-rare-mute aria-label="Pack sounds" aria-pressed="'+sound.enabled+'">'+ico(sound.enabled?'volume':'muted')+'</button>'+
-  '<button type="button" class="primary" data-rare-close>'+ (reduce?'Continue':'Skip reveal') +'</button></div>';
+  '<button type="button" class="outline" data-rare-mute></button>'+
+  '<button type="button" class="primary" data-rare-close>'+(reduce?'Continue':'Skip reveal')+'</button></div></div>';
  const deck=dialog.querySelector('.rare-deck'),button=dialog.querySelector('[data-rare-close]'),announce=dialog.querySelector('.rare-live');
+ const mute=dialog.querySelector('[data-rare-mute]'),credit=dialog.querySelector('.rare-track'),canvas=dialog.querySelector('canvas');
  const art=deck.querySelector('.scene-shot'),hero=dialog.querySelector('.rare-hero');
- const setBackdrop=()=>{hero.src=art.currentSrc||art.src};
+ function setBackdrop(){hero.src=art.currentSrc||art.src}
  hero.addEventListener('load',()=>hero.classList.add('ready'),{once:true});
  if(art?.complete&&art.naturalWidth)setBackdrop();
  else art?.addEventListener('load',setBackdrop,{once:true});
- const draw=windowEffects(dialog.querySelector('canvas'),tier);
- let frame=0,impact=0,end=0,closed=false,resolve;
+ let frame=0,impact=0,end=0,endAt=0,shownAt,closed=false,resolve;
+ let world,watchSize,animation,musicRequest=0,motionMs=tier.ms;
  const done=new Promise(r=>{resolve=r});
+ const clipTime=hold?10.5:4.2;
+ function disposeWorld(){
+  cancelAnimationFrame(frame);watchSize?.disconnect();
+  world?.dispose();world=null;delete dialog.dataset.worldReady;
+ }
  function close(){
-  if(closed)return;closed=true;
-  cancelAnimationFrame(frame);clearTimeout(impact);clearTimeout(end);sound.stopScore();
-  document.removeEventListener('visibilitychange',hidden);
+  if(closed)return;closed=true;musicRequest++;
+  clearTimeout(impact);clearTimeout(end);animation?.cancel();sound.stopScore();
+  canvas.removeEventListener('webglcontextlost',disposeWorld);disposeWorld();
+  document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',close);
   if(dialog.open)dialog.close();
   dialog.remove();
   if(prior?.isConnected)prior.focus({preventScroll:true});
   resolve();
  }
  function hidden(){if(document.hidden)close()}
+ function setEnd(at){
+  if(hold||at<=endAt)return;
+  endAt=at;clearTimeout(end);end=setTimeout(close,Math.max(0,at-performance.now()));
+ }
+ function syncMute(){
+  mute.setAttribute('aria-label','Pack audio');
+  mute.setAttribute('aria-pressed',String(sound.enabled));
+  mute.title=sound.enabled?'Mute pack audio':'Enable pack audio';
+  mute.innerHTML=ico(sound.enabled?'volume':'muted');
+ }
+ function playTrack(){
+  const request=++musicRequest;
+  if(!src||!sound.enabled)return;
+  const tryPlay=()=>{
+   if(closed||musicRequest!==request)return;
+   const elapsed=Math.max(0,(performance.now()-shownAt)/1000);
+   if(!hold&&elapsed>1.1)return;
+   if(sound.playRevealTrack(src,elapsed,clipTime-elapsed)){
+    const finish=shownAt+clipTime*1000;
+    setEnd(finish);
+    motionMs=Math.max(motionMs,finish-start);
+    if(world&&!frame)frame=requestAnimationFrame(draw);
+   }
+  };
+  const loading=sound.prepareRevealTrack(src);
+  if(loading)loading.then(tryPlay);else tryPlay();
+ }
  function reveal(){
-  if(closed||dialog.dataset.revealed)return;
-  dialog.dataset.revealed='true';button.textContent='Continue';announce.textContent=title+' · '+odds;
+  if(closed||shownAt!==undefined)return;
+  shownAt=performance.now();
+  dialog.dataset.revealed='true';button.textContent='Continue';announce.textContent=tier.name+' · '+title+' · '+odds;
+  credit?.removeAttribute('tabindex');
+  playTrack();
  }
  dialog.addEventListener('cancel',e=>{e.preventDefault();close()});
  dialog.addEventListener('close',close);
- dialog.querySelector('[data-rare-mute]').onclick=e=>{
-  toggleSound();e.currentTarget.setAttribute('aria-pressed',String(sound.enabled));
-  e.currentTarget.innerHTML=ico(sound.enabled?'volume':'muted');
+ mute.onclick=()=>{
+  toggleSound();syncMute();
+  if(shownAt!==undefined)playTrack();
+  else if(src&&sound.enabled)sound.prepareRevealTrack(src);
  };
  button.onclick=close;
  const all=dialog.querySelector('[data-rare-all]');
  if(all)all.onclick=()=>{all.hidden=true;button.focus({preventScroll:true});skipAll()};
- observeArt?.(dialog);
+ syncMute();observeArt?.(dialog);
  document.addEventListener('visibilitychange',hidden);
+ window.addEventListener('pagehide',close);
  document.body.append(dialog);dialog.showModal();button.focus({preventScroll:true});
- if(reduce||!deck.animate){
-  deck.style.transform='none';draw(tier.hit+600);reveal();sound.play('results');
-  if(!hold)end=setTimeout(close,1750);
+ if(src&&sound.enabled)sound.prepareRevealTrack(src);
+ const start=performance.now();
+ setEnd(start+(reduce?1750:tier.ms));
+ if(reduce){
+  dialog.dataset.still='true';
+  deck.style.transform='none';
+  sound.play('results');
+  reveal();
   return {done,close};
  }
- const turnSpan=245+effect*27,tilt=effect%2?-1:1;
- deck.animate([
-  {opacity:0,transform:pose(...entrances[effect]),easing:'cubic-bezier(.2,.72,.28,1)'},
-  {offset:(tier.hit-200)/tier.ms,opacity:1,transform:pose(0,0,-35,8,170,tilt*6,.90),easing:'cubic-bezier(.56,0,.94,.55)'},
-  {offset:tier.hit/tier.ms,opacity:1,transform:pose(0,0,26,-3,90,tilt*4,.97),easing:'cubic-bezier(.1,.78,.27,1)'},
-  {offset:(tier.hit+turnSpan)/tier.ms,opacity:1,transform:pose(0,-5,34,-6,-tilt*11,-tilt*2,1.04),easing:'ease-out'},
-  {offset:(tier.hit+turnSpan+400)/tier.ms,opacity:1,transform:pose(0,0,0,0,0,0,1)},
-  {opacity:1,transform:pose(0,0,0,0,0,0,1)}
- ],{duration:tier.ms,fill:'forwards'});
- const start=performance.now();
- function loop(now){
-  if(closed)return;
-  const age=now-start;
-  if(age>=tier.hit)reveal();
-  draw(Math.min(age,tier.ms));
-  if(age<tier.ms)frame=requestAnimationFrame(loop);
- }
- frame=requestAnimationFrame(loop);
+ animation=turnCard(deck,tier);
  sound.score(effect,tier.hit,tier.ms);
  impact=setTimeout(reveal,tier.hit);
- if(!hold)end=setTimeout(close,tier.ms);
+ function draw(now){
+  frame=0;
+  if(closed||!world)return;
+  const age=Math.min(motionMs,Math.max(0,now-start));
+  try{
+   if(world.draw(age))dialog.dataset.worldReady='true';
+  }catch{disposeWorld();return}
+  if(age<motionMs)frame=requestAnimationFrame(draw);
+ }
+ loadWorld().then(module=>{
+  if(closed||!module)return;
+  try{
+   world=module.createRareRevealWorld(canvas,tier);
+   if(!world)return;
+   canvas.addEventListener('webglcontextlost',disposeWorld,{once:true});
+   watchSize=new ResizeObserver(()=>{if(!frame)draw(performance.now())});
+   watchSize.observe(canvas);
+   frame=requestAnimationFrame(draw);
+  }catch{disposeWorld()}
+ });
  return {done,close};
 }
