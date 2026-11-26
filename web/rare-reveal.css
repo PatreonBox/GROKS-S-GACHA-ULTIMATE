@@ -88,9 +88,11 @@ dialog.rare-reveal[open]{
 @keyframes rare-charge{from{opacity:.55;scale:.84}to{opacity:1;scale:1.08}}
 .rare-reveal:not([data-revealed]) .rare-front .level-card{visibility:hidden}
 .rare-footer{display:grid;justify-items:center;gap:10px;z-index:2;text-align:center}
-.rare-track{display:flex;align-items:center;gap:6px;max-width:100%;visibility:hidden;
+.rare-track-credit{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px 8px;visibility:hidden}
+.rare-reveal[data-revealed] .rare-track-credit{visibility:visible}
+.rare-track{display:flex;align-items:center;gap:6px;max-width:100%;min-height:25px;
  color:#e8dcf1;font-size:.78rem;font-weight:650;line-height:1.2;text-shadow:0 1px 5px #090615}
-.rare-reveal[data-revealed] .rare-track{visibility:visible}
+.rare-track-license{padding:4px 2px;color:#c0b4cd;font-size:.70rem;text-decoration:underline;text-underline-offset:3px}
 .rare-track svg{width:12px;height:12px;flex:none;color:var(--rarity)}
 .rare-track:hover{text-decoration:underline;text-underline-offset:3px}
 .rare-controls{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap}

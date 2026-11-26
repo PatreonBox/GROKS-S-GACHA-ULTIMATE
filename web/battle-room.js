@@ -23,8 +23,7 @@ import {equippedCube} from './cube-catalog.js';
 import {markGuide,newAreas,newBadge} from './guide-progress.js';
 import {drillGuideId,remixGuideId} from './minigame-guide.js';
 import {playerProgress} from './player-progression.js';
-import {featureLevel} from './level-access.js';
-import {lockAttributes,lockBadge} from './level-lock.js';
+import {arenaActivities,battleNavigation} from './battle-navigation.js';
 
 const fmt=n=>n.toLocaleString('en-US');
 const short=n=>Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(n);
@@ -38,26 +37,15 @@ const arenaArt=[
 const face=d=>d===impossibleCategory?'/assets/impossible/mark.webp':'/assets/faces/'+(d.includes(' Demon')?'demon-'+d.split(' ')[0].toLowerCase():d.toLowerCase())+'.webp';
 const payoutRange=t=>arenas[t-1].map(short).join('–');
 const nameplate=t=>'<img class="bt-face" src="'+face(difficulties[t])+'" alt="">'+difficulties[t];
-const battleShortcuts={training:{name:'Training zone',route:'training',style:'training',icon:'spark'},
- remix:{name:'Meme levels',route:'arcade',style:'arcade',icon:'flame'},
- army:{name:'Army mode',route:'army',style:'army',icon:'battle'}};
-function battleShortcut(key,level,inArena=false){
- const {name,route,style,icon}=battleShortcuts[key];
- const required=featureLevel(route),locked=level<required,label=locked?name+' · Level '+required+' required':name;
- return '<a class="outline feature-shortcut '+style+'-shortcut'+(inArena?' arena-activity':'')+'"'+
-  lockAttributes(required,level,'#battle/'+route)+' aria-label="'+label+'" title="'+label+'">'+ico(icon)+'<span class="feature-label">'+name+'</span>'+
-  (locked?lockBadge(required):newAreas[key]?newBadge(newAreas[key]):'')+'</a>';
-}
-
 export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet,announce,onGuide}){
  let gym=false,arcadePage=false,trainee=0,trainQuery='',trainingGame=null,relay=null,seqSeen=-1;
  let visible=false,wallet=null,owned=[],loaded=false,loadId=0,tier=1,target=0,knownBattle='',draft=[],picker=false,search='',page=0;
  let collectionError=false,busy=false,feedback='',loop=null,lastInjured=0,clockVersion='';
- let mode='regular',campaignTier=0,selection=null,runner=null,inspection=null,playback=null,stopPlayback=null;
+ let battleView='battle',lastScreen='',campaignTier=0,selection=null,runner=null,inspection=null,playback=null,stopPlayback=null;
  let playerLevel=0;
  const bountyTickets=new Map(),camera={flat:true};
  let clearTicket=null,arenaViewport;
- const mutedBtn=()=>'<button data-bsound aria-label="Battle sounds" aria-pressed="'+sound.enabled+'" class="iconbtn">'+ico(sound.enabled?'volume':'muted')+'</button>';
+ const mutedBtn=()=>'<button type="button" data-bsound aria-label="Battle audio" title="'+(sound.enabled?'Mute battle audio':'Enable battle audio')+'" aria-pressed="'+sound.enabled+'" class="iconbtn">'+ico(sound.enabled?'volume':'muted')+'</button>';
  const until=id=>wallet?.injuries?.[id]||0;
  const healthy=id=>until(id)<=Date.now();
  const byId=id=>owned.find(c=>c.id===Number(id));
@@ -95,9 +83,9 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   if(w.battle?.id!==knownBattle){
    knownBattle=w.battle?.id||'';target=0;
    Object.assign(camera,{flat:true,yaw:undefined,pitch:undefined,zoom:1});
-   if(w.battle?.campaign){mode='campaign';campaignTier=w.battle.campaign}
-   else if(w.battle?.remix){mode='remix';selection=findRemix(w.battle.remix)}
-   else if(w.battle){mode='regular';tier=w.battle.tier}
+   if(w.battle?.campaign)campaignTier=w.battle.campaign;
+   else if(w.battle?.remix)selection=findRemix(w.battle.remix);
+   else if(w.battle)tier=w.battle.tier;
   }
   const stamp=[w.battle?.id,w.battle?.seq,w.battle?.status,JSON.stringify(w.battle?.techniques||{}),...(w.squad||[]),JSON.stringify(w.injuries||{}),w.trainingRevision||0,playerLevel].join('|');
   if(stamp!==clockVersion){clockVersion=stamp;if(!playback)render()}
@@ -115,14 +103,14 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   owned=list.sort((a,b)=>{const x=ownedStats(a),y=ownedStats(b);return y.tier-x.tier||y.maxHp+y.attack-x.maxHp-x.attack||a.row[1].localeCompare(b.row[1])});
   loaded=true;if(!playback)render();
  }
- function show(on,trainingZone=false,miniLevels=false){
-  const changed=gym!==trainingZone||arcadePage!==miniLevels;gym=trainingZone;arcadePage=miniLevels;
-  if(gym)markGuide(newAreas.training);
-  if(arcadePage){selection??=remixes[0];markGuide(newAreas.remix)}
-  if(visible===on&&changed){trainingGame?.close();inspection?.close();runner?.close();if(playback)finishPlayback();feedback='';render()}
+ function show(on,next='battle'){
+  const changed=battleView!==next;
+  battleView=next;gym=next==='training';arcadePage=next==='arcade';
+  if(on&&gym)markGuide(newAreas.training);
+  if(on&&arcadePage){selection??=remixes[0];markGuide(newAreas.remix)}
+  if(on&&visible&&changed){trainingGame?.close();inspection?.close();runner?.close();if(playback)finishPlayback();picker=false;feedback='';render()}
   if(visible===on)return;visible=on;root.hidden=!on;clearInterval(loop);if(!on){trainingGame?.close();runner?.close();inspection?.close();if(playback)finishPlayback()}
-  if(!on){arenaViewport?.detach();root.querySelector('.orders-sheet[open]')?.close();picker=false;feedback='';return}
-  if(!gym&&!arcadePage&&!wallet?.battle){mode='regular';tier=1;}
+  if(!on){arenaViewport?.detach();root.querySelector('.orders-sheet[open]')?.close();picker=false;feedback='';lastScreen='';return}
   picker=false;draft=[...(wallet?.squad||[])];loaded=false;collectionError=false;clockVersion='';lastInjured=Object.values(wallet?.injuries||{}).filter(n=>n>Date.now()).length;
   sound.preload();render();refreshCollection();loop=setInterval(timer,1000);
  }
@@ -244,22 +232,16 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   if(picker)return equipment()+recovery();
   const team=wallet.squad||[],ready=team.length===4&&team.every(id=>healthy(id)&&byId(id));
   const selector='<label class="arena-label" for="arenaChoice">Arena difficulty</label><select id="arenaChoice" aria-label="Arena difficulty">'+difficulties.slice(1).map((d,i)=>'<option value="'+(i+1)+'" '+(tier===i+1?'selected':'')+'>'+d+'</option>').join('')+'</select>';
-  const activeMode=arcadePage?'remix':mode,campaign=activeMode==='campaign',remix=activeMode==='remix';
-  const tabs='<div class="battle-tabs" role="group" aria-label="Battle mode">'+
-   [['campaign','Campaign'],['regular','Standard arenas'],['remix','Meme levels']].map(([key,label])=>{
-    const required=key==='remix'?featureLevel('arcade'):0,locked=playerLevel<required;
-    return '<button data-mode="'+key+'" aria-pressed="'+(activeMode===key)+'"'+lockAttributes(required,playerLevel)+'>'+
-     label+(locked?lockBadge(required):key==='remix'?newBadge(newAreas.remix):'')+'</button>';
-   }).join('')+'</div>';
+  const campaign=battleView==='campaign';
   const poster='<section class="arena-poster'+(tier>=6?' demon-poster':'')+'" style="--arena:'+colors[tier]+'"><div class="arena-copy"><div class="battle-eyebrow">'+ico('battle')+' FOUR VS FOUR</div><h2>'+difficulties[tier]+' arena</h2>'+selector+'<div class="bounty">'+coin+'<b>'+payoutRange(tier)+'</b> coins per enemy</div></div><div class="arena-medal"><img src="'+face(difficulties[tier])+'" alt=""></div><img class="arena-banner-art" src="'+arenaArt[tier-1]+'" alt=""></section>';
   const action=owned.length<4?'<a href="#gacha" class="bt-primary">Open packs</a>':ready?
    '<button class="bt-primary" data-start '+(busy?'disabled':'')+'>'+(campaign?'Enter stage':'Enter battle')+'</button>':
    '<button class="bt-primary" data-edit>Choose squad</button>';
   const activeStage=campaignTier||Math.min(campaignStages.length,1+campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length);
   if(campaign)campaignTier=activeStage;
-  const front=campaign?campaignView(wallet,activeStage,{action,coverSource,face,enc,colors}):remix?remixPicker(selection):poster;
-  const squadStatus=ready?'4 / 4 ready':owned.length<4?'Collect four different levels to enter.':'Equip healthy cards lol';
-  return tabs+front+'<section class="bt-panel"><div class="bt-title"><div><small>LOADOUT</small><h2>Your squad</h2></div>'+
+  const front=campaign?campaignView(wallet,activeStage,{action,coverSource,face,enc,colors}):arcadePage?remixPicker(selection):poster;
+  const squadStatus=ready?'4 / 4 ready':owned.length<4?'Collect four different cards to enter.':'Equip four cards that are ready to battle.';
+  return front+'<section class="bt-panel"><div class="bt-title"><div><small>LOADOUT</small><h2>Your squad</h2></div>'+
    (owned.length?'<button class="outline" data-edit>Edit squad</button>':'')+'</div><div class="squad-grid">'+
    Array.from({length:4},(_,i)=>slot(byId(team[i]),i)).join('')+'</div><div class="bt-commit"><span>'+squadStatus+'</span>'+
    (campaign?'':action)+'</div></section>'+recovery();
@@ -313,7 +295,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const done=b.status!=='active',actor=activeActor(b),remix=findRemix(b.remix);
   const stage=stageFor(b.campaign);
   const title=stage?.name||remix?.name||difficulties[b.tier]+' arena';
-  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+battleShortcut('training',playerLevel,true)+battleShortcut('remix',playerLevel,true)+battleShortcut('army',playerLevel,true)+'<a class="outline leave-field" href="#gacha">Packs</a></div></div>';
+  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+arenaActivities(playerLevel)+'<a class="outline leave-field" href="#gacha">Packs</a></div></div>';
   const side=(units,key,title,tip)=>'<div class="battle-side"><h3><span>'+title+'</span><small>'+enc(tip)+'</small></h3><div class="formation">'+units.map((u,i)=>tile(u,i,key,b)).join('')+'</div></div>';
   const relayWait=Math.max(0,(b.relayAt||0)-b.seq);
   const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><i></i><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span><i></i></div>';
@@ -357,17 +339,22 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const live=!gym&&!arcadePage&&wallet?.battle&&loaded;
   if(!live)arenaViewport?.detach();
   const match=live&&(playback||wallet.battle),current=root.querySelector('.live-arena');
-  if(!gym&&!arcadePage)onGuide?.((match?match.campaign:mode==='campaign')?'battle-campaign':'battle-arenas');
+  if(!gym&&!arcadePage)onGuide?.((match?match.campaign:battleView==='campaign')?'battle-campaign':'battle-arenas');
   if(match&&current?.dataset.encounter===match.id){
    syncArena(current,arena(match));
    root.querySelector('.bt-feedback').textContent=feedback;
    return;
   }
-  const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Meme arcade':'Battle mode')+'</h1><div class="combat-links">'+
-   (gym||arcadePage?'<a class="outline" href="#battle">Return to battle</a>':'')+
-   (!gym?battleShortcut('training',playerLevel):'')+(!arcadePage?battleShortcut('remix',playerLevel):'')+
-   battleShortcut('army',playerLevel)+mutedBtn()+'</div></div>';
-  root.innerHTML=heading+(collectionError&&!loaded?'<p>Your squad could not load. <button class="outline" data-retry-collection>Try again</button></p>':!wallet||!loaded?'<p>Loading your squad…</p>':gym?training():match?arena(match):lobby())+'<div class="bt-feedback" role="status">'+enc(feedback)+'</div>';
+  const screen=live?'arena':picker?'squad':loaded?battleView:'';
+  const activeLink=root.contains(document.activeElement)?document.activeElement?.closest('.battle-navigation [data-battle-link]')?.dataset.battleLink:null;
+  const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Meme levels':battleView==='campaign'?'Battle campaign':'Battle mode')+'</h1>'+mutedBtn()+'</div>'+
+   battleNavigation(battleView,playerLevel);
+  const content=collectionError&&!loaded?'<p>Your squad could not load. <button class="outline" data-retry-collection>Try again</button></p>':
+   !wallet||!loaded?'<p role="status">Loading your squad…</p>':gym?training():match?arena(match):lobby();
+  root.innerHTML=heading+(live?content:'<div class="battle-content'+(screen&&lastScreen!==screen?' battle-enter':'')+'">'+content+'</div>')+
+   '<div class="bt-feedback" role="status">'+enc(feedback)+'</div>';
+  lastScreen=screen;
+  if(activeLink)root.querySelector('.battle-navigation [data-battle-link="'+activeLink+'"]')?.focus({preventScroll:true});
   if(live){
    bindArenaCamera(root,camera);
    if(arenaViewport===undefined)arenaViewport=createArenaViewport();
@@ -435,16 +422,10 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const d=el.dataset;
   if('feedMax'in d){const form=el.form;form.elements.copies.value=form.elements.copies.max;feedInput(form);return}
   if('retryCollection'in d){feedback='';refreshCollection();render();return}
-  if('bsound'in d){sound.toggle();el.setAttribute('aria-pressed',sound.enabled);el.innerHTML=ico(sound.enabled?'volume':'muted');return}
+  if('bsound'in d){sound.toggle();el.setAttribute('aria-pressed',sound.enabled);el.title=sound.enabled?'Mute battle audio':'Enable battle audio';el.innerHTML=ico(sound.enabled?'volume':'muted');return}
   if('fast'in d&&playback){sound.stop();finishPlayback();return}
   if(busy||!wallet)return;
   if(d.drill){drillsGame(d.drill);return}
-  if(d.mode){
-   sound.play('select');
-   if(d.mode==='remix'&&!arcadePage){location.hash='#battle/arcade';return}
-   if(d.mode!=='remix'){mode=d.mode;if(arcadePage){location.hash='#battle';return}}
-   render();return;
-  }
   if(d.stage&&stageUnlocked(wallet,Number(d.stage))){
    campaignTier=Number(d.stage);sound.play('select');render();
    root.querySelector('[data-stage="'+campaignTier+'"]')?.focus({preventScroll:true});return;
@@ -457,8 +438,14 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
    runner=openRunner(stage,{sound,avatar:equippedCube(wallet),onStart:()=>startRemix(stage.id),onFinale:startLimboFinale,onResult:async(token,proof)=>{const {wallet:next,result}=await recordRemix(token,proof);applyWallet(next);if(visible&&!playback)render();return result;}});
    runner.addEventListener('close',()=>{runner=null;if(visible&&!playback)render()},{once:true});return;
   }
-  if('edit'in d){draft=[...(wallet.squad||[])];picker=true;search='';page=0;feedback='';render();return}
-  if('cancelEdit'in d){picker=false;feedback='';render();return}
+  if('edit'in d){
+   draft=[...(wallet.squad||[])];picker=true;search='';page=0;feedback='';render();
+   const searchField=root.querySelector('[data-search]');
+   searchField.closest('.edit-panel')?.scrollIntoView({block:'start'});
+   if(matchMedia('(pointer:fine)').matches)searchField.focus({preventScroll:true});
+   return;
+  }
+  if('cancelEdit'in d){picker=false;feedback='';render();root.querySelector('[data-edit]')?.focus();return}
   if('auto'in d){draft=owned.filter(c=>healthy(c.id)).slice(0,4).map(c=>c.id);sound.play('stack');render();return}
   if('pick'in d){
    const id=Number(d.pick);
@@ -470,7 +457,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   if('page'in d){page+=Number(d.page);render();return}
   if('saveTeam'in d){commit(()=>saveSquad([...draft]),'save');return}
   if('start'in d){
-   const campaign=!arcadePage&&mode==='campaign',remix=arcadePage||mode==='remix'?selection:null;
+   const campaign=battleView==='campaign',remix=arcadePage?selection:null;
    const difficulty=campaign?campaignTier:remix?.tier||tier;
    const fromArcade=arcadePage;
    commit(async()=>{const w=await enterArena([...(wallet.squad||[])],difficulty,remix?.id,{campaign});if(fromArcade&&location.hash==='#battle/arcade')location.hash='#battle';return w},'start');return;
@@ -501,7 +488,11 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   if('stay'in d){showOrders(b);return}
   if('finish'in d||d.nextStage){
    if(d.nextStage&&stageUnlocked(wallet,Number(d.nextStage)))campaignTier=Number(d.nextStage);
-   commit(()=>leaveResults(b.id),'leave');return;
+   commit(async()=>{
+    const next=await leaveResults(b.id);
+    if(b.remix&&visible&&location.hash==='#battle')location.hash='#battle/arcade';
+    return next;
+   },'leave');return;
   }
   if('move'in d||'withdraw'in d){if(d.move==='break')target=enemyIntent(b).index;root.querySelector('.orders-sheet')?.close();commit(()=>battleAction(b.id,b.seq,d.move||'retreat',target,activeActor(b)),'turn')}
  };

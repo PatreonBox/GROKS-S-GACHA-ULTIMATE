@@ -260,7 +260,7 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
    assert.equal(response.status,200);
    const {wallet}=await response.json();
    assert.equal(wallet.kingdom.towerLevel,3);
-   assert.equal(wallet.playerXp,state.playerXp+600);
+   assert.equal(wallet.playerXp,state.playerXp+600+wallet.achievementRewardXp-state.achievementRewardXp);
   }
   assert.equal((await command(adminId,'admin.kingdom.finish',{})).status,400);
   assert.deepEqual((await (await call(memberId,'/api/players',null,'')).json()).rows.map(row=>row.alias),['Fixture member']);

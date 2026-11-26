@@ -3,6 +3,9 @@ import {settleMine} from '../web/mine-economy.js';
 import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {directoryPlayer,findPlayer,searchPlayers} from './player-directory.mjs';
 import {isUuid,one,reject} from './game-http.mjs';
+import {seedAchievements} from './progression.mjs';
+import {discoveredVisitors} from './kingdom-visitors.mjs';
+import {updateAchievements} from '../web/progression-rules.js';
 
 function managePlayer(record){
  const {coins}=JSON.parse(record.wallet);
@@ -28,7 +31,11 @@ async function moderate(db,actor,body){
   const now=Date.now(),writeId=crypto.randomUUID(),wallet=normalizeWallet(JSON.parse(record.wallet));
   const result={previous:action==='coins'?wallet.coins:action==='level'?playerProgress(wallet.playerXp).level:record.banned_at};
   let banned=record.banned_at;
-  if(action==='level')wallet.playerXp=playerXpAtLevel(amount);
+  if(action==='level'){
+   await seedAchievements(db,id,wallet,now);
+   updateAchievements(wallet,{visitors:discoveredVisitors(wallet,now).length},now);
+   wallet.playerXp=playerXpAtLevel(amount);
+  }
   if(action==='coins'){settleMine(wallet,now);wallet.coins=amount;}
   if(action==='ban')banned=banned??now;
   if(action==='unban')banned=null;

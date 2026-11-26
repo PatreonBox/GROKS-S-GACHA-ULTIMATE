@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {houseEntry,houseSize,towerPlot,trailCorners} from '../web/kingdom-rules.js';
 
@@ -602,30 +601,4 @@ export function makeHouse(level=1){
  for(const y of [.32,1.12])doorBlock(upgraded?iron:timber,leafWidth/2,y,.05,leafWidth-.065,.072,.030);
  doorBlock(upgraded?copper:iron,leafWidth-.17,.66,.063,.089,.10,.058);
  return house;
-}
-
-export function makeResident(loader){
- const resident=new THREE.Group(),body=new THREE.Group();
- resident.add(body);
- const base=material('#5feacf',{roughness:.53});
- const skin=new THREE.MeshBasicMaterial({transparent:true,alphaTest:.13,depthWrite:true,polygonOffset:true,polygonOffsetFactor:-2});
- meshAt(body,new RoundedBoxGeometry(1.05,1.05,1.05,2,.075),base,0,0,0);
- const geometry=new THREE.PlaneGeometry(.95,.95);
- for(let i=0;i<4;i++){
-  const angle=i*Math.PI/2;
-  const face=meshAt(body,geometry,skin,Math.sin(angle)*.532,0,Math.cos(angle)*.532,false);
-  face.rotation.y=angle;
- }
- let activeId='';
- function setCube(cube){
-  if(activeId===cube.id)return;
-  activeId=cube.id;
-  base.color.set(cube.color);
-  skin.map?.dispose();
-  skin.map=loader.load(cube.icon);
-  skin.map.colorSpace=THREE.SRGBColorSpace;
-  skin.map.anisotropy=4;
-  skin.needsUpdate=true;
- }
- return {resident,body,setCube};
 }

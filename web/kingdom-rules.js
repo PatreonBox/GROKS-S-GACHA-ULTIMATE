@@ -1,4 +1,6 @@
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
+import {achievementBoost} from './achievement-boosts.js';
+
 import {gemTenths} from './card-economy.js';
 import {awardPlayerXp} from './player-progression.js';
 import {spikeInvestment,spikeKind,spikePlan,spikePrice} from './kingdom-defences.js';
@@ -341,10 +343,14 @@ export function collectForge(wallet,id,now){
  if(forge.upgrade&&now>=forge.upgrade.endsAt){
   Object.assign(forge,promoteForge(forge,forge.upgrade.endsAt));delete forge.upgrade;
  }
- const {stored:earned,capacity}=forgePlan(forge,now);
- if(earned<forgeMinimum)throw Error('Collect when this forge has at least '+forgeMinimum+' mana.');
- forge.collectedAt=earned===capacity?now:(forge.collectedAt??now)+elapsedForgeSeconds(forge,now)*1000;
+ const {stored,capacity}=forgePlan(forge,now);
+ if(stored<forgeMinimum)throw Error('Collect when this forge has at least '+forgeMinimum+' mana.');
+ forge.collectedAt=stored===capacity?now:(forge.collectedAt??now)+elapsedForgeSeconds(forge,now)*1000;
  delete forge.storedMana;
+ const bonusBp=Math.round(achievementBoost(wallet,'mana')*100);
+ const bonus=stored*bonusBp+(wallet.kingdom.achievementManaRemainder||0);
+ if(bonus>0)wallet.kingdom.achievementManaRemainder=bonus%10_000;
+ const earned=stored+Math.floor(bonus/10_000);
  wallet.kingdom.mana=(wallet.kingdom.mana||0)+earned;
  return {id,earned};
 }

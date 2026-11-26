@@ -1,3 +1,5 @@
+import {achievementBoost} from './achievement-boosts.js';
+
 export const mineRateCap=10_000_000_000;
 export const mineAwayLimit=5*60*60*1000;
 export const mineLevelCap=200;
@@ -66,12 +68,13 @@ export function mineMachineRate(mine,id){
  const doubles=boughtSkills(mine).filter(skill=>skill.doubles?.includes(id)).length;
  return machine.rate*count*2**(Math.floor(count/mineMilestone)+doubles);
 }
-export function mineRate(mine){
+export function mineRate(mine,boost=0){
  if(!mine)return 0;
  const base=mineMachines.reduce((sum,machine)=>sum+mineMachineRate(mine,machine.id),0);
  const bonus=boughtSkills(mine).reduce((sum,skill)=>sum+(skill.rate||0),0);
- return Math.min(mineRateCap,Math.floor(base*(100+bonus)/100));
+ return Math.min(mineRateCap,Math.floor(base*(100+bonus)/100*(100+boost)/100));
 }
+export const mineWalletRate=wallet=>mineRate(wallet.mine,achievementBoost(wallet,'mine'));
 export function mineMachineLock(mine,id){
  const machine=byId.get(id);
  if(machine.parent&&machineOwned(mine,machine.parent.id)<machine.after)return ownRequirement(machine.parent,machine.after);
@@ -92,7 +95,7 @@ export function mineEarnings(wallet,now=Date.now()){
  const mine=wallet.mine;
  if(!mine?.collectedAt)return {coins:0,elapsed:0,remainder:0};
  const elapsed=Math.min(mineAwayLimit,Math.max(0,now-mine.collectedAt));
- const rate=mineRate(mine),partial=rate*(elapsed%1000)+(mine.remainder||0);
+ const rate=mineWalletRate(wallet),partial=rate*(elapsed%1000)+(mine.remainder||0);
  const coins=Math.min(Number.MAX_SAFE_INTEGER-wallet.coins,rate*Math.floor(elapsed/1000)+Math.floor(partial/1000));
  return {coins,elapsed,remainder:partial%1000};
 }

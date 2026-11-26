@@ -134,6 +134,11 @@
 
 
 }
+@media(max-width:440px){
+ .headwrap nav{grid-template-columns:repeat(20,minmax(0,1fr));row-gap:2px}
+ .headwrap nav .tab{grid-column:span 4;padding-inline:3px;font-size:11px}
+ .headwrap nav .tab:nth-child(n+6){grid-column:span 5}
+}
 @media(max-width:680px),(pointer:coarse){
  .game-touch:not([hidden]){display:flex;justify-content:center;align-items:stretch;gap:6px;width:100%;margin-top:9px}
  .game-touch:not([hidden]),.game-touch button{touch-action:none;user-select:none}

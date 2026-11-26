@@ -183,7 +183,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(!routeLocked&&['merge','index','vault'].includes(view))readWallet().then(w=>{
    if(!routeLocked&&['merge','index','vault'].includes(view))stations.show(view,w);
   }).catch(()=>{});
-  if(['battle','training','arcade'].includes(view))battle.refreshCollection();
+  if(['battle','campaign','training','arcade'].includes(view))battle.refreshCollection();
   if(view==='army')army.refreshCollection();
  });
  document.addEventListener('gdlb-admin-wallet',event=>applyWallet(event.detail));
@@ -256,9 +256,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   stations.leave();coinMine.leave();trade.leave();progressionRoom.leave();version++;view=next;routePack=packId;
   const progression=['progression','achievements'].includes(next),feature=progression?'progression':next;
   routeLocked=locked(feature);
-  const classic=['battle','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom',trading=next==='trading';
+  const classic=['battle','campaign','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom',trading=next==='trading';
   root.hidden=!view||!routeLocked&&(combat||home);
-  battle.show(classic&&!routeLocked,next==='training'&&!routeLocked,next==='arcade'&&!routeLocked);
+  battle.show(classic&&!routeLocked,classic?next:undefined);
   army.show(next==='army'&&!routeLocked);
   cubes.show(false);kingdom.show(home&&!routeLocked);
   if(home&&!routeLocked){markGuide(newAreas.kingdom);markKingdomNav()}

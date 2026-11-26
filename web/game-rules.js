@@ -15,6 +15,7 @@ import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-pr
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
 import {buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
 import {validTradeMinimum} from './trade-rules.js';
+import {achievementBoost} from './achievement-boosts.js';
 
 export function newWallet() {
  return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
@@ -275,6 +276,8 @@ const rules={
   requireRule(enemies.length===4&&enemies.every(Boolean),'The opposing squad could not load.');
   w.squad=[...ids];
   w.battle=makeBattle(allies,enemies,tier,randomUnit,w.training||{});
+  const hpBoost=achievementBoost(w,'battle');
+  for(const ally of w.battle.allies)ally.hp=ally.maxHp+=Math.floor(ally.maxHp*hpBoost/100);
   if(campaign)configureCampaignBattle(w.battle);
   if(remix){
    w.battle.remix=remix.id;

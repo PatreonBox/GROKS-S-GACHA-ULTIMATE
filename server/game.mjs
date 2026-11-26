@@ -8,13 +8,13 @@ import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,r
 import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {featureLevel} from '../web/level-access.js';
 import {tradeLevelNotice} from '../web/trade-rules.js';
-import {kingdomVisitors,settleKingdomVisitors} from './kingdom-visitors.mjs';
+import {discoveredVisitors,kingdomVisitors,settleKingdomVisitors} from './kingdom-visitors.mjs';
 import {kingdomDefences,kingdomForges,kingdomHouses,maxTowerLevel,settleKingdomConstruction} from '../web/kingdom-rules.js';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
 import {trainingLevels,updateAchievements} from '../web/progression-rules.js';
-import {seedAchievements} from './progression.mjs';
+import {achievementActionEvents,refreshAchievementWallet,seedAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
 
 const guestCookie='__Host-gdlb-save';
@@ -215,7 +215,8 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    const current=await profile(db,session.owner,false);
    if(!current)reject('Reload the page to reconnect to your save.',401);
    if(current.banned_at!==null)reject(banMessage,403,{banned:true});
-   return {wallet:visibleWallet(await seedAchievements(db,current.player_id,JSON.parse(current.wallet),Date.now())),saveRevision:current.revision,result:JSON.parse(previous.result)};
+   const saved=await refreshAchievementWallet(db,current);
+   return {...saved,wallet:visibleWallet(saved.wallet),result:JSON.parse(previous.result)};
   }
   const changes=new Map(),now=Date.now();
   const trainingVersion=wallet.trainingRevision,battleWasActive=wallet.battle?.status==='active',trainingAction=['card.feed','drill.finish'].includes(action);
@@ -232,10 +233,11 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    if(testing)result=finishAdminConstruction(wallet,now);
    else{
     settleKingdomConstruction(wallet,now);
+    if(args?.field==='level')updateAchievements(wallet,{visitors:discoveredVisitors(wallet,now).length},now);
     result=adjustAdminWallet(wallet,args);
    }
    settleKingdomVisitors(wallet,now,true);
-   updateAchievements(wallet,{},now);
+   updateAchievements(wallet,{visitors:discoveredVisitors(wallet,now).length},now);
   }else{
    try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
@@ -243,12 +245,17 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    await seedAchievements(db,record.player_id,wallet,now,records);
    const lastTraining=trainingAction?trainingLevels(wallet):0;
    const kingdomAction=action.startsWith('kingdom.');
+   const before={battleActive:battleWasActive,kills:wallet.battle?.kills||0,
+    opened:action==='pack.advance'&&wallet.pending?.id===args.id?wallet.pending?.opened:undefined};
    if(kingdomAction)settleKingdomVisitors(wallet,now);
    try{result=prepared.apply(wallet,records||[],changes,now,true);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
    if(kingdomAction)settleKingdomVisitors(wallet,now,true);
-   updateAchievements(wallet,{cards:changes.values(),wins:Number(action==='arena.move'&&battleWasActive&&wallet.battle?.status==='won'),
-    trained:trainingAction?Math.max(0,trainingLevels(wallet)-lastTraining):0},now);
+   updateAchievements(wallet,{records:changes.size?records:undefined,changes,
+    wins:Number(action==='arena.move'&&battleWasActive&&wallet.battle?.status==='won'),
+    trained:trainingAction?Math.max(0,trainingLevels(wallet)-lastTraining):0,
+    events:achievementActionEvents(wallet,action,result,before),
+    visitors:wallet.kingdom?discoveredVisitors(wallet,now).length:0},now);
   }
   let power=record.collection_power;
   if(reset)power=0;
@@ -282,7 +289,7 @@ async function transferSave(db,session,body,getPool){
   const records=await inventory(db,record.player_id),now=Date.now();
   await seedAchievements(db,record.player_id,wallet,now,records);
   const {changes,result}=applySaveTransfer(wallet,records,prepared,now);
-  updateAchievements(wallet,{cards:changes.values(),train:true},now);
+  updateAchievements(wallet,{records,changes,train:true},now);
   wallet.legacyTransfer={id:transferId,...result};
   if(JSON.stringify(wallet).length>1700000)reject('This browser save is too large to transfer.',413);
   const power=collectionPower(records,wallet,changes);
@@ -398,7 +405,10 @@ export function gameRoutes(readJson,hasArt){
    if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt,admin),...account});
    const record=await profile(db,session.owner,initial);
    if(!record)reject('Open the game to start your save.',401);
-   if(view==='wallet')return json({wallet:visibleWallet(await seedAchievements(db,record.player_id,normalizeWallet(JSON.parse(record.wallet)),Date.now())),saveRevision:record.revision,...account},200,session.cookie);
+   if(view==='wallet'){
+    const saved=await refreshAchievementWallet(db,record);
+    return json({...saved,wallet:visibleWallet(saved.wallet),...account},200,session.cookie);
+   }
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
    if(view==='gacha-activity')return json({activity:await gachaActivity(db,record)});

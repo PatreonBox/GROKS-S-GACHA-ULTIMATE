@@ -10,13 +10,8 @@
 .army-heading,.army-panel-head,.army-strip,.army-field-head,.army-command{
  display:flex;align-items:center;justify-content:space-between;gap:12px;
 }
-.army-heading{align-items:flex-end;margin-bottom:clamp(14px,2.1vw,25px)}
-.army-heading h1{margin:0;font:800 clamp(42px,6vw,70px)/.95 Cond,sans-serif}
+.army-heading{margin-bottom:12px}
 .army-heading p{margin:8px 0 0;color:var(--army-muted);font-size:14px}
-.army-nav{display:flex;align-items:center;gap:2px;padding:4px;background:#191c27;border:1px solid var(--army-line);border-radius:9px;white-space:nowrap}
-.army-nav a{color:var(--army-muted);text-decoration:none;font-weight:700;font-size:13px;padding:9px 11px;border-radius:5px}
-.army-nav a:hover,.army-nav a[aria-current]{background:#27363f;color:var(--army-teal)}
-.army-nav .iconbtn{margin-left:3px}
 .army-layout{display:grid;grid-template-columns:minmax(0,1fr) clamp(253px,24vw,306px);gap:clamp(12px,2vw,24px);align-items:start}
 .army-stage,.army-panel{min-width:0}
 .army-stage{overflow:hidden;isolation:isolate;background:#141824;border:1px solid var(--army-line);border-radius:13px}
@@ -131,8 +126,6 @@
  .army-stats [data-army-standing]{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 }
 @media(max-width:525px){
- .army-heading{display:grid;justify-content:stretch;gap:10px}
- .army-nav{width:max-content}
  .army-heading p{font-size:13px}
  .army-field{height:clamp(285px,79vw,350px)}
  .army-command .bt-primary{margin-left:auto}

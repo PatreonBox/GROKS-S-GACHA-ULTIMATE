@@ -5,6 +5,8 @@ import {armyLimit,armySpeed,armyMaps,armyBackdrops,backdropSource,armyFrame,army
 import {createArmyWorld} from './army-world.js';
 import {skillsFor} from './card-skills.js';
 import {ico} from './icons.js';
+import {battleNavigation} from './battle-navigation.js';
+import {playerProgress} from './player-progression.js';
 
 const fixed=armyFrame;
 const resultText={won:'Victory',lost:'Army defeated',draw:'Draw',retreated:'Army withdrew'};
@@ -45,9 +47,9 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
  const action=(key,text,primary=false)=>'<button type="button" class="'+(primary?'bt-primary':'outline')+'" data-army-act="'+key+'">'+text+'</button>';
  function markup(){
   const skies=Object.entries(armyBackdrops).map(([key,name])=>'<option value="'+key+'">'+name+'</option>').join('');
-  return '<div class="army-heading"><div><h1>Army mode</h1><p>Deploy up to 10 cards. They advance and use their skills in real time.</p></div>'+
-  '<nav class="army-nav" aria-label="Battle modes"><a href="#battle">Card battles</a><a href="#battle/army" aria-current="page">Army mode</a>'+
-  '<button type="button" class="iconbtn" data-army-act="sound" aria-label="Battle sounds"></button></nav></div>'+
+  return '<div class="bt-heading army-heading"><div><h1>Army mode</h1><p>Deploy up to 10 cards in real-time battles.</p></div>'+
+  '<button type="button" class="iconbtn" data-army-act="sound" aria-label="Battle audio"></button></div>'+
+  '<div data-army-mode-links></div>'+
   '<section class="army-trilogy" aria-label="Army Trilogies"><div class="army-series-heading"><div><h2 data-army-mode-title>Army Trilogies</h2><span data-army-tier></span></div>'+
   '<div class="army-series-tabs" role="group" aria-label="Army challenge type"><button class="outline" data-army-act="series">Trilogies</button><button class="outline" data-army-act="skirmish">Skirmish</button></div></div>'+
   '<div class="army-series-controls" data-army-series-controls><label>Find a trilogy<input type="search" data-army-series-search placeholder="Try Bloodbath or CraZy" maxlength="80"></label>'+
@@ -82,6 +84,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
  }
  function speaker(){
   const button=root.querySelector('[data-army-act="sound"]');
+  button.title=sound.enabled?'Mute battle audio':'Enable battle audio';
   button.setAttribute('aria-pressed',String(sound.enabled));button.innerHTML=ico(sound.enabled?'volume':'muted');
  }
  function message(text){
@@ -616,6 +619,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
    cancelAnimationFrame(frame);clearCallouts();hovered=pinned=cursor=null;pointers.clear();pinch=drag=null;world?.dispose();world=null;readId++;poolId++;sound.stop();return;
   }
   if(!built){root.innerHTML=markup();bind();listSeries();built=true}
+  el('mode-links').innerHTML=battleNavigation('army',playerProgress(getWallet()?.playerXp).level);
   sound.preload();speaker();world=createArmyWorld(el('field'),coverSource);
   if(world){
    previous=0;renderAt=-1;frame=requestAnimationFrame(tick);

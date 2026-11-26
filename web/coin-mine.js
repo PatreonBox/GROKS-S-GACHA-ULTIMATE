@@ -3,7 +3,7 @@ import {stat} from './card-economy.js';
 import {mineCoin,purchaseMineMachine,purchaseMineSkill} from './pack-engine.js';
 import {rewardOrigin} from './reward-flight.js';
 import {
- mineMachines,mineSkills,mineMilestone,mineLevelCap,mineRateCap,mineTapBatch,mineRate,mineTapPower,machineOwned,skillOwned,
+ mineMachines,mineSkills,mineMilestone,mineLevelCap,mineRateCap,mineTapBatch,mineWalletRate,mineTapPower,machineOwned,skillOwned,
  mineMachineRate,mineMachineLock,mineSkillRequirements,mineSkill,quoteMachine
 } from './mine-economy.js';
 
@@ -168,7 +168,7 @@ export function createCoinMine({sound,rewards,applyWallet,announce,onCode}){
  function setWallet(next){
   wallet=next;
   if(!active())return;
-  const mine=next.mine,rate=mineRate(mine),tap=mineTapPower(mine);
+  const mine=next.mine,rate=mineWalletRate(next),tap=mineTapPower(mine);
   text(view.rate,stat(rate));
   view.rate.title=number(rate)+' coins per second';
   text(view.tap,'+'+number(tap)+' per tap');

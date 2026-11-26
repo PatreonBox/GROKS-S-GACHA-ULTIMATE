@@ -1,5 +1,5 @@
 import {ico} from './icons.js';
-import {remixTracks,remixTrackSource} from './remix-media.js';
+import {rareLevelTrack} from './rare-level-tracks.js';
 
 export const rareTiers=[
  {n:5000,name:'First Light',effect:'slit',ink:'#9beaff',flare:'#147eef',hit:840,ms:2050},
@@ -15,16 +15,7 @@ export function revealTier(percent){
  return null;
 }
 
-const newgroundsSongs={'speed-of-light':467339,epilogue:723714,carnivores:690265,reverie:787986};
-const songsByLevel={
- 3979721:'speed-of-light',    // Cataclysm
- 10565740:'speed-of-light',   // Bloodbath
- 25610878:'speed-of-light',   // aftermath
- 42584142:'speed-of-light',   // Bloodlust
- 61079355:'epilogue',         // Acu
- 37456092:'carnivores',       // Digital Descent
- 75867791:'reverie'           // poocu
-};
+const bedSource=tier=>'/reveal-media/beds/'+tier.effect+'.mp3';
 const reducedMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 let worldRequest;
 function loadWorld(){
@@ -36,8 +27,13 @@ export function prepareRareReveal(items,sound){
  if(!rare.length)return;
  if(!reducedMotion())loadWorld();
  if(!sound.enabled)return;
- const tracks=new Set(rare.map(item=>songsByLevel[item.row[0]]).filter(Boolean));
- for(const clip of tracks)sound.prepareRevealTrack(remixTrackSource(clip));
+ const tracks=new Set();
+ for(const item of rare){
+  tracks.add(bedSource(revealTier(item.percent)));
+  const track=rareLevelTrack(item.row[0]);
+  if(track)tracks.add(track.src);
+ }
+ for(const src of tracks)sound.prepareRevealTrack(src);
 }
 
 const motions={
@@ -66,7 +62,7 @@ function turnCard(deck,tier){
 
 export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,hold=false,skipAll}){
  const effect=rareTiers.indexOf(tier),reduce=reducedMotion()||!Element.prototype.animate;
- const clip=songsByLevel[levelId],song=newgroundsSongs[clip],src=song&&remixTrackSource(clip);
+ const track=rareLevelTrack(levelId),src=track?.src,bed=bedSource(tier);
  const dialog=document.createElement('dialog'),prior=document.activeElement;
  dialog.className='rare-reveal';dialog.dataset.effect=tier.effect;
  dialog.setAttribute('aria-label','Rare card reveal');
@@ -80,21 +76,28 @@ export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound
   '<div class="rare-back"><span class="rare-crest"><img src="/assets/player-cube.png" alt=""></span></div>'+
   '<div class="rare-front">'+cardHTML+'</div></div></div>'+
   '<p class="rare-live" role="status" aria-live="polite"></p><div class="rare-footer">'+
-  (song?'<a class="rare-track" href="https://www.newgrounds.com/audio/listen/'+song+'" target="_blank" rel="noopener noreferrer" tabindex="-1">'+
-   '<span>'+remixTracks[clip]+'</span>'+ico('external')+'</a>':'')+
+  (track?'<div class="rare-track-credit"><a class="rare-track" target="_blank" rel="noopener noreferrer">'+
+   '<span></span>'+ico('external')+'</a><a class="rare-track-license" target="_blank" rel="noopener noreferrer">License</a></div>':'')+
   '<div class="rare-controls">'+
   (skipAll?'<button type="button" class="outline" data-rare-all>Skip opening</button>':'')+
   '<button type="button" class="outline" data-rare-mute></button>'+
   '<button type="button" class="primary" data-rare-close>'+(reduce?'Continue':'Skip reveal')+'</button></div></div>';
  const deck=dialog.querySelector('.rare-deck'),button=dialog.querySelector('[data-rare-close]'),announce=dialog.querySelector('.rare-live');
  const mute=dialog.querySelector('[data-rare-mute]'),credit=dialog.querySelector('.rare-track'),canvas=dialog.querySelector('canvas');
+ if(credit){
+  credit.href=track.href;
+  credit.querySelector('span').textContent=track.title;
+  const license=dialog.querySelector('.rare-track-license');
+  license.href=track.license||track.href;
+  license.title='Excerpt of '+track.title;
+ }
  const art=deck.querySelector('.scene-shot'),hero=dialog.querySelector('.rare-hero');
  function setBackdrop(){hero.src=art.currentSrc||art.src}
  hero.addEventListener('load',()=>hero.classList.add('ready'),{once:true});
  if(art?.complete&&art.naturalWidth)setBackdrop();
  else art?.addEventListener('load',setBackdrop,{once:true});
  let frame=0,impact=0,end=0,endAt=0,shownAt,closed=false,resolve;
- let world,watchSize,animation,musicRequest=0,motionMs=tier.ms;
+ let world,watchSize,animation,musicRequest=0,bedRequest=0,motionMs=tier.ms;
  const done=new Promise(r=>{resolve=r});
  const clipTime=hold?10.5:4.2;
  function disposeWorld(){
@@ -102,7 +105,7 @@ export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound
   world?.dispose();world=null;delete dialog.dataset.worldReady;
  }
  function close(){
-  if(closed)return;closed=true;musicRequest++;
+  if(closed)return;closed=true;musicRequest++;bedRequest++;
   clearTimeout(impact);clearTimeout(end);animation?.cancel();sound.stopScore();
   canvas.removeEventListener('webglcontextlost',disposeWorld);disposeWorld();
   document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',close);
@@ -139,19 +142,34 @@ export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound
   const loading=sound.prepareRevealTrack(src);
   if(loading)loading.then(tryPlay);else tryPlay();
  }
+ function playBed({fallback=false}={}){
+  const request=++bedRequest;
+  if(!sound.enabled)return;
+  const tryPlay=()=>{
+   if(closed||bedRequest!==request||!sound.enabled||(shownAt!==undefined&&src))return false;
+   const elapsed=(performance.now()-start+(reduce?tier.hit:0))/1000;
+   return sound.playRevealBed(bed,elapsed,tier.ms/1000-elapsed);
+  };
+  if(tryPlay())return;
+  if(fallback)sound.score(effect,tier.hit,tier.ms);
+  sound.prepareRevealTrack(bed)?.then(tryPlay);
+ }
  function reveal(){
   if(closed||shownAt!==undefined)return;
   shownAt=performance.now();
   dialog.dataset.revealed='true';button.textContent='Continue';announce.textContent=tier.name+' · '+title+' · '+odds;
-  credit?.removeAttribute('tabindex');
   playTrack();
  }
  dialog.addEventListener('cancel',e=>{e.preventDefault();close()});
  dialog.addEventListener('close',close);
  mute.onclick=()=>{
   toggleSound();syncMute();
-  if(shownAt!==undefined)playTrack();
-  else if(src&&sound.enabled)sound.prepareRevealTrack(src);
+  bedRequest++;
+  if(shownAt!==undefined&&src)playTrack();
+  else{
+   playBed();
+   if(src&&sound.enabled)sound.prepareRevealTrack(src);
+  }
  };
  button.onclick=close;
  const all=dialog.querySelector('[data-rare-all]');
@@ -167,11 +185,12 @@ export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound
   dialog.dataset.still='true';
   deck.style.transform='none';
   sound.play('results');
+  if(!src)playBed();
   reveal();
   return {done,close};
  }
  animation=turnCard(deck,tier);
- sound.score(effect,tier.hit,tier.ms);
+ playBed({fallback:true});
  impact=setTimeout(reveal,tier.hit);
  function draw(now){
   frame=0;

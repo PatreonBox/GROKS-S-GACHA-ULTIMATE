@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,residentPath} from './kingdom-model.js';
+import {groundHeight,makeHouse,makeLandscape,makeSky,makeTower,residentPath} from './kingdom-model.js';
+import {makeResident} from './kingdom-cubes.js';
 import {createBuildingPreview} from './building-preview.js';
 import {makeResourceBubble,makeManaForge} from './mana-forge-model.js';
 import {makeGemMine} from './gem-mine-model.js';
@@ -106,7 +107,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  const lightColors=[ambient.color,ambient.groundColor,sun.color,scene.fog.color];
  let lastLight=-1;
  const loader=new THREE.TextureLoader();
- const path=residentPath(),tower=makeTower(),owner=makeResident(loader);
+ const path=residentPath(),tower=makeTower(),owner=makeResident();
  const spikeTexture=loader.load(spikeIcon);spikeTexture.colorSpace=THREE.SRGBColorSpace;
  const defences=[1,2,3,4].map(level=>makeSpikeShooter(level,spikeTexture));
  const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine(),[spikeKind]:defences[0]};
@@ -194,7 +195,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const finished=worksite&&towerLevel>=(worksite.schedule.level??2)&&!schedule;
   if(worksite){worksite.site.removeFromParent();release(worksite.site);worksite=null}
   if(schedule){
-   worksite={...makeTowerConstruction(loader),schedule};
+   worksite={...makeTowerConstruction(),schedule};
    worksite.site.position.copy(tower.position);
    scene.add(worksite.site);
   }else if(finished){
@@ -290,7 +291,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   }
   for(const visitor of visitors){
    if(guests.has(visitor.id))continue;
-   const walker=makeResident(loader);
+   const walker=makeResident();
    walker.resident.scale.setScalar(.81);walker.setCube(visitor.skin);
    walker.hit=hitBox('visitor:'+visitor.id,1.25,1.25,1.25,.86);
    const recent=visitor.arrivedAt>0&&clock()-visitor.arrivedAt<visitorWelcomeMs;
@@ -652,3 +653,5 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  }
  return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,productionOrigin,popProduction,fireSpike,panMode,zoom,reset,dispose};
 }
+
+export {createCubePortraitRenderer} from './cube-shop-preview.js';

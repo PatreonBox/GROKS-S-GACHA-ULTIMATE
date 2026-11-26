@@ -51,7 +51,7 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,rareMusic:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,rareMusic:1,rareBed:1};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
@@ -90,15 +90,18 @@ export function createPackSound(){
  function fadeOut(voice){
   if(voice.stopping)return;
   voice.stopping=true;
-  const now=ctx.currentTime,end=now+(voice.lane==='rareMusic'?.095:.014);
+  const now=ctx.currentTime,end=now+(['rareMusic','rareBed'].includes(voice.lane)?.095:.014);
   const level=voice.gain.gain;
   if(typeof level.cancelAndHoldAtTime==='function')level.cancelAndHoldAtTime(now);
   else{level.cancelScheduledValues(now);level.setValueAtTime(level.value,now)}
   level.linearRampToValueAtTime(0,end);voice.source.stop(end+.002);
  }
- function stopScore(){
+ function stopSynthScore(){
   stopRare?.();stopRare=null;
-  for(const voice of voices)if(voice.lane==='rareMusic')fadeOut(voice);
+ }
+ function stopScore(){
+  stopSynthScore();
+  for(const voice of voices)if(voice.lane==='rareMusic'||voice.lane==='rareBed')fadeOut(voice);
  }
  function score(tier,impact,duration){
   stopScore();
@@ -118,19 +121,22 @@ export function createPackSound(){
   const source=ctx.createBufferSource(),gain=ctx.createGain();
   source.buffer=track;source.playbackRate.value=rate;gain.gain.value=level;
   const start=ctx.currentTime;
-  if(lane==='rareMusic'){
+  if(lane==='rareMusic'||lane==='rareBed'){
    gain.gain.setValueAtTime(.0001,start);
    gain.gain.linearRampToValueAtTime(level,start+.07);
    gain.gain.setValueAtTime(level,start+length-.20);
    gain.gain.linearRampToValueAtTime(.0001,start+length);
   }
   const stereo=ctx.createStereoPanner?.();
+  const duck=lane==='rareBed'?ctx.createGain():null;
   source.connect(gain);
-  if(stereo){stereo.pan.value=pan;gain.connect(stereo);stereo.connect(master)}
-  else gain.connect(master);
-  const voice={source,gain,lane,stopping:false};
+  if(duck)gain.connect(duck);
+  const output=duck||gain;
+  if(stereo){stereo.pan.value=pan;output.connect(stereo);stereo.connect(master)}
+  else output.connect(master);
+  const voice={source,gain,lane,duck,stopping:false};
   voices.add(voice);
-  source.onended=()=>{voices.delete(voice);source.disconnect();gain.disconnect();stereo?.disconnect()};
+  source.onended=()=>{voices.delete(voice);source.disconnect();gain.disconnect();duck?.disconnect();stereo?.disconnect()};
   source.start(start,offset,length);
  }
  function emit(name,rate,pan,level){emitClip(buffer,cues[name],channels[name],rate,pan,level)}
@@ -160,13 +166,18 @@ export function createPackSound(){
   const loading=prepareGame(src,src);
   if(loading||resuming)return Promise.all([loading,resuming]);
  }
- function playRevealTrack(src,offset,seconds){
+ function playRevealClip(src,offset,seconds,lane,volume){
   const track=gameBuffers.get(src),length=Math.min(seconds,(track?.duration??0)-offset);
   if(!enabled||ctx?.state!=='running'||document.hidden||length<.35)return false;
-  stopScore();
-  emitClip(track,[offset,length],'rareMusic',1,0,.58);
+  stopSynthScore();
+  if(lane==='rareMusic')for(const voice of voices){
+   if(voice.duck&&!voice.stopping)voice.duck.gain.setTargetAtTime(.18,ctx.currentTime,.046);
+  }
+  emitClip(track,[offset,length],lane,1,0,volume);
   return true;
  }
+ const playRevealTrack=(src,offset,seconds)=>playRevealClip(src,offset,seconds,'rareMusic',.58);
+ const playRevealBed=(src,offset,seconds)=>playRevealClip(src,offset,seconds,'rareBed',.66);
  function playGame(name,{rate=1,pan=0,level=1}={}){
   if(!enabled||!ctx||document.hidden||!Object.hasOwn(gameCues,name))return;
   const [clip,fallback,lane,bank='arcade']=gameCues[name];
@@ -276,5 +287,5 @@ export function createPackSound(){
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll()});
  window.addEventListener('pagehide',stopAll);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed};
 }

@@ -156,8 +156,8 @@ async function acceptTrade(db,trade,context,now){
  const aChanges=exchangeCards(a,leftCards,gave,withRows(got,rightCards),now);
  const bChanges=exchangeCards(b,rightCards,got,withRows(gave,leftCards),now);
  await Promise.all([seedAchievements(db,sender.player_id,a,now,left),seedAchievements(db,recipient.player_id,b,now,right)]);
- updateAchievements(a,{cards:aChanges.values(),traded:1},now);
- updateAchievements(b,{cards:bChanges.values(),traded:1},now);
+ updateAchievements(a,{records:left,changes:aChanges,traded:1},now);
+ updateAchievements(b,{records:right,changes:bChanges,traded:1},now);
  const eligible=Number(trade.market_eligible&&marketTrusted(sender,a,adminOwner)&&marketTrusted(recipient,b,adminOwner));
  const writes=[db.prepare(`UPDATE game_trades SET status='completed',resolved_at=?,resolution_id=?,offered=?,requested=?,market_eligible=?
    WHERE trade_id=? AND status='pending' AND expires_at>? AND ${currentProfile} AND ${currentProfile}`)

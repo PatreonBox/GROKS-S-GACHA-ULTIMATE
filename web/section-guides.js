@@ -86,7 +86,7 @@ export const sectionGuides={
 
 const gachaGuides={shop:'pack-shop',collection:'my-cards',index:'card-index',vault:'secret-vault',
  merge:'merge-station',mine:'coin-mine',upgrades:'gem-upgrades',results:'pack-results',cubes:'cube-shop'};
-const battleGuides={army:'army-mode',training:'training-zone',arcade:'meme-levels'};
+const battleGuides={easy:'battle-arenas',campaign:'battle-campaign',army:'army-mode',training:'training-zone',arcade:'meme-levels'};
 const mainGuides={leaderboard:'level-leaderboard',stars:'star-levels',demons:'demon-lists',kingdom:'kingdom',saved:'saved-levels'};
 
 export function sectionGuideId(section,tier){

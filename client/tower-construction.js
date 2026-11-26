@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {cubeCatalog} from '../web/cube-catalog.js';
-import {makeResident} from './kingdom-model.js';
+import {makeResident} from './kingdom-cubes.js';
 import {poseKingdomCube} from './kingdom-walkers.js';
 
 const turn=Math.PI*2;
@@ -8,7 +8,7 @@ const clamp=THREE.MathUtils.clamp;
 const wood=new THREE.Color('#ad7045');
 const crewSkins=['02','39','06'].map(id=>cubeCatalog.find(cube=>cube.id===id));
 
-export function makeTowerConstruction(loader){
+export function makeTowerConstruction(){
  const site=new THREE.Group();
  const timber=new THREE.MeshStandardMaterial({color:wood,roughness:.88});
  const ends=new THREE.MeshStandardMaterial({color:'#774629',roughness:.94});
@@ -61,10 +61,10 @@ export function makeTowerConstruction(loader){
  for(const x of [.52,1.62])block(site,timber,x,.26,2.69,.08,.50,.10);
 
  const workers=crewSkins.map(cube=>{
-  const person=makeResident(loader);person.setCube(cube);
+  const person=makeResident();person.setCube(cube);
   person.resident.scale.setScalar(.62);
-  add(person.body,new THREE.CylinderGeometry(.43,.45,.065,14),hat,0,.56,0);
-  add(person.body,new THREE.SphereGeometry(.34,14,8,0,turn,0,Math.PI/2),hat,0,.58,0);
+  add(person.body,new THREE.CylinderGeometry(.43,.45,.065,14),hat,0,.65,0);
+  add(person.body,new THREE.SphereGeometry(.34,14,8,0,turn,0,Math.PI/2),hat,0,.67,0);
   site.add(person.resident);return person;
  });
  const hammer=new THREE.Group();site.add(hammer);
