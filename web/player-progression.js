@@ -35,6 +35,7 @@ export function playerProgress(totalXp){
  const xp=total-playerXpAtLevel(low),goal=playerXpAtLevel(low+1)-playerXpAtLevel(low);
  return {level:low,xp,goal,total,ratio:xp/goal};
 }
+export const maxPlayerLevel=playerProgress(Number.MAX_SAFE_INTEGER).level;
 
 export function awardPlayerXp(wallet,amount){
  if(amount>0)wallet.playerXp=Math.min(Number.MAX_SAFE_INTEGER,(wallet.playerXp||0)+Math.floor(amount));

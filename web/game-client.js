@@ -160,7 +160,7 @@ if (typeof document !== 'undefined') {
   },savePrivacy:settings=>gameCommand('profile.privacy',settings)});
  setupAdminTools({canOpen:()=>canAdmin,loadWallet:()=>gameRead('wallet'),searchPlayers:searchAdminPlayers,moderate:runPlayerAdmin,run:async(action,args)=>{
   const data=await gameCommand(action,args);
-  if(action==='admin.adjust')document.dispatchEvent(new CustomEvent('gdlb-admin-wallet',{detail:data.wallet}));
+  if(action==='admin.adjust'||action==='admin.kingdom.finish')document.dispatchEvent(new CustomEvent('gdlb-admin-wallet',{detail:data.wallet}));
   return data;
  }});
  document.getElementById('playerProfileRefresh')?.addEventListener('submit',event=>{

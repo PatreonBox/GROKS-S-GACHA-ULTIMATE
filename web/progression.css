@@ -48,8 +48,18 @@
 .achievement-track{display:flex;align-items:center;gap:7px;color:#c1cde6;font-size:.73rem}
 .achievement-track progress{height:7px;flex:1;min-width:25px;accent-color:#c6a4f8}
 [data-earned=true] .achievement-track progress{accent-color:#efc779}
-.achievement-toast{position:fixed;inset:12px auto auto 50%;transform:translateX(-50%);margin:0;width:min(430px,calc(100vw - 22px));display:flex;align-items:center;gap:12px;z-index:1000;padding:8px 14px;color:#fff2cb;background:linear-gradient(145deg,#263853,#26223e);border:1px solid #dcbb73;border-radius:10px;box-shadow:0 12px 42px #0009;text-decoration:none;animation:achievement-slide .32s ease-out both}
+.achievement-toast{position:fixed;inset:12px auto auto 50%;transform:translateX(-50%);margin:0;width:min(430px,calc(100vw - 22px));display:flex;align-items:center;gap:12px;z-index:1000;padding:9px 15px;color:#fff2cb;background:radial-gradient(ellipse at 9% 0,#465779,#26334d 45%,#25203a);border:1px solid #dcbb73;border-radius:10px;box-shadow:0 12px 42px #0009;text-decoration:none}
+.achievement-toast[data-phase=enter]{animation:achievement-enter .46s cubic-bezier(.2,.78,.32,1) both}
+.achievement-toast[data-phase=enter] .achievement-badge{animation:achievement-medal .54s .04s cubic-bezier(.18,.77,.39,1.2) both}
+.achievement-toast[data-phase=exit]{animation:achievement-exit .24s cubic-bezier(.55,.12,.76,.38) both}
 .achievement-toast>div{display:grid;gap:2px}.achievement-toast small{font-size:.74rem;color:#f0ce91}.achievement-toast strong{font:800 1.4rem/1.08 Cond,sans-serif;color:#fff6df}.achievement-toast span:not(.achievement-badge){font-size:.8rem;color:#cdd7ef}
-@keyframes achievement-slide{from{opacity:0;transform:translate(-50%,-21px) scale(.97)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes achievement-enter{from{opacity:0;transform:translate(-50%,-114%) scale(.94)}70%{opacity:1;transform:translate(-50%,5px) scale(1.014)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+@keyframes achievement-medal{from{opacity:.35;transform:scale(.58) rotate(-17deg)}68%{opacity:1;transform:scale(1.12) rotate(5deg)}to{opacity:1;transform:none}}
+@keyframes achievement-exit{to{opacity:0;transform:translate(-50%,-114%) scale(.92)}}
+@keyframes achievement-fade{from{opacity:0}}
 @media(max-width:600px){.progression-overview{grid-template-columns:1fr}.progression-title p{font-size:.8rem}.progression-title{align-items:start}.progression-overview section,.progression-recent{padding:11px}}
-@media(prefers-reduced-motion:reduce){.achievement-toast{animation:none}}
+@media(prefers-reduced-motion:reduce){
+ .achievement-toast[data-phase=enter]{animation:achievement-fade .09s both}
+ .achievement-toast[data-phase=enter] .achievement-badge{animation:none}
+ .achievement-toast[data-phase=exit]{animation:achievement-fade .09s reverse both}
+}

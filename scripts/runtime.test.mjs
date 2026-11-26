@@ -228,7 +228,9 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
   assert.equal((await call(adminId,'/api/players',{alias:'Owner'})).status,403);
   assert.equal((await command(memberId,'admin.adjust',{field:'coins',mode:'add',amount:70})).status,403);
   assert.equal((await command(memberId,'admin.reset',{confirmation:'RESET'})).status,403);
-  assert.equal((await command(adminId,'admin.adjust',{field:'luck',mode:'set',amount:501})).status,400);
+  assert.equal((await command(memberId,'admin.adjust',{field:'level',mode:'set',amount:15})).status,403);
+  assert.equal((await command(memberId,'admin.kingdom.finish',{})).status,403);
+  assert.equal((await command(adminId,'admin.adjust',{field:'luck',mode:'set',amount:Number.MAX_SAFE_INTEGER+1})).status,400);
   assert.equal((await command(adminId,'admin.adjust',{field:'gems',mode:'set',amount:12.55})).status,400);
   const requestId=crypto.randomUUID(),args={field:'coins',mode:'add',amount:700};
   for(const result of await Promise.all([command(adminId,'admin.adjust',args,requestId),command(adminId,'admin.adjust',args,requestId)])){
@@ -240,8 +242,31 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
    assert.equal(response.status,200);
    assert.equal((await response.json()).wallet[field],value);
   }
+  const level=15,luck=75_000_000_000;
+  assert.equal((await (await command(adminId,'admin.adjust',{field:'level',mode:'set',amount:level})).json()).result.value,level);
+  assert.equal((await (await call(adminId,'/api/game?view=profile')).json()).profile.level,level);
+  assert.equal((await (await command(adminId,'admin.adjust',{field:'luck',mode:'set',amount:luck})).json()).wallet.luck,luck);
+  const funded=await (await command(adminId,'admin.adjust',{field:'mana',mode:'set',amount:2600})).json();
+  assert.equal(funded.wallet.kingdom.mana,2600);
+  const staged=await (await command(adminId,'admin.adjust',{field:'tower',mode:'set',amount:2})).json();
+  assert.equal(staged.wallet.kingdom.towerLevel,2);
+  assert.equal((await command(adminId,'admin.adjust',{field:'tower',mode:'set',amount:4})).status,400);
+  const state=staged.wallet,now=Date.now();
+  state.kingdom.towerConstruction={level:3,startedAt:now,endsAt:now+180_000};
+  sqlite.prepare('UPDATE game_profiles SET wallet=? WHERE player_id=?').run(JSON.stringify(state),owner);
+  assert.equal((await command(adminId,'admin.adjust',{field:'tower',mode:'set',amount:1})).status,400);
+  const finishId=crypto.randomUUID();
+  for(const response of await Promise.all([command(adminId,'admin.kingdom.finish',{},finishId),command(adminId,'admin.kingdom.finish',{},finishId)])){
+   assert.equal(response.status,200);
+   const {wallet}=await response.json();
+   assert.equal(wallet.kingdom.towerLevel,3);
+   assert.equal(wallet.playerXp,state.playerXp+600);
+  }
+  assert.equal((await command(adminId,'admin.kingdom.finish',{})).status,400);
   assert.deepEqual((await (await call(memberId,'/api/players',null,'')).json()).rows.map(row=>row.alias),['Fixture member']);
-  assert.equal((await command(adminId,'pack.buy',{packId:'common',quantity:1})).status,200);
+  const pull=await command(adminId,'pack.buy',{packId:'common',quantity:1});
+  assert.equal(pull.status,200);
+  assert.equal((await pull.json()).wallet.pending.luckAtPurchase,luck);
   assert.equal((await command(adminId,'admin.reset',{confirmation:'reset'})).status,400);
   const reset=await command(adminId,'admin.reset',{confirmation:'RESET'});
   assert.equal(reset.status,200);

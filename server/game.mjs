@@ -1,14 +1,15 @@
-import {cardCategories,difficulties,createCardPool,mergeBlocked,normalizeWallet,upgrades} from '../web/pack-engine.js';
+import {cardCategories,difficulties,createCardPool,mergeBlocked,normalizeWallet} from '../web/pack-engine.js';
 import {newWallet,prepareGameAction} from '../web/game-rules.js';
 import {campaignStages,stageCleared} from '../web/campaign.js';
 import {mineEarnings,settleMine} from '../web/mine-economy.js';
 import {createMergePlanner,gemTenths} from '../web/card-economy.js';
 import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
 import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,rankingVersion} from './player-rankings.mjs';
-import {playerProgress} from '../web/player-progression.js';
+import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {featureLevel} from '../web/level-access.js';
 import {tradeLevelNotice} from '../web/trade-rules.js';
 import {kingdomVisitors,settleKingdomVisitors} from './kingdom-visitors.mjs';
+import {kingdomForges,kingdomHouses,maxTowerLevel,settleKingdomConstruction} from '../web/kingdom-rules.js';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
@@ -159,20 +160,45 @@ function adjustAdminWallet(wallet,args){
  if(!Number.isFinite(amount)||amount<0)reject('Enter a valid amount.');
  if(field==='luck'&&(mode==='set'||mode==='add')){
   const next=(mode==='add'?(wallet.luck||0):0)+amount;
-  if(!Number.isInteger(amount)||next>upgrades.luck.max)reject('Luck must stay between 0 and '+upgrades.luck.max+'%.');
+  if(!Number.isSafeInteger(amount)||!Number.isSafeInteger(next))reject('Enter a whole luck percentage within the save limit.');
   wallet.luck=next;
- }else if(field==='coins'&&mode==='add'){
-  if(!Number.isSafeInteger(amount)||amount===0||amount>Number.MAX_SAFE_INTEGER-wallet.coins)reject('Enter a whole coin amount within the wallet limit.');
-  wallet.coins+=amount;
+  return {field,value:next};
+ }
+ if(field==='coins'&&(mode==='set'||mode==='add')){
+  const next=(mode==='add'?wallet.coins:0)+amount;
+  if(!Number.isSafeInteger(amount)||!Number.isSafeInteger(next)||mode==='add'&&!amount)reject('Enter a whole coin amount within the wallet limit.');
+  wallet.coins=next;
  }else if(field==='gems'&&mode==='set'){
   if(!Number.isSafeInteger(gemTenths(amount))||gemTenths(amount)/10!==amount)reject('Use at most one decimal place, within the gem balance limit.');
   wallet.gems=amount;
+ }else if(field==='level'&&mode==='set'){
+  const xp=playerXpAtLevel(amount);
+  if(!Number.isSafeInteger(amount)||amount>maxPlayerLevel||!Number.isSafeInteger(xp))reject('Enter a level within the game limit.');
+  wallet.playerXp=xp;
+  return {field,value:amount};
+ }else if(field==='mana'&&mode==='set'){
+  if(!Number.isSafeInteger(amount))reject('Enter a whole Mana amount within the wallet limit.');
+  wallet.kingdom={...wallet.kingdom,mana:amount};
+  return {field,value:amount};
+ }else if(field==='tower'&&mode==='set'){
+  if(!Number.isInteger(amount)||amount<1||amount>maxTowerLevel)reject('Choose a tower level from 1 to '+maxTowerLevel+'.');
+  if(wallet.kingdom?.towerConstruction)reject('Finish the current tower construction first.');
+  wallet.kingdom={...wallet.kingdom,towerLevel:amount};
+  return {field,value:amount};
  }else reject('Choose a valid admin adjustment.');
  return {field,value:wallet[field]};
 }
 
+function finishAdminConstruction(wallet,now){
+ const sites=[wallet.kingdom?.towerConstruction,...kingdomHouses(wallet).map(item=>item.upgrade),...kingdomForges(wallet).map(item=>item.upgrade)].filter(Boolean);
+ if(!sites.length)reject('Start a Kingdom upgrade first.');
+ for(const site of sites)site.endsAt=Math.min(site.endsAt,now);
+ return settleKingdomConstruction(wallet,now);
+}
+
 async function play(db,session,{action,args,requestId},getPool,hasArt,administrator){
- const admin=action==='admin.adjust'||action==='admin.reset';
+ const testing=action==='admin.kingdom.finish';
+ const admin=action==='admin.adjust'||action==='admin.reset'||testing;
  const reset=action==='admin.reset';
  if(admin&&!administrator)reject('Admin tools are unavailable for this account.',403);
  if(reset&&args?.confirmation!=='RESET')reject('Type RESET to confirm this save reset.');
@@ -202,7 +228,14 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
   }else if(admin){
    await seedAchievements(db,record.player_id,wallet,now);
    settleMine(wallet,now);
-   result=adjustAdminWallet(wallet,args);
+   settleKingdomVisitors(wallet,now);
+   if(testing)result=finishAdminConstruction(wallet,now);
+   else{
+    settleKingdomConstruction(wallet,now);
+    result=adjustAdminWallet(wallet,args);
+   }
+   settleKingdomVisitors(wallet,now,true);
+   updateAchievements(wallet,{},now);
   }else{
    try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}

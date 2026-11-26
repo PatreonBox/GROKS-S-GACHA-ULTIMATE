@@ -1,6 +1,6 @@
 import {normalizeWallet} from '../web/pack-engine.js';
 import {settleMine} from '../web/mine-economy.js';
-import {playerProgress,playerXpAtLevel} from '../web/player-progression.js';
+import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {directoryPlayer,findPlayer,searchPlayers} from './player-directory.mjs';
 import {isUuid,one,reject} from './game-http.mjs';
 
@@ -10,14 +10,13 @@ function managePlayer(record){
 }
 
 const byWrite='EXISTS(SELECT 1 FROM game_profiles WHERE player_id=? AND last_request=?)';
-const maxLevel=playerProgress(Number.MAX_SAFE_INTEGER).level;
 
 async function moderate(db,actor,body){
  const {id,action,amount,requestId}=body;
  if(!isUuid(id)||!isUuid(requestId)||id===actor.player_id)reject('Choose another player.');
  if(!['level','coins','ban','unban'].includes(action))reject('Choose a valid player action.');
  if(['level','coins'].includes(action)&&(!Number.isSafeInteger(amount)||amount<0))reject('Enter a valid whole number.');
- if(action==='level'&&(amount>maxLevel||!Number.isSafeInteger(playerXpAtLevel(amount))))reject('Enter a level within the game limit.');
+ if(action==='level'&&(amount>maxPlayerLevel||!Number.isSafeInteger(playerXpAtLevel(amount))))reject('Enter a level within the game limit.');
  for(let attempt=0;attempt<4;attempt++){
   const record=await findPlayer(db,id);
   if(!record||!record.owner.startsWith('discord:'))reject('Player not found.',404);

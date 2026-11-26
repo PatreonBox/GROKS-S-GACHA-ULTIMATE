@@ -186,6 +186,7 @@
   <div class="admin-tabs" role="group" aria-label="Admin tools sections">
    <button type="button" class="outline" data-admin-tab="players" aria-pressed="true">Manage players</button>
    <button type="button" class="outline" data-admin-tab="mine" aria-pressed="false">My save</button>
+   <button type="button" class="outline" data-admin-tab="kingdom" aria-pressed="false">Kingdom testing</button>
   </div>
   <section data-admin-pane="players">
    <form id="adminPlayerSearch" class="admin-search">
@@ -212,6 +213,7 @@
   </section>
   <section data-admin-pane="mine" hidden>
   <dl class="admin-balances">
+   <div><dt>Player level</dt><dd data-admin-balance="level">—</dd></div>
    <div><dt>Luck</dt><dd data-admin-balance="luck">—</dd></div>
    <div><dt>Coins</dt><dd data-admin-balance="coins">—</dd></div>
    <div><dt>Gems</dt><dd data-admin-balance="gems">—</dd></div>
@@ -219,13 +221,15 @@
   <form id="adminAdjustment" class="admin-form">
    <label>Action
     <select name="adjustment">
+     <option value="level:set">Set my level</option>
      <option value="luck:set">Set luck</option>
      <option value="luck:add">Add luck</option>
      <option value="coins:add">Give coins</option>
+     <option value="coins:set">Set coins</option>
      <option value="gems:set">Set gems</option>
     </select>
    </label>
-   <label>Amount <input name="amount" type="number" inputmode="numeric" min="0" max="500" step="1" required></label>
+   <label>Amount <input name="amount" type="number" inputmode="numeric" min="0" step="1" required></label>
    <button class="primary" type="submit">Apply</button>
   </form>
   <details class="admin-reset">
@@ -236,6 +240,30 @@
     <button class="outline admin-danger" type="submit">Reset my save</button>
    </form>
   </details>
+  </section>
+  <section data-admin-pane="kingdom" hidden>
+   <dl class="admin-balances">
+    <div><dt>Player level</dt><dd data-admin-balance="level">—</dd></div>
+    <div><dt>Tower level</dt><dd data-admin-kingdom="tower">—</dd></div>
+    <div><dt>Housing lots</dt><dd data-admin-kingdom="lots">—</dd></div>
+    <div><dt>House levels</dt><dd data-admin-kingdom="houses">—</dd></div>
+    <div><dt>Mana</dt><dd data-admin-kingdom="mana">—</dd></div>
+    <div><dt>Kingdom stars</dt><dd data-admin-kingdom="stars">—</dd></div>
+   </dl>
+   <div id="adminKingdomProgress" class="admin-kingdom-progress" hidden>
+    <strong></strong><small></small><progress max="1" aria-label="Kingdom progression"></progress>
+   </div>
+   <form id="adminKingdomAdjustment" class="admin-form">
+    <label>Testing action <select name="adjustment">
+     <option value="mana">Set Mana</option><option value="tower">Set tower level</option>
+    </select></label>
+    <label>Amount <input type="number" name="amount" inputmode="numeric" min="0" step="1" required></label>
+    <button class="primary" type="submit">Apply to my Kingdom</button>
+   </form>
+   <div class="admin-kingdom-actions">
+    <button type="button" class="outline" id="adminKingdomFinish" disabled>Finish construction</button>
+    <a class="outline" href="#kingdom" data-admin-open-kingdom>Open Kingdom</a>
+   </div>
   </section>
   <p id="adminToolsStatus" class="player-form-status" role="status"></p>
  </div>

@@ -143,6 +143,14 @@
  background:#0e1523;color:#f0f7ff;font:inherit;font-size:16px;color-scheme:dark;
 }
 .admin-form button{min-height:42px}
+.admin-kingdom-progress{
+ display:grid;gap:3px;margin:0 0 13px;padding:9px 11px;color:#f2fff7;
+ border:1px solid #597b7e;border-radius:7px;background:#1a2a38;
+}
+.admin-kingdom-progress small{color:#bcd1df}
+.admin-kingdom-progress progress{width:100%;height:7px;accent-color:#84ddbd}
+.admin-kingdom-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.admin-kingdom-actions a{display:inline-flex;align-items:center}
 .admin-reset{border:1px solid #66434e;border-radius:8px;margin-top:18px;padding:10px;background:#261b27}
 .admin-reset summary{font-weight:750;color:#ffb5b8;cursor:pointer}
 .admin-reset p{color:#e5b8bd}

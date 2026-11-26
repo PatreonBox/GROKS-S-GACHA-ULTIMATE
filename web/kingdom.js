@@ -3,7 +3,8 @@ import {campaignStages} from './campaign.js';
 import {ico} from './icons.js';
 import {kingdomAmbience} from './kingdom-ambience.js';
 import {gameCommand,gameRead} from './game-client.js';
-import {buildingSpecs,buildingPlacementError,forgeMinimum,forgePlan,forgeStored,forgeUpgrade,forgeWelcomeMana,gemMine,gemMineBuildError,gemMinePlan,housePrice,houseUpgrade,kingdomDaylight,kingdomStats,lastLandLevel,manaIcon,towerSkipCost,visitorSlots,visitorWelcomeMs} from './kingdom-rules.js';
+import {buildingSpecs,buildingPlacementError,forgeMinimum,forgePlan,forgeStored,forgeUpgrade,forgeWelcomeMana,gemMine,gemMineBuildError,gemMinePlan,housePlan,houseStars,houseUpgrades,kingdomDaylight,kingdomStats,lastLandLevel,manaIcon,towerExperience,towerSkipCost,visitorSlots,visitorWelcomeMs} from './kingdom-rules.js';
+import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from './kingdom-suggestions.js';
 import {playerProgress} from './player-progression.js';
 import {towerPlayerLevel} from './level-access.js';
 import {rewardOrigin} from './reward-flight.js';
@@ -42,7 +43,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  let plot=kingdomStats(),visitors=[],plotSignature='',snap=true,build=null,placing=false,upgrading=false;
  let buildingKind='house',productionKind='forge',expanding=false,editing=false,ambience,visitorDue,refreshingVisitors=false;
  let clockOffset=0,finishing=false,finishRetryAt=0;
- let welcomeUntil=0;
+ let welcomeUntil=0,trackedUpgrade;
  const collecting=new Set(),welcomed=new Set();
  const clock=()=>Date.now()+clockOffset;
  const timeLeft=site=>Math.max(0,Math.ceil((site.endsAt-clock())/1000));
@@ -71,7 +72,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
   return building?buildingSpecs[building.kind||'house'].name:guestFor(id)?.name;
  }
  const priceFor=kind=>kind==='house'?plot.houseCost:buildingSpecs[kind].price;
- const purchaseProblem=kind=>kind===mineKind?gemMineBuildError(plot):
+ const purchaseProblem=kind=>kind===mineKind?gemMineBuildError(plot)||(plot.mana<gemMine.mana?
+  'Need '+readout.format(gemMine.mana-plot.mana)+' more Mana.':''):
   kind==='house'&&plot.houseLots>=plot.tower.limit?'The tower’s house lots are full.':'';
  const placementError=spot=>buildingPlacementError(plot.buildings.filter(item=>item.id!==build?.id),spot,plot.land.bounds,plot.trees);
 
@@ -80,13 +82,15 @@ export function createKingdom(root,sound,applyWallet,rewards){
    const {level,limit,next,construction}=plot.tower,required=towerPlayerLevel(level+1);
    const unmet=playerProgress(wallet?.playerXp).level<required?'Lvl '+required+'+':
     plot.houses.length<limit?'Fill all '+limit+' house lots to upgrade.':'';
-   return {level,construction,unmet,next:next&&{coins:next.price,mana:next.mana,buildMs:next.buildMs,benefit:next.limit+' house lots'}};
+   return {level,construction,unmet,next:next&&{coins:next.price,mana:next.mana,buildMs:next.buildMs,benefit:next.limit+' house lots · +'+next.xp+' XP'}};
   }
   const building=buildingFor(id);
   if(!building||building.kind===mineKind)return null;
   const level=building.level===2?2:1;
   if(building.kind==='forge')return {level,construction:building.upgrade,unmet:plot.tower.level<forgeUpgrade.towerLevel?'Requires Tower Level 2.':'',next:level===1?{...forgeUpgrade,benefit:'3 Mana/s · 1,200 capacity'}:null};
-  return {level,construction:building.upgrade,next:level===1?{...houseUpgrade,benefit:'+0.02 stars'}:null};
+  const plan=housePlan(building,clock());
+  return {...plan,unmet:plan.next?.towerLevel>plot.tower.level?'Requires Tower Level '+plan.next.towerLevel+'.':'',
+   next:plan.next&&{...plan.next,benefit:'+'+readout.format(plan.next.stars)+' stars'}};
  }
  function upgradeProblem(option){
   if(option.unmet)return option.unmet;
@@ -119,7 +123,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(construction){
    meter.max=(construction.endsAt-construction.startedAt)/1000;
    meter.value=Math.max(0,meter.max-timeLeft(construction));
-   status='Level '+(level+1)+' under construction · '+timerText(construction);
+   status='Level '+(construction.level??level+1)+' under construction · '+timerText(construction);
   }else if(next){
    unmet=upgradeProblem(option);
    button.dataset.upgradeObject=id;
@@ -187,7 +191,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const option=upgradeOption(selection);
   ui.state.textContent=option?'Level '+option.level:mine?'Production':guest?guest.rarity+' resident':tree?'Landscape':cube.rarity+' cube';
   ui.description.textContent=tower?houses.length+' / '+plot.tower.limit+' house lots used.'+(plot.tower.next?' Upgrade the tower for more space.':''):
-   house?'Worth '+readout.format(building.price??housePrice)+' coins · +'+readout.format(option.level===2?.30+houseUpgrade.stars:.30)+' stars':
+   house?'+'+readout.format(houseStars(option.level))+' stars':
    building?'':guest?'Moved in after your Kingdom reached '+guest.stars+' stars.':tree?'Clear this tree to free up its space.':'Your equipped cube roams the grounds.';
   ui.changeCube.hidden=selection!=='cube';
   ui.manage.hidden=!building;
@@ -301,15 +305,16 @@ export function createKingdom(root,sound,applyWallet,rewards){
    if(build?.spot)build.error=placementError(build.spot);
   }
   if(ui){
-   const ready=plot.houses.filter(house=>house.level===2&&pendingHouses.has(house.id)).length;
+   const ready=plot.houses.filter(house=>!house.upgrade&&pendingHouses.has(house.id));
    if(wasBuilding&&!plot.tower.construction){
-    announce('Tower Level '+plot.tower.level+' complete · '+plot.tower.limit+' house lots');
+    announce('Tower Level '+plot.tower.level+' complete · '+plot.tower.limit+' house lots · +'+towerExperience(plot.tower.level)+' XP');
     sound.play('bonus',{level:.61});
    }else if(plot.forges.some(forge=>forge.level===2&&pendingForges.has(forge.id))){
     announce('Mana Forge Level 2 complete · 3 Mana/s');
     sound.play('bonus',{level:.61});
-   }else if(ready){
-    announce(ready===1?'GD House Level 2 complete · +0.02 stars':ready+' houses upgraded to Level 2');
+   }else if(ready.length){
+    const level=ready[0].level;
+    announce(ready.length===1?'GD House Level '+level+' complete · +'+readout.format(houseUpgrades[level-2].stars)+' stars':ready.length+' house upgrades complete');
     sound.play('bonus',{level:.61});
    }
   }
@@ -355,6 +360,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(ui.guestDialog.open)paintVisitorHint();
   paintConstruction();
   paintUpgrade(ui.inspectUpgrade,selection);
+  paintSuggestions();
   if(ui.buildDialog.open)paintBuildMenu();
   const now=clock(),tower=wallet?.kingdom?.towerConstruction;
   if(!ui.welcome.hidden&&welcomeUntil<=now)ui.welcome.hidden=true;
@@ -398,6 +404,69 @@ export function createKingdom(root,sound,applyWallet,rewards){
   build.spot=spot;
   build.error=placementError(spot);
  }
+ const suggestions=()=>kingdomSuggestions(plot,coins,playerProgress(wallet?.playerXp).level,clock());
+ const suggestionLabel=task=>task.site?'View construction':task.action.object?task.ready?'Upgrade':'View requirements':
+  task.action.mode==='expand'?task.ready?'Expand':'View expansion':task.action.mode==='restore'?'Place back':task.ready?'Build':'View building';
+ function paintSuggestions(){
+  ui.tracker.hidden=Boolean(build||!wallet);
+  if(ui.tracker.hidden)return;
+  const rows=suggestions();
+  const tracked=rows.find(row=>row.id===trackedUpgrade)||recommendedKingdomUpgrade(rows);
+  ui.tracker.hidden=!tracked;
+  if(!tracked){
+   ui.suggestions.replaceChildren();
+   return;
+  }
+  const now=clock(),status=kingdomSuggestionStatus(tracked,now);
+  if(ui.trackerTitle.textContent!==tracked.title)ui.trackerTitle.textContent=tracked.title;
+  if(ui.trackerStatus.textContent!==status)ui.trackerStatus.textContent=status;
+  ui.trackerStatus.title=status;
+  ui.trackerMeter.value=tracked.progress;
+  ui.trackerAction.dataset.suggestedAction=tracked.id;
+  ui.trackerAction.textContent=suggestionLabel(tracked);
+  ui.trackerAction.disabled=upgrading||expanding||placing||editing;
+  if(!ui.buildDialog.open)return;
+  if(ui.suggestions.dataset.rows!==rows.map(row=>row.id).join('/')){
+   ui.suggestions.dataset.rows=rows.map(row=>row.id).join('/');
+   ui.suggestions.innerHTML=rows.map(row=>'<article><div><strong>'+escape(row.title)+'</strong><small></small><progress max="1" aria-label="'+escape(row.title)+' progress"></progress></div>'+
+    '<button class="outline" type="button" data-track-upgrade="'+escape(row.id)+'" aria-label="Track '+escape(row.title)+'">Track</button>'+
+    '<button class="outline" type="button" data-suggested-action="'+escape(row.id)+'"></button></article>').join('');
+  }
+  rows.forEach((row,i)=>{
+   const card=ui.suggestions.children[i],label=card.querySelector('small');
+   const note=kingdomSuggestionStatus(row,now);
+   if(label.textContent!==note)label.textContent=note;
+   card.querySelector('progress').value=row.progress;
+   const track=card.querySelector('[data-track-upgrade]');
+   track.setAttribute('aria-pressed',String(tracked.id===row.id));
+   track.textContent=tracked.id===row.id?'Tracking':'Track';
+   const action=card.querySelector('[data-suggested-action]');
+   action.textContent=suggestionLabel(row);
+   action.disabled=ui.trackerAction.disabled;
+  });
+ }
+ function runSuggestion(id){
+  const task=suggestions().find(row=>row.id===id);
+  if(!task||upgrading||expanding||placing||editing||build)return;
+  const {object,kind,mode,id:buildingId}=task.action;
+  if(object){
+   if(task.ready)improveBuilding(object);
+   else{
+    ui.buildDialog.close();
+    select(object);ui.name.scrollIntoView({block:'nearest'});
+   }
+  }else if(mode==='expand'){
+   if(task.ready)expand();
+   else{openBuildMenu();ui.landLevel.scrollIntoView({block:'nearest'});}
+  }else if(mode==='restore'){
+   startBuild(mode,plot.storage.find(item=>item.id===buildingId));
+  }else{
+   buildingKind=kind;
+   if(kind!=='house')productionKind=kind;
+   if(ui.buildDialog.open&&task.ready)startBuild();
+   else openBuildMenu();
+  }
+ }
  function paintBuildMenu(){
   const {houses,forges,gemMines,tower,land,houseLots,storage}=plot,free=Math.max(0,tower.limit-houseLots),full=free===0;
   const storedKey=storage.map(item=>item.id).join('/');
@@ -409,18 +478,6 @@ export function createKingdom(root,sound,applyWallet,rewards){
    }).join(''):'<p>No stored buildings.</p>';
   }
   ui.storageCount.textContent=storage.length?' ('+storage.length+')':'';
-  const suggestions=[];
-  if(!houses.length)suggestions.push('Place a house to attract your first visitor.');
-  if(tower.construction)suggestions.push('Tower Level '+tower.construction.level+' is under construction.');
-  else if(tower.next&&houses.length>=tower.limit)suggestions.push('Upgrade the tower to open more house lots.');
-  if(!forges.length)suggestions.push('Build a Mana Forge to start producing Mana.');
-  else if(tower.level>=2&&forges.some(forge=>!forge.upgrade&&forge.level!==2))suggestions.push('Upgrade a Mana Forge to triple production.');
-  if(houses.some(house=>!house.upgrade&&house.level!==2))suggestions.push('Upgrade a house for +0.02 Kingdom stars.');
-  if(land.nextPrice!==null)suggestions.push('Expand the plot to open more building space.');
-  if(ui.suggestions.dataset.key!==suggestions.join('/')){
-   ui.suggestions.dataset.key=suggestions.join('/');
-   ui.suggestions.innerHTML=(suggestions.length?suggestions:['Your Kingdom upgrades are complete.']).map(line=>'<li>'+escape(line)+'</li>').join('');
-  }
   const house=buildingKind==='house',price=priceFor(buildingKind),problem=purchaseProblem(buildingKind);
   const required=towerPlayerLevel(tower.level+1),playerLevel=playerProgress(wallet?.playerXp).level;
   const short=Math.max(0,price-coins);
@@ -432,6 +489,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.price.textContent=price?readout.format(price)+' coins':'Free to build';
   ui.priceLine.firstElementChild.hidden=!price;
   ui.priceLine.hidden=house&&full&&!tower.next;
+  ui.priceMana.hidden=buildingKind!==mineKind;
   ui.choose.disabled=!world||!wallet||upgrading||expanding||Boolean(problem)||short>0;
   const rows=[['tower',towerName],...(house?houses:forges).map((item,i)=>[buildingKey(item),nameOf(buildingKey(item))+' '+(i+1)])];
   const key=rows.map(([id])=>id).join('/');
@@ -475,10 +533,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }
  }
  function openBuildMenu(){
-  if(!wallet||build||ui.buildDialog.open)return;
+  if(!wallet||build)return;
   delete ui.buildNotice.dataset.notice;
-  ui.buildDialog.showModal();
-  paintBuildMenu();previewBuilding();
+  if(!ui.buildDialog.open)ui.buildDialog.showModal();
+  paintBuildMenu();previewBuilding();paintSuggestions();
  }
  function paintBuild(){
   if(!ui)return;
@@ -492,12 +550,14 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.place.disabled=placing||Boolean(build?.error||unavailable)||short>0||priceChanged;
   ui.cancel.disabled=placing;
   ui.rotate.disabled=placing;
+  if(build)ui.rotate.setAttribute('aria-label','Rotate 45 degrees. Current angle '+build.rotation*90+' degrees');
   ui.snap.disabled=placing;
   ui.snap.setAttribute('aria-pressed',String(snap));
   ui.snap.textContent=snap?'Snap on':'Snap off';
   ui.canvas.dataset.locked=String(Boolean(build?.locked));
   if(build){
    ui.placementPrice.textContent=buying&&build.cost?readout.format(build.cost)+' coins':'Free placement';
+   ui.placementMana.hidden=!buying||build.kind!==mineKind;
    const problem=unavailable||(priceChanged?'The price changed. Reopen Build Mode to review it.':build.error);
    const instruction=placing?'Placing building…':problem||(build.locked?
     (short?'Need '+readout.format(short)+' more coins.':'Position locked. Confirm to place.'):
@@ -507,6 +567,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }
   if(ui.buildDialog.open)paintBuildMenu();
   paintUpgrade(ui.inspectUpgrade,selection);
+  paintSuggestions();
   world?.setBuild(build?{...build,snap}:null);
  }
  function pointOnPlot(point,lock){
@@ -536,8 +597,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
  }
  function rotate(){
   if(!build||placing)return;
-  build.rotation=(build.rotation+1)%4;
-  updatePreview();paintBuild();
+  build.rotation=(build.rotation+.5)%4;
+  updatePreview();
+  if(build.error)build.locked=false;
+  paintBuild();
  }
  async function place(){
   if(!build?.locked||build.error||placing)return;
@@ -596,7 +659,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    const {wallet:next,result}=await gameCommand('kingdom.expand',{level});
    applyWallet(next);
    if(epoch!==visit)return;
-   ui.buildNotice.dataset.notice='Land Level '+result.level+' · 25% more area';
+   announce('Land Level '+result.level+' · 25% more area');
    sound.play('buy',{level:.74});
   }catch(error){if(epoch===visit)ui.buildNotice.dataset.notice=error.message}
   finally{if(epoch===visit){expanding=false;paintBuild()}}
@@ -641,11 +704,15 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="kingdom-controls"><span id="kingdomControls">Drag to orbit · Scroll or pinch to zoom</span><div role="group" aria-label="Camera controls">'+
    cameraButton('pan','pan','Pan camera')+cameraButton('out','zoomOut','Zoom out')+cameraButton('in','zoomIn','Zoom in')+
    cameraButton('reset','aim','Reset camera')+cameraButton('ambient','volume','Kingdom ambience')+'</div></div></div>'+
-   '<div class="kingdom-builder"><button type="button" class="primary" data-build="start" aria-haspopup="dialog" disabled>'+ico('tower')+'Build Mode</button>'+
+   '<div class="kingdom-builder"><section class="kingdom-recommendation" aria-label="Tracked Kingdom upgrade" hidden>'+
+   '<div><small>Suggested upgrade</small><strong data-tracker-title></strong><span data-tracker-status></span>'+
+   '<progress max="1" aria-label="Suggested upgrade progress"></progress></div><button type="button" class="outline" data-tracker-action></button></section>'+
+   '<button type="button" class="primary" data-build="start" aria-haspopup="dialog" disabled>'+ico('tower')+'Build Mode</button>'+
    '<div data-build-tools hidden><div class="kingdom-placement-copy"><strong data-placement-name></strong>'+
-   '<span>'+coin+'<b data-placement-price></b></span><p data-build-status role="status"></p></div>'+
+   '<span>'+coin+'<b data-placement-price></b></span><span data-placement-mana hidden>'+mana+'<b>'+readout.format(gemMine.mana)+' Mana</b></span>'+
+   '<p data-build-status role="status"></p></div>'+
    '<div class="kingdom-build-controls"><button type="button" class="outline" data-build="snap" aria-pressed="true">Snap on</button>'+
-   '<button type="button" class="outline" data-build="rotate">Rotate <kbd>R</kbd></button>'+
+   '<button type="button" class="outline" data-build="rotate">Rotate 45° <kbd>R</kbd></button>'+
    '<button type="button" class="outline" data-build="cancel">Cancel <kbd>Q</kbd></button>'+
    '<button type="button" class="primary" data-build="place" hidden>Place <kbd>E</kbd></button></div></div></div>'+
    '<div class="kingdom-dashboard"><section class="kingdom-inspector" aria-label="Inspect your plot"><div class="kingdom-objects" role="group" aria-label="Select an object">'+
@@ -685,9 +752,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<span id="housePreviewControls">Drag or use arrow keys to rotate</span></div>'+
    '<div class="build-option-info"><h3 data-build-name>'+houseName+'</h3><span class="build-rating" data-build-effect>'+star+'+0.3 stars</span>'+
    '<small class="build-price" data-house-price-line>'+coin+'<b data-house-price></b></small>'+
+   '<small class="build-price" data-build-mana hidden>'+mana+'<b>'+readout.format(gemMine.mana)+' Mana</b></small>'+
    '<button class="primary" type="button" data-build="choose">Build GD House</button></div></article>'+
    '<details class="build-storage"><summary>Stored buildings<span data-storage-count></span></summary><div data-build-storage></div></details>'+
-   '<details class="build-storage"><summary>Suggested upgrades</summary><ul data-suggestions></ul></details>'+
+   '<details class="build-storage build-suggestions"><summary>Suggested upgrades</summary><div data-suggestions></div></details>'+
    '<section class="build-upgrades" aria-labelledby="buildUpgradesTitle"><h3 id="buildUpgradesTitle">Building upgrades</h3><div data-build-upgrades></div></section>'+
    '<div class="land-expansion"><div><strong>Land expansion</strong><small data-land-level></small></div>'+
    '<button type="button" class="outline" data-expand-land>Expand +25% <span>'+coin+'<b data-land-price></b></span></button></div>'+
@@ -702,6 +770,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    welcome:get('.kingdom-arrival'),welcomeIcon:get('.kingdom-arrival img'),welcomeName:get('.kingdom-arrival strong'),
    manage:get('[data-manage-building]'),move:get('[data-move-building]'),store:get('[data-store-building]'),clearTree:get('[data-clear-tree]'),
    storage:get('[data-build-storage]'),storageCount:get('[data-storage-count]'),suggestions:get('[data-suggestions]'),
+   tracker:get('.kingdom-recommendation'),trackerTitle:get('[data-tracker-title]'),trackerStatus:get('[data-tracker-status]'),
+   trackerMeter:get('.kingdom-recommendation progress'),trackerAction:get('[data-tracker-action]'),
    pan:get('[data-camera="pan"]'),tower:get('[data-object="tower"]'),resident:get('[data-object="cube"]'),lastHouse:get('[data-last-house]'),lastForge:get('[data-last-forge]'),lastMine:get('[data-last-gem-mine]'),
    avatar:get('[data-resident-avatar]'),residentName:get('[data-resident-name]'),
    name:get('.kingdom-detail h2'),state:get('[data-plot-state]'),description:get('.kingdom-detail p'),changeCube:get('[data-change-cube]'),
@@ -715,7 +785,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    optionName:get('[data-build-name]'),buildEffect:get('[data-build-effect]'),kindButtons:root.querySelectorAll('[data-build-kind]'),
    productionCount:get('[data-production-count]'),productionPicker:get('.build-production'),productionButtons:root.querySelectorAll('[data-production-kind]'),
    landLevel:get('[data-land-level]'),landUpgrade:get('[data-expand-land]'),landPrice:get('[data-land-price]'),
-   price:get('[data-house-price]'),priceLine:get('[data-house-price-line]'),placementPrice:get('[data-placement-price]'),placementName:get('[data-placement-name]'),
+   price:get('[data-house-price]'),priceLine:get('[data-house-price-line]'),priceMana:get('[data-build-mana]'),
+   placementMana:get('[data-placement-mana]'),placementPrice:get('[data-placement-price]'),placementName:get('[data-placement-name]'),
    limits:get('[data-house-lots]'),available:get('[data-lots-available]'),lotMeter:get('[data-lot-meter]'),
    inspectUpgrade:get('.kingdom-detail .kingdom-upgrade'),buildUpgrades:get('[data-build-upgrades]'),
    openBuild:get('[data-build="start"]'),cancel:get('[data-build="cancel"]'),rotate:get('[data-build="rotate"]'),
@@ -742,6 +813,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    if(button===ui.visitors){paintVisitorHint();ui.guestDialog.showModal();return}
    if(button.matches('[data-close-visitors]')){ui.guestDialog.close();return}
    if(button.dataset.visit){ui.guestDialog.close();select('visitor:'+button.dataset.visit);return}
+   if(button.dataset.trackUpgrade){trackedUpgrade=button.dataset.trackUpgrade;paintSuggestions();return}
+   if(button.dataset.suggestedAction){runSuggestion(button.dataset.suggestedAction);return}
    if(button===ui.openBuild){openBuildMenu();return}
    if(button.dataset.build==='close'){ui.buildDialog.close();return}
    if(button.dataset.buildKind||button.dataset.productionKind){

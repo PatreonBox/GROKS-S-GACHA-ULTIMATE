@@ -71,29 +71,40 @@ export function setupAchievementBanners(sound){
  banner.setAttribute('role','status');banner.setAttribute('aria-live','polite');banner.hidden=true;
  if(typeof banner.showPopover==='function')banner.setAttribute('popover','manual');
  document.body.append(banner);
- const queue=[];
- let seen=null,revision=-1,timer=0,opening=false;
- function dismiss(){
+ const queue=[],reveal=document.getElementById('packReveal');
+ const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+ let seen=null,revision=-1,timer=0,opening=false,current=null;
+ function hide(){
   clearTimeout(timer);timer=0;
   if(banner.matches(':popover-open'))banner.hidePopover();
   banner.hidden=true;
-  show();
+  current=null;
+ }
+ function exit(){
+  banner.dataset.phase='exit';
+  timer=setTimeout(()=>{hide();show();},reduced.matches?90:240);
+ }
+ function scheduleExit(){
+  if(!current||banner.dataset.phase==='exit')return;
+  clearTimeout(timer);
+  const end=current.since+(queue.length?2080:3200);
+  timer=setTimeout(exit,Math.max(0,end-performance.now()));
  }
  function show(){
-  if(timer||opening||!queue.length||document.hidden)return;
+  if(current||opening||reveal?.open||!queue.length||document.hidden)return;
   const item=queue.shift();
+  const showing=current={since:performance.now()};
   banner.innerHTML=badge(item)+'<div><small>Achievement unlocked</small><strong>'+item.name+'</strong><span>'+item.description+'</span></div>';
+  banner.dataset.phase='enter';
   banner.hidden=false;
   if(banner.hasAttribute('popover'))banner.showPopover();
-  const loading=sound.prepareGame('gdAchievement');
-  if(loading)loading.then(()=>{if(!banner.hidden)sound.playGame('gdAchievement',{level:.78});});
-  else sound.playGame('gdAchievement',{level:.78});
-  timer=setTimeout(dismiss,4200);
+  sound.playGameReady('gdAchievement',{level:.88},()=>current===showing&&banner.dataset.phase==='enter');
+  scheduleExit();
  }
  document.addEventListener('gdlb-achievements',event=>{
   const {earned,saveRevision,pending}=event.detail;
   if(!earned){
-   seen=null;revision=-1;queue.length=0;dismiss();return;
+   seen=null;revision=-1;queue.length=0;hide();return;
   }
   if(saveRevision<revision)return;
   revision=saveRevision;opening=Boolean(pending);
@@ -102,8 +113,10 @@ export function setupAchievementBanners(sound){
    const item=achievementById(id);
    if(item&&!seen.has(id))queue.push(item);
   }
-  seen=now;show();
+  seen=now;
+  if(current&&queue.length)scheduleExit();else show();
  });
  document.addEventListener('visibilitychange',show);
- banner.addEventListener('click',()=>{queue.length=0;dismiss();});
+ reveal?.addEventListener('close',()=>requestAnimationFrame(show));
+ banner.addEventListener('click',()=>{queue.length=0;hide();});
 }

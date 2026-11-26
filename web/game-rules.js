@@ -13,7 +13,7 @@ import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnloc
 import {replayDrill,replayRemix} from './game-replay.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildForge,buildGemMine,buildHouse,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleForgeUpgrades,settleHouseUpgrades,settleTower,skipTower,storeKingdomBuilding,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
+import {buildForge,buildGemMine,buildHouse,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,upgradeForge,upgradeHouse,upgradeTower} from './kingdom-rules.js';
 import {validTradeMinimum} from './trade-rules.js';
 
 export function newWallet() {
@@ -178,7 +178,7 @@ const rules={
  'kingdom.tower.skip':{run:({w,args,now,finishedTower})=>{
   if(finishedTower)return {tower:finishedTower};
   const tower=skipTower(w,args.maxGems,now);
-  awardPlayerXp(w,30+20*tower.level);
+  awardPlayerXp(w,towerExperience(tower.level));
   return {tower};
  }},
  'profile.privacy':{run:({w,args})=>{
@@ -195,7 +195,6 @@ const rules={
   const plan=towerPlan(w,now);
   if(plan.next)requireLevel(w,towerPlayerLevel(plan.level+1),'Tower Level '+(plan.level+1));
   const tower=upgradeTower(w,args.level,now);
-  if(!tower.construction)awardPlayerXp(w,30+20*tower.level);
   return {tower};
  }},
  'kingdom.tower.finish':{run:({w,finishedTower})=>{
@@ -382,9 +381,7 @@ export async function prepareGameAction(name,args,getPool,hasArt=()=>true){
  const rule=rules[name];
  const prepared=await rule.prepare?.(args,getPool,hasArt);
  return {cards:rule.cards,apply(w,records,changes,now,online){
-  const finishedTower=settleTower(w,now);
-  const finishedHouses=settleHouseUpgrades(w,now),finishedForges=settleForgeUpgrades(w,now);
-  if(finishedTower)awardPlayerXp(w,30+20*finishedTower.level);
+  const {tower:finishedTower,houses:finishedHouses,forges:finishedForges}=settleKingdomConstruction(w,now);
   const feature=Object.hasOwn(gatedActions,name)?features[gatedActions[name]]:null;
   if(feature)requireLevel(w,feature.level,feature.name);
   const income=settleMine(w,now);

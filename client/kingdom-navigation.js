@@ -1,4 +1,4 @@
-import {buildingFootprint,houseEntry,towerFootprint,towerPlot,trailCorners} from '../web/kingdom-rules.js';
+import {buildingFootprint,houseEntry,insideFootprint,towerFootprint,towerPlot,trailCorners} from '../web/kingdom-rules.js';
 
 const steps=[[1,0],[-1,0],[0,1],[0,-1]];
 const within=({x,z},box)=>x>=box.left&&x<=box.right&&z>=box.back&&z<=box.front;
@@ -16,7 +16,7 @@ export function kingdomNavigation(bounds,buildings,trees,construction){
  const blocked=new Uint8Array(width*depth);
  for(let i=0;i<blocked.length;i++){
   const point=position(i);
-  blocked[i]=Number(obstacles.some(box=>within(point,box)));
+  blocked[i]=Number(obstacles.some(box=>insideFootprint(point,box)));
  }
  function index(x,z){
   const column=Math.round(x)-left,row=Math.round(z)-back;
@@ -103,7 +103,7 @@ export function kingdomNavigation(bounds,buildings,trees,construction){
   for(const [a,b] of [[end,approach],[approach,inside]]){
    for(let i=0;i<=12;i++){
     const t=i/12,point={x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t};
-    if(extra.some(box=>within(point,box)))return null;
+   if(extra.some(box=>insideFootprint(point,box)))return null;
    }
   }
   path.points.push(approach);

@@ -26,7 +26,7 @@ const gameSamples={gdPlay:'/assets/audio/gd-play.mp3',gdDeath:'/assets/audio/gd-
 const gameCues={
  gdPlay:[[0,1.02],'stack','gamePortal','gdPlay'],
  gdDeath:[[0,1.83],'injury','impact','gdDeath'],
- gdAchievement:[[0,1.82],'victory','reward','gdAchievement'],
+ gdAchievement:[[0,1.82],'victory','achievement','gdAchievement'],
  jump:[[.05,.26],'sweep','gameMove'],
  orb:[[.55,.36],'charged','gameMove'],
  portal:[[1.05,.76],'miniPortal','gamePortal'],
@@ -51,11 +51,11 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
- const gameBuffers=new Map(),gameLoading=new Map();
+ const gameBuffers=new Map(),gameLoading=new Map(),gameFiles=new Map();
  let stopRare=null;
  let mineCount=0,generation=0,lastMine=-Infinity,lastMint=-Infinity,failedAt=-Infinity,cueSerial=0;
  const synths=new Set(),voices=new Set(),waiting=new Map(),accents=new Set();
@@ -101,13 +101,14 @@ export function createPackSound(){
   stopScore();
   if(enabled&&ctx&&!document.hidden)stopRare=startRareScore(ctx,master,tier,impact,duration);
  }
- function silence(){
+ function silence(keepAchievement=false){
   stopScore();
   accents.forEach(clearTimeout);accents.clear();waiting.clear();
   for(const v of synths)v.stop();
-  synths.clear();for(const voice of voices)fadeOut(voice);
+  synths.clear();for(const voice of voices)if(!keepAchievement||voice.lane!=='achievement')fadeOut(voice);
  }
- function stop(){generation++;silence()}
+ function stop(){generation++;silence(true)}
+ function stopAll(){generation++;silence()}
  function emitClip(track,[offset,length],lane,rate,pan,level){
   const active=[...voices].filter(v=>v.lane===lane&&!v.stopping);
   if(active.length>=limits[lane])fadeOut(active[0]);
@@ -123,15 +124,24 @@ export function createPackSound(){
   source.start(ctx.currentTime,offset,length);
  }
  function emit(name,rate,pan,level){emitClip(buffer,cues[name],channels[name],rate,pan,level)}
+ function preloadGame(bank){
+  if(!enabled||gameBuffers.has(bank))return;
+  if(!gameFiles.has(bank)){
+   const file=fetch(gameSamples[bank]).then(response=>{
+    if(!response.ok)throw Error('Extra audio unavailable');
+    return response.arrayBuffer();
+   }).catch(()=>{gameFiles.delete(bank);return null});
+   gameFiles.set(bank,file);
+  }
+  return gameFiles.get(bank);
+ }
  function prepareGame(bank='arcade'){
   unlock();
   if(!enabled||!ctx||gameBuffers.has(bank))return;
   if(!gameLoading.has(bank)){
-   const loading=fetch(gameSamples[bank]).then(response=>{
-    if(!response.ok)throw Error('Extra audio unavailable');
-    return response.arrayBuffer();
-   }).then(data=>ctx.decodeAudioData(data)).then(decoded=>{gameBuffers.set(bank,decoded)})
-    .catch(()=>{}).finally(()=>{gameLoading.delete(bank)});
+   const loading=preloadGame(bank).then(data=>data&&ctx.decodeAudioData(data))
+    .then(decoded=>{if(decoded)gameBuffers.set(bank,decoded)})
+    .catch(()=>{}).finally(()=>{gameLoading.delete(bank);gameFiles.delete(bank)});
    gameLoading.set(bank,loading);
   }
   return gameLoading.get(bank);
@@ -147,6 +157,13 @@ export function createPackSound(){
   }
   if(gameBuffer&&ctx.state==='running'){cueSerial++;emitClip(gameBuffer,clip,lane,rate,pan,level);}
   else play(fallback,{rate,pan,level});
+ }
+ function playGameReady(name,options,isCurrent){
+  if(!enabled)return;
+  const loading=prepareGame(gameCues[name][3]);
+  const playReady=()=>{if(isCurrent())playGame(name,options);};
+  if(loading||resuming)Promise.all([loading,resuming]).then(playReady);
+  else playReady();
  }
  function coinReward(large,pans=[0]){
   if(!enabled||document.hidden)return;
@@ -215,14 +232,19 @@ export function createPackSound(){
  function listenForUiTaps(){
   const controls='button:not(:disabled),a[href],summary,select:not(:disabled),input[type=checkbox]:not(:disabled),input[type=radio]:not(:disabled)';
   const uiControl=target=>target.closest?.(controls)&&!target.closest('#mineHit,.turn-handle,[data-tear]');
+  const primeAchievement=()=>{if(!gameBuffers.has('gdAchievement'))prepareGame('gdAchievement');};
+  preloadGame('gdAchievement');
+  document.addEventListener('keydown',primeAchievement,true);
+  document.addEventListener('pointerup',event=>{if(event.pointerType!=='mouse')primeAchievement();},true);
   document.addEventListener('pointerdown',event=>{
    if(event.button!==0)return;
    if(uiControl(event.target))prepareGame('ui');
    if(!gameBuffers.has('coinDrop'))prepareGame('coinDrop');
    if(!gameBuffers.has('gdPlay'))prepareGame('gdPlay');
-   if(!gameBuffers.has('gdAchievement'))prepareGame('gdAchievement');
+   primeAchievement();
   },true);
   document.addEventListener('click',event=>{
+   primeAchievement();
    if(!enabled||!uiControl(event.target))return;
    const at=performance.now(),serial=cueSerial,loading=prepareGame('ui');
    window.setTimeout(async()=>{
@@ -231,7 +253,7 @@ export function createPackSound(){
    },0);
   },true);
  }
- document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
- window.addEventListener('pagehide',stop);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,coinReward,listenForUiTaps,sweep,land,score,stopScore};
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll()});
+ window.addEventListener('pagehide',stopAll);
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore};
 }

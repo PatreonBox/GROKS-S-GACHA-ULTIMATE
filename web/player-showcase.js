@@ -4,7 +4,7 @@ import {impossibleCover} from './impossible-cards.js';
 import {moveArt} from './combat-arts.js';
 import {cubeCatalog,equippedCube} from './cube-catalog.js';
 import {ico} from './icons.js';
-import {buildingSpecs,forgePlan,gemMine,houseUpgrade,kingdomDaylight} from './kingdom-rules.js';
+import {buildingSpecs,forgePlan,gemMine,houseStars,kingdomDaylight} from './kingdom-rules.js';
 
 const number=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const skins=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
@@ -73,7 +73,7 @@ export async function visitKingdom(root,plot,alias){
   const upgrading=tower?construction:building?.upgradeEndsAt;
   const mine=building?.kind==='gem-mine';
   const extras=building?.kind==='forge'?' · '+forgePlan(building,clock()).rate+' Mana/s':
-   mine?' · 1 gem every '+gemMine.interval/60_000+' min':upgrading?' · Upgrading to Level 2':'';
+   mine?' · 1 gem every '+gemMine.interval/60_000+' min':upgrading?' · Upgrading to Level '+(tower?(construction.level??2):(building.upgradeLevel??2)):'';
   selection.textContent=name(id)+(tower||building&&!mine?' · Level '+(tower?towerLevel:building.level):'')+extras;
   world.select(id);
  }
@@ -97,9 +97,11 @@ export async function visitKingdom(root,plot,alias){
   if(construction&&now>=construction.endsAt){towerLevel=construction.level??2;construction=null;changed=true}
   for(const building of items.values()){
    if(!(building.upgradeEndsAt<=now))continue;
-   building.level=2;
+   const previous=building.level;
+   building.level=building.upgradeLevel??2;
    delete building.upgradeEndsAt;
-   if(building.kind==='house')stars=Math.min(5,Math.round((stars+houseUpgrade.stars)*100)/100);
+   delete building.upgradeLevel;
+   if(building.kind==='house')stars=Math.min(5,Math.round((stars+houseStars(building.level)-houseStars(previous))*100)/100);
    changed=true;
   }
   if(changed)paint();

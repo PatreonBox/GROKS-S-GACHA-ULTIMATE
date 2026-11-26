@@ -80,7 +80,7 @@ export function bonusChance(level){
 // The UI and sampler use the same integer table, including at maximum luck.
 export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion}={}){
  const base=version===1?legacyPackBases[pack.id]:version===2&&pack.id==='mythic'?priorMythicBase:pack.base;
- const extra=Math.max(0,Math.min(upgrades.luck.max,Number(luckLevel)||0))/100;
+ const extra=Math.max(0,Math.min(Number.MAX_SAFE_INTEGER,Number(luckLevel)||0))/100;
  const whole=Math.floor(extra),fraction=extra-whole;
  let baseCdf=0,prior=0,remaining=base.filter(pct=>pct>0).length;
  const odds=base.map((pct,index)=>{

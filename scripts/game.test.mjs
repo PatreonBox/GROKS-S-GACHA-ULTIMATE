@@ -20,7 +20,8 @@ import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/ca
 import {mineMachineRate,mineSkillRequirements,mineSkills} from '../web/mine-economy.js';
 import {playerProgress,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
-import {forgePlan,gemMine,gemMinePlan,housePlacementError,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {buildingFootprint,forgePlan,gemMine,gemMinePlan,housePlacementError,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
 import {achievements,achievementProgress} from '../web/progression-rules.js';
 import {kingdomVisitors} from '../server/kingdom-visitors.mjs';
@@ -406,7 +407,7 @@ test('house lots unlock after the 500K coin and 500 Mana one-minute tower upgrad
   assert.equal(result.tower.completed,true);
   assert.equal(wallet.kingdom.towerLevel,2);
   assert.equal(wallet.kingdom.towerConstruction,undefined);
-  assert.equal(wallet.playerXp,playerXpAt(8)+180);
+  assert.equal(wallet.playerXp,playerXpAt(8)+110+150);
   assert.equal(wallet.coins,200_000);
  }
  assert.equal((await f.command(player,'kingdom.house',third)).status,200);
@@ -437,7 +438,7 @@ test('house upgrades spend 30 Mana once and add 0.02 stars after ten seconds',as
  for(const response of started){
   assert.equal(response.status,200);
   const {wallet,result}=await response.json();
-  assert.deepEqual(result.house.construction,{startedAt:start,endsAt:start+10000});
+  assert.deepEqual(result.house.construction,{level:2,startedAt:start,endsAt:start+10000});
   assert.equal(wallet.kingdom.mana,30);
   assert.equal(kingdomStats(wallet).stars,.60);
  }
@@ -803,16 +804,18 @@ test('the final campaign stage pays its scaled prize once and preserves active l
  assert.equal(oldWallet.coins,300_000_030_000);
 });
 
-test('Level 3 tower requires filled lots and Level 10, and its gem skip uses the remaining time',async t=>{
+test('Level 3 tower requires Level 15 and the new costs, grants 600 XP once, and opens one lot',async t=>{
  const start=Date.now();
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),player=await f.open(),houses=[
   {id:'north',x:-8,z:-7,rotation:0},{id:'west',x:-8,z:7,rotation:1},{id:'east',x:8,z:7,rotation:0}
  ];
- f.store(player.id,w=>{w.playerXp=playerXpAt(9);w.coins=4_500_000;w.gems=12.5;w.kingdom={towerLevel:2,mana:1100,houses};});
+ f.store(player.id,w=>{w.playerXp=playerXpAt(14);w.coins=1_500_000;w.gems=12.5;w.kingdom={towerLevel:2,mana:2499,houses};});
  const command=(action,args,id)=>f.command(player,'kingdom.'+action,args,id);
- assert.equal((await command('tower',{level:2})).status,400);
- f.store(player.id,w=>{w.playerXp=playerXpAt(10);});
+ assert.match((await (await command('tower',{level:2})).json()).error,/Level 15/);
+ f.store(player.id,w=>{w.playerXp=playerXpAt(15);});
+ assert.match((await (await command('tower',{level:2})).json()).error,/2,500 Mana/);
+ f.store(player.id,w=>{w.kingdom.mana=2600;});
  assert.equal((await command('house',{x:8,z:-7,rotation:0,expectedPrice:400_000})).status,400);
  const upgrade=await command('tower',{level:2}).then(r=>r.json());
  assert.deepEqual(upgrade.result.tower.construction,{level:3,startedAt:start,endsAt:start+180_000});
@@ -826,11 +829,73 @@ test('Level 3 tower requires filled lots and Level 10, and its gem skip uses the
   assert.equal(receipt.tower.gems,8);
   assert.equal(wallet.gems,4.5);
   assert.equal(wallet.kingdom.towerLevel,3);
+  assert.equal(wallet.playerXp,playerXpAt(15)+600);
   assert.ok(wallet.achievements['tower-3']);
   assert.equal(wallet.kingdom.houses.length,3);
  }
  assert.equal((await command('tower.skip',{maxGems:8})).status,400);
+ assert.equal((await command('tower',{level:3})).status,400);
+ const fourth=await command('house',{x:8,z:-7,rotation:.5,expectedPrice:400_000});
+ assert.equal(fourth.status,200);
+ assert.equal((await fourth.json()).result.house.rotation,.5);
+ assert.equal((await command('house',{x:10,z:9,rotation:0,expectedPrice:800_000})).status,400);
  assert.equal(kingdomStats({kingdom:{towerLevel:2,houses:houses.concat(houses)}}).houses.length,6);
+});
+
+test('Level 3 houses wait for Tower Level 2, charge both resources once and keep diagonal doors usable',async t=>{
+ const start=Date.now();
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),owner=await f.open('manor-owner'),viewer=await f.open('manor-visitor');
+ const house={id:'home',x:-8,z:7,rotation:1,level:2,price:50_000};
+ f.store(owner.id,w=>{
+  w.playerXp=playerXpAt(8);w.coins=1_100_000;
+  w.kingdom={towerLevel:1,houses:[house],mana:240};
+ });
+ const command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
+ const target={id:house.id,level:2};
+ assert.match((await (await command('house.upgrade',target)).json()).error,/Tower Level 2/);
+ f.store(owner.id,w=>{w.kingdom.towerLevel=2;});
+ const requestId=crypto.randomUUID();
+ for(const response of await Promise.all([command('house.upgrade',target,requestId),command('house.upgrade',target,requestId)])){
+  assert.equal(response.status,200);
+  const {wallet,result}=await response.json();
+  assert.deepEqual(result.house.construction,{level:3,startedAt:start,endsAt:start+30_000});
+  assert.equal(wallet.coins,100_000);
+  assert.equal(wallet.kingdom.mana,40);
+  assert.equal(kingdomStats(wallet).stars,.32);
+ }
+ const readPlot=async()=>((await (await f.call('/api/players?player='+owner.id+'&view=kingdom',viewer)).json()).kingdom);
+ assert.equal((await readPlot()).buildings[0].upgradeLevel,3);
+ t.mock.timers.setTime(start+30_000);
+ const complete=await (await command('construction.finish')).json();
+ assert.deepEqual(complete.result.houses,[house.id]);
+ assert.equal(kingdomStats(complete.wallet).stars,.35);
+ assert.equal((await command('house.upgrade',{...target,level:3})).status,400);
+ assert.equal((await command('building.place',{id:house.id,mode:'move',x:-8,z:7,rotation:.25})).status,400);
+ const rotated=await (await command('building.place',{id:house.id,mode:'move',x:-8,z:7,rotation:.5})).json();
+ assert.equal(rotated.result.building.rotation,.5);
+ assert.equal(rotated.result.building.level,3);
+ assert.equal((await readPlot()).buildings[0].level,3);
+ const footprint=buildingFootprint(rotated.result.building);
+ assert.ok(!insideFootprint({x:footprint.left+.03,z:footprint.front-.03},footprint));
+ const nav=kingdomNavigation(kingdomBounds(),[rotated.result.building],[],false);
+ assert.ok(nav.homeRoute({x:-2,z:9},nav.targets.housing[0]));
+});
+
+test('suggested Kingdom upgrades follow current gates, costs and construction time',()=>{
+ const start=Date.now(),houses=Array.from({length:3},(_,i)=>({id:String(i),x:i*4,z:7,rotation:0,level:2}));
+ const kingdom={towerLevel:2,houses,mana:2500,forges:[{id:'forge',kind:'forge',x:8,z:-7,rotation:0,level:2}]};
+ const options=(at,coins,level)=>kingdomSuggestions(kingdomStats({kingdom},at),coins,level,at);
+ const locked=options(start,120_000,14).find(item=>item.id==='tower:3');
+ assert.equal(locked.ready,false);
+ assert.match(kingdomSuggestionStatus(locked,start),/14 \/ 15 player level/);
+ assert.match(kingdomSuggestionStatus(locked,start),/120,000 \/ 1,000,000 coins/);
+ assert.equal(recommendedKingdomUpgrade(options(start,1_000_000,15)).id,'tower:3');
+ kingdom.towerConstruction={level:3,startedAt:start,endsAt:start+180_000};
+ const tracked=recommendedKingdomUpgrade(options(start+90_000,1_000_000,15));
+ assert.equal(tracked.progress,.5);
+ assert.match(kingdomSuggestionStatus(tracked,start+90_000),/1:30 left/);
+ assert.equal(options(start+180_000,1_000_000,15).some(item=>item.id==='tower:3'),false);
 });
 
 test('Trees clear once and buildings move, store and restore without repurchasing',async t=>{
@@ -935,15 +1000,19 @@ test('A Gem Mine unlocks at Tower Level 2, banks offline production, and caps an
  const start=Date.now(),tick=gemMine.interval;
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),owner=await f.open('gem-miner'),viewer=await f.open('mine-viewer');
- const spot={x:8,z:7,rotation:0,expectedPrice:0},command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
- f.store(owner.id,w=>{w.playerXp=playerXpAt(8);w.coins=23;w.gems=2.5;});
+ const spot={x:8,z:7,rotation:0,expectedPrice:150_000},command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
+ f.store(owner.id,w=>{w.playerXp=playerXpAt(8);w.coins=150_023;w.gems=2.5;});
  assert.match((await (await command('gem-mine',spot)).json()).error,/Tower Level 2/);
- f.store(owner.id,w=>{w.kingdom={towerLevel:2};});
+ f.store(owner.id,w=>{w.kingdom={towerLevel:2,mana:799};});
+ assert.match((await (await command('gem-mine',spot)).json()).error,/800 Mana/);
+ f.store(owner.id,w=>{w.kingdom.mana=800;});
+ assert.equal((await command('gem-mine',{...spot,expectedPrice:0})).status,400);
  assert.equal((await command('gem-mine',{...spot,x:-2.65,z:0})).status,400);
  const builds=await Promise.all([command('gem-mine',spot),command('gem-mine',{...spot,x:-8})]);
  assert.deepEqual(builds.map(res=>res.status).sort(),[200,400]);
  const created=await builds.find(res=>res.ok).json(),mine=created.result.building,id=mine.id;
  assert.equal(created.wallet.coins,23);
+ assert.equal(created.wallet.kingdom.mana,0);
  assert.equal(created.wallet.gems,2.5);
  assert.equal(kingdomStats(created.wallet).houseLots,0);
  assert.equal(kingdomStats(created.wallet).buildings[0].kind,'gem-mine');

@@ -343,7 +343,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const row=o=>'<div class="chance-row">'+faceIcon(o.category)+'<span>'+(o.category===impossibleCategory?'???':o.category)+'</span><i aria-hidden="true"><b style="width:'+o.percent+'%"></b></i><strong>'+pct(o.percent)+'</strong></div>';
   table.innerHTML='<div><h4>Star levels</h4>'+odds.slice(0,6).map(row).join('')+'</div><div><h4>Demons</h4>'+odds.slice(6).map(row).join('')+'<div class="odds-total">Total <b>'+pct(odds.reduce((sum,o)=>sum+o.weight,0)/10000)+'</b></div></div>';
   byId('packPeak').innerHTML='<span>Most likely</span> '+faceIcon(peak.category)+peak.category+' <b>'+pct(peak.percent)+'</b>';
-  setText('luckStatus','Luck +'+luck+'%');
+  setText('luckStatus','Luck +'+number(luck)+'%');
   const dest=byId('rankOdds');
   dest.closest('details').hidden=odds[10].weight===0;
   if(!odds[10].weight)return;
@@ -363,12 +363,16 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const details={luck:'Each 100% adds a difficulty roll. The hardest result wins.',bonus:'Each pack rolls independently for a sixth card, up to a 90% chance.'};
   const tiles=Object.entries(upgrades).map(([key,item])=>{
    const level=wallet[key]||0,maxed=level>=item.max,effect=effects[key];
+   const override=key==='luck'&&level>item.max;
    const buttons=[[1,'Upgrade'],[10,'Upgrade ×10'],['max','Upgrade Max']].map(([mode,label])=>{
     const {count,cost,affordable}=quoteUpgrade(key,level,wallet.gems,mode);
     const title=label+' · '+item.name+(count?' · '+count+' '+(count===1?'level':'levels')+' for '+number(cost)+' gems':'');
     return '<button type="button" class="upgrade-buy" data-upgrade="'+key+'" data-upgrade-mode="'+mode+'" aria-label="'+title+'" title="'+title+'" '+(!affordable||upgrading?'disabled':'')+'>'+label+(count?'<span>'+gem+number(cost)+'</span>':'')+'</button>';
    }).join('');
-   return '<article class="upgrade-card upgrade-'+key+'"><div class="upgrade-title"><span class="up-icon">'+ico(key==='luck'?'spark':'pack')+'</span><span>Level '+level+' / '+item.max+'</span></div><h3>'+item.name+'</h3><p>'+details[key]+'</p><div class="up-effect"><b>'+pct(effect(level))+'</b><span>'+(maxed?'Max level reached':'Next level <strong>'+pct(effect(level+1))+'</strong>')+'</span></div><div class="upgrade-meter"><i style="width:'+100*level/item.max+'%"></i></div><div class="gem-buy-actions">'+buttons+'</div></article>';
+   return '<article class="upgrade-card upgrade-'+key+'"><div class="upgrade-title"><span class="up-icon">'+ico(key==='luck'?'spark':'pack')+'</span><span>'+
+    (override?'Admin luck override':'Level '+level+' / '+item.max)+'</span></div><h3>'+item.name+'</h3><p>'+details[key]+'</p><div class="up-effect"><b>'+
+    (override?'+'+number(level)+'%':pct(effect(level)))+'</b><span>'+(override?'Applied to pack rolls':maxed?'Max level reached':'Next level <strong>'+pct(effect(level+1))+'</strong>')+
+    '</span></div><div class="upgrade-meter"><i style="width:'+100*Math.min(level,item.max)/item.max+'%"></i></div><div class="gem-buy-actions">'+buttons+'</div></article>';
   }).join('');
   body.innerHTML='<section class="upgrade-panel"><div class="upgrade-heading"><div><h2>Gem upgrades</h2><p>Earn gems from the <a href="#gacha/index">card index</a> and <a href="#gacha/merge">merges</a>. Each upgrade starts at 2 gems. The price rises by 0.5 gems per level.</p></div><strong class="gem-balance">'+gem+number(wallet.gems)+' gems</strong></div><div class="upgrade-grid">'+tiles+'</div></section>';
  }

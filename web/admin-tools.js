@@ -1,6 +1,12 @@
+import {housePlan,kingdomStats,maxTowerLevel} from './kingdom-rules.js';
+import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from './kingdom-suggestions.js';
+import {maxPlayerLevel,playerProgress} from './player-progression.js';
+import {mineEarnings} from './mine-economy.js';
+
 const shortcut='9090889';
-const format=new Intl.NumberFormat(undefined,{maximumFractionDigits:1});
-const amountRules={luck:{min:0,max:500,step:1},coins:{min:1,max:Number.MAX_SAFE_INTEGER,step:1},
+const format=new Intl.NumberFormat(undefined,{maximumFractionDigits:2});
+const amountRules={luck:{min:0,max:Number.MAX_SAFE_INTEGER,step:1},coins:{min:0,max:Number.MAX_SAFE_INTEGER,step:1},
+ level:{min:0,max:maxPlayerLevel,step:1},
  gems:{min:0,max:Math.floor(Number.MAX_SAFE_INTEGER/10),step:.1}};
 
 export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate}){
@@ -14,16 +20,41 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
  const target=document.getElementById('adminTarget'),edit=document.getElementById('adminPlayerAdjustment');
  const ban=document.getElementById('adminPlayerBan'),confirm=document.getElementById('adminBanConfirmation');
  const confirmBan=document.getElementById('confirmAdminBan');
- let digits='',lastKey=0,busy=false,selected,players=[];
+ const kingdomEdit=document.getElementById('adminKingdomAdjustment'),kingdomFinish=document.getElementById('adminKingdomFinish');
+ const kingdomProgress=document.getElementById('adminKingdomProgress');
+ const kingdomStatsFields=[...panel.querySelectorAll('[data-admin-kingdom]')];
+ let digits='',lastKey=0,busy=false,selected,players=[],currentWallet,clockOffset=0;
+
+ function paintKingdom(){
+  if(!currentWallet)return;
+  const now=Date.now()+clockOffset,plot=kingdomStats(currentWallet,now);
+  const levels=plot.houses.map(house=>housePlan(house,now).level);
+  const values={tower:plot.tower.level,lots:plot.houseLots+' / '+plot.tower.limit,
+   houses:levels.length?[...new Set(levels)].sort().map(level=>'Lv. '+level+' ×'+levels.filter(value=>value===level).length).join(' · '):'0 houses',
+   mana:format.format(plot.mana),stars:format.format(plot.stars)+' / 5'};
+  for(const entry of kingdomStatsFields)entry.textContent=values[entry.dataset.adminKingdom];
+  const level=playerProgress(currentWallet.playerXp).level;
+  const next=recommendedKingdomUpgrade(kingdomSuggestions(plot,currentWallet.coins+mineEarnings(currentWallet,now).coins,level,now));
+  kingdomProgress.hidden=!next;
+  if(next){
+   kingdomProgress.querySelector('strong').textContent=next.title;
+   kingdomProgress.querySelector('small').textContent=kingdomSuggestionStatus(next,now);
+   kingdomProgress.querySelector('progress').value=next.progress;
+  }
+  kingdomFinish.disabled=busy||!(currentWallet.kingdom?.towerConstruction||plot.buildings.some(item=>item.upgrade));
+ }
 
  function showBalances(wallet){
+  currentWallet=wallet;
+  if(Number.isFinite(wallet.kingdomClock))clockOffset=wallet.kingdomClock-Date.now();
   for(const entry of panel.querySelectorAll('[data-admin-balance]')){
    const field=entry.dataset.adminBalance;
-   entry.textContent=format.format(wallet[field]||0)+(field==='luck'?'%':'');
+   entry.textContent=format.format(field==='level'?playerProgress(wallet.playerXp).level:wallet[field]||0)+(field==='luck'?'%':'');
   }
+  paintKingdom();
  }
  function showStatus(message,error=false){status.textContent=message;status.dataset.error=String(error);}
- function setBusy(value){busy=value;for(const button of buttons)button.disabled=value;}
+ function setBusy(value){busy=value;for(const button of buttons)button.disabled=value;paintKingdom();}
  function selectPane(name){
   for(const tab of panel.querySelectorAll('[data-admin-tab]'))tab.setAttribute('aria-pressed',String(tab.dataset.adminTab===name));
   for(const pane of panel.querySelectorAll('[data-admin-pane]'))pane.hidden=pane.dataset.adminPane!==name;
@@ -62,11 +93,21 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
   finally{setBusy(false);}
  }
  function amountLimits(){
-  const field=action.value.split(':')[0],rules=amountRules[field];
+  const [field,mode]=action.value.split(':'),rules={...amountRules[field]};
+  if(field==='coins'&&mode==='add')rules.min=1;
   Object.assign(amount,rules,{inputMode:field==='gems'?'decimal':'numeric'});
   amount.value='';
  }
  action.addEventListener('change',amountLimits);
+ amountLimits();
+ function kingdomAmountLimits(){
+  const editTower=kingdomEdit.elements.adjustment.value==='tower',input=kingdomEdit.elements.amount;
+  Object.assign(input,{min:editTower?1:0,max:editTower?maxTowerLevel:Number.MAX_SAFE_INTEGER});
+  input.value='';
+ }
+ kingdomEdit.elements.adjustment.addEventListener('change',kingdomAmountLimits);
+ kingdomAmountLimits();
+ panel.querySelector('[data-admin-open-kingdom]').addEventListener('click',()=>panel.close());
  panel.querySelector('[data-close-admin]').addEventListener('click',()=>panel.close());
  async function open(pane){
   if(!canOpen()||panel.open)return;
@@ -91,8 +132,9 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
   if(busy)return;
   selectPane(tab.dataset.adminTab);
   showStatus('');
-  if(tab.dataset.adminTab==='mine')loadBalances();
+  if(tab.dataset.adminTab!=='players')loadBalances();
  });
+ setInterval(()=>{if(panel.open&&!kingdomEdit.closest('section').hidden)paintKingdom();},1000);
  window.addEventListener('keydown',event=>{
   if(!canOpen()||event.repeat||event.ctrlKey||event.metaKey||event.altKey||
     event.target.closest?.('input,textarea,select,[contenteditable]')||document.querySelector('dialog[open]'))return;
@@ -143,6 +185,26 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
    showBalances(wallet);
    amount.value='';
    showStatus('Saved.');
+  }catch(error){showStatus(error.message,true);}
+  finally{setBusy(false);}
+ });
+ kingdomEdit.addEventListener('submit',async event=>{
+  event.preventDefault();
+  if(busy)return;
+  setBusy(true);
+  try{
+   const {wallet}=await run('admin.adjust',{field:kingdomEdit.elements.adjustment.value,mode:'set',amount:kingdomEdit.elements.amount.valueAsNumber});
+   showBalances(wallet);kingdomEdit.elements.amount.value='';
+   showStatus('Kingdom testing change saved.');
+  }catch(error){showStatus(error.message,true);}
+  finally{setBusy(false);}
+ });
+ kingdomFinish.addEventListener('click',async()=>{
+  if(busy)return;
+  setBusy(true);
+  try{
+   const {wallet}=await run('admin.kingdom.finish',{});
+   showBalances(wallet);showStatus('Construction complete.');
   }catch(error){showStatus(error.message,true);}
   finally{setBusy(false);}
  });

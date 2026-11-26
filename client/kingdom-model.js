@@ -449,7 +449,7 @@ function woodGrain(seed,light,shadow){
 }
 
 export function makeHouse(level=1){
- const upgraded=level===2;
+ const upgraded=level>=2,manor=level===3;
  const house=new THREE.Group(),positions=new Map();
  const boards=woodGrain(851,'#dfb187','#83573d'),beams=woodGrain(817,'#bd8963','#64412a');
  const timber=material('#a0724c',{map:beams,bumpMap:beams,bumpScale:.018});
@@ -457,7 +457,8 @@ export function makeHouse(level=1){
  const pale=material(upgraded?'#fae5b9':'#d6be98',{map:boards});
  const stepStone=material('#9c9687',{flatShading:true}),mortar=material('#b4a894');
  const dark=material('#43352e'),iron=material('#4f4b43',{metalness:.28});
- const roofColors=upgraded?['#73472f','#9c6340','#af7647','#835d41']:['#594f3e','#6c5d47'];
+ const roofColors=manor?['#258393','#36748f','#42a1b0','#285d78']:
+  upgraded?['#73472f','#9c6340','#af7647','#835d41']:['#594f3e','#6c5d47'];
  const roof=roofColors.map(color=>material(color,{map:boards,bumpMap:boards,bumpScale:.025}));
  const lit=material('#ffcf80',{emissive:'#dc7431',emissiveIntensity:.38});
  const glass=material('#ffdf9f',{emissive:'#de974c',emissiveIntensity:.18});
@@ -503,7 +504,7 @@ export function makeHouse(level=1){
   for(const y of [.26,1.65])block(timber,x,y,-.035,.145,.14,2.45);
   block(timber,x,.96,-.039,.13,1.51,.16);
  }
- const ridge=upgraded?2.80:2.50,rise=ridge-1.66,slope=rise/1.53;
+ const ridge=manor?3.06:upgraded?2.80:2.50,rise=ridge-1.66,slope=rise/1.53;
  function gable(z,back){
   const vertices=[-1.39,0,0,1.39,0,0,0,rise,0];
   const geo=new THREE.BufferGeometry();
@@ -554,9 +555,11 @@ export function makeHouse(level=1){
   for(const y of [2.53,2.73,2.93])block(mortar,-.89,y,-.62,.48,.026,.49);
   block(stepStone,-.89,3.102,-.62,.55,.13,.56);
   block(dark,-.89,3.17,-.62,.32,.018,.32);
-  block(timber,0,2.179,1.204,.42,.42,.082,Math.PI/4);
-  block(lit,0,2.18,1.253,.29,.29,.020,Math.PI/4);
-  block(timber,0,2.18,1.271,.085,.085,.015,Math.PI/4);
+  if(!manor){
+   block(timber,0,2.179,1.204,.42,.42,.082,Math.PI/4);
+   block(lit,0,2.18,1.253,.29,.29,.020,Math.PI/4);
+   block(timber,0,2.18,1.271,.085,.085,.015,Math.PI/4);
+  }
   for(const side of [-1,1]){
    block(timber,side*1.424,1.12,-.52,.097,.56,.61);
    block(glass,side*1.475,1.12,-.52,.019,.416,.458);
@@ -566,6 +569,26 @@ export function makeHouse(level=1){
   block(iron,1.17,1.501,1.251,.11,.27,.13);
   block(lit,1.17,1.50,1.32,.10,.141,.062);
   block(iron,1.17,1.61,1.316,.16,.07,.085);
+ }
+ if(manor){
+  const trim=material('#c7ab78',{metalness:.27}),teal=roof[1];
+  block(stepStone,.89,2.62,-.61,.41,1.22,.44);
+  block(trim,.89,3.24,-.61,.52,.11,.52);
+  block(dark,.89,3.31,-.61,.32,.04,.34);
+  block(timber,0,2.31,1.16,.98,.78,.32);
+  for(const side of [-1,1]){
+   block(teal,.255*side,2.75,1.18,.67,.12,.44,-side*.52);
+   block(trim,.247*side,2.76,1.413,.69,.055,.052,-side*.52);
+   block(lit,.211*side,2.35,1.334,.292,.34,.04);
+   block(timber,.211*side,2.35,1.357,.042,.34,.035);
+   block(mortar,side*1.23,.63,1.245,.16,.84,.15);
+   block(trim,side*.594,1.56,1.288,.12,.124,.12);
+  }
+  block(trim,0,2.115,1.34,1.04,.11,.24);
+  block(teal,0,1.697,1.306,1.55,.09,.45);
+  block(trim,0,1.66,1.52,1.58,.08,.075);
+  block(trim,0,3.265,.14,.075,.39,.079);
+  block(copper,0,3.53,.14,.19,.19,.19,Math.PI/4);
  }
  for(const [finish,pieces] of positions){
   meshAt(house,mergeGeometries(pieces),finish,0,0,0);

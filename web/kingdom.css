@@ -65,7 +65,16 @@ main:has(#kingdomRoom:not([hidden])){
 }
 .kingdom-controls button:hover,.kingdom-controls button[aria-pressed="true"]{background:#315d52;border-color:#b5ecd2;color:#defbed}
 .kingdom-controls button svg{width:20px;height:20px}
-.kingdom-builder{display:flex;justify-content:flex-end;margin-top:8px}
+.kingdom-builder{display:flex;align-items:flex-start;justify-content:flex-end;gap:8px;margin-top:8px}
+.kingdom-recommendation{
+ display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex:1;min-width:0;
+ padding:8px 11px;border:1px solid #567578;border-radius:8px;background:#1b2e38;
+}
+.kingdom-recommendation div,.build-suggestions article div{display:grid;min-width:0;gap:2px}
+.kingdom-recommendation small{color:#a4e3c5;font-size:.69rem;font-weight:820}
+.kingdom-recommendation span,.build-suggestions article small{color:#c0cfe0;font-size:.77rem;overflow-wrap:anywhere}
+.kingdom-recommendation progress,.build-suggestions article progress{width:min(100%,270px);height:6px;accent-color:#89dfb3}
+.kingdom-recommendation button,.build-suggestions article button{min-height:35px;padding:5px 9px;font-size:.78rem}
 .kingdom-builder [data-build="start"]{display:inline-flex;align-items:center;gap:8px;min-height:43px;padding:8px 15px}
 .kingdom-builder [data-build="start"] svg{width:18px;height:18px}
 .kingdom-builder.is-building{
@@ -116,6 +125,7 @@ main:has(#kingdomRoom:not([hidden])){
 .build-option-info h3{margin:0;font:800 30px/1 Cond,sans-serif}
 .build-price,.build-rating{display:inline-flex;align-items:center;gap:5px;font-size:.84rem}
 .build-price{color:#ffdc86}
+.build-price[data-build-mana]{color:#a0e8f5}
 .build-rating{color:#c6d7e4}
 .build-option-info .primary{align-self:stretch;margin-top:6px;min-height:42px;padding:6px}
 .build-option-info .primary:disabled{opacity:.62;cursor:not-allowed}
@@ -227,6 +237,8 @@ main:has(#kingdomRoom:not([hidden])){
  .kingdom-stars{--star-size:16px}
 }
 @media(max-width:490px){
+ .kingdom-builder{flex-wrap:wrap}
+ .kingdom-recommendation{flex-basis:100%}
  .build-option{grid-template-columns:1fr;gap:8px}
  .build-viewport{height:180px}
  .build-option-info{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;padding:5px}
@@ -243,3 +255,10 @@ main:has(#kingdomRoom:not([hidden])){
 .build-storage summary{cursor:pointer;font-weight:800;color:#edf6ff}
 .build-storage p,.build-storage ul{margin:8px 0 2px;color:#c1cee0}
 .build-storage [data-build-storage]>div{display:flex;gap:8px;justify-content:space-between;align-items:center;padding-top:7px}
+.build-suggestions [data-suggestions]{display:grid;gap:6px;padding-top:8px}
+.build-suggestions article{
+ display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;
+ padding:6px 7px;border-radius:6px;border:1px solid #41586e;background:#1b293a;font-size:.83rem;
+}
+.build-suggestions button[aria-pressed=true]{color:#aef4ce;border-color:#6caf89;background:#243e3f}
+@media(max-width:420px){.build-suggestions article{grid-template-columns:1fr 1fr}.build-suggestions article div{grid-column:1/-1}}

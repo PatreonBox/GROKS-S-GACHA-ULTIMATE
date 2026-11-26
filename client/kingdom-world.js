@@ -4,7 +4,7 @@ import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,resi
 import {createBuildingPreview} from './building-preview.js';
 import {makeResourceBubble,makeManaForge} from './mana-forge-model.js';
 import {makeGemMine} from './gem-mine-model.js';
-import {buildingSpecs,forgeMinimum,forgeStored,gemMinePlan,kingdomBounds,kingdomDaylight,manaIcon,plotTrees,visitorSlots,visitorWelcomeMs} from '../web/kingdom-rules.js';
+import {buildingSpecs,forgeMinimum,forgeStored,gemMinePlan,housePlan,kingdomBounds,kingdomDaylight,manaIcon,manorHeight,plotTrees,visitorSlots,visitorWelcomeMs} from '../web/kingdom-rules.js';
 import {kingdomNavigation} from './kingdom-navigation.js';
 import {createKingdomWalker} from './kingdom-walkers.js';
 import {treeWithin} from '../web/kingdom-forest.js';
@@ -106,8 +106,8 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  const loader=new THREE.TextureLoader();
  const path=residentPath(),tower=makeTower(),owner=makeResident(loader);
  const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine()};
- const improvedModels={house:makeHouse(2),forge:makeManaForge(2)},windows=new Set();
- for(const model of [models.house,improvedModels.house]){
+ const improvedModels={house:makeHouse(2),forge:makeManaForge(2)},manor=makeHouse(3),windows=new Set();
+ for(const model of [models.house,improvedModels.house,manor]){
   model.traverse(part=>{if(part.material?.name==='Cottage lights')windows.add(part.material)});
  }
  function bubbleFor(path){
@@ -241,17 +241,18 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   }
   for(const building of buildings){
    const {id,x,z,rotation,kind='house'}=building,{size,height}=buildingSpecs[kind],key=kind+':'+id;
-   const level=building.level===2?2:1,existing=structures.get(id);
+   const level=kind==='house'?housePlan(building,clock()).level:building.level===2?2:1,existing=structures.get(id);
+   const tall=kind==='house'&&level===3?manorHeight:height;
    if(existing?.level===level&&existing.building.x===x&&existing.building.z===z&&existing.building.rotation===rotation){
     existing.building=building;continue;
    }
-   const model=((level===2&&improvedModels[kind])||models[kind]).clone(),floor=floorAt(building);
+   const model=(level===3?manor:(level===2&&improvedModels[kind])||models[kind]).clone(),floor=floorAt(building);
    model.position.set(x,floor,z);model.rotation.y=rotation*Math.PI/2;
    scene.add(model);
    const resource=resources[kind],door=model.getObjectByName('house-door'),base=resource?productionBase(building,floor):null;
    if(base)scene.add(base);
    const hit=existing?picked.get(key).mesh:hitBox(key,size.width,height,size.depth,Math.max(size.width,size.depth)/2+.34);
-   hit.position.copy(model.position);hit.position.y+=height/2;hit.rotation.y=model.rotation.y;
+   hit.position.copy(model.position);hit.position.y+=tall/2;hit.scale.y=tall/height;hit.rotation.y=model.rotation.y;
    if(existing){
     if(door&&existing.door)door.rotation.y=existing.door.rotation.y;
     existing.model.removeFromParent();
@@ -560,7 +561,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
   preview?.dispose();
-  scene.add(...Object.values(models),...Object.values(improvedModels),...Object.values(resources).map(resource=>resource.bubble));
+  scene.add(...Object.values(models),...Object.values(improvedModels),manor,...Object.values(resources).map(resource=>resource.bubble));
   release(scene);foundationMaterial.dispose();
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();

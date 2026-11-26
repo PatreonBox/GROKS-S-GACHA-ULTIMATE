@@ -13,7 +13,7 @@ export function kingdomShowcase(wallet,clock=Date.now()){
   towerLevel:plot.tower.level,construction:plot.tower.construction,removedTrees:plot.removedTrees,
   buildings:plot.buildings.map(({id,x,z,rotation,kind='house',...details})=>({
    id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:kind==='forge'?forgePlan(details,clock).level:1,
-   ...(details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt}:{})
+   ...(details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt,upgradeLevel:details.upgrade.level??2}:{})
   })),
   visitors:discoveredVisitors(wallet,clock).map(({id,slot,cube,name,arrivedAt})=>({id,slot,cube,name,arrivedAt}))
  };

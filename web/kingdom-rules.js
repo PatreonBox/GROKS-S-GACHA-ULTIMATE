@@ -1,14 +1,17 @@
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
 import {gemTenths} from './card-economy.js';
+import {awardPlayerXp} from './player-progression.js';
 
 export const housePrice=50_000;
 export const houseSize={width:3.15,depth:2.72};
-export const houseHeight=3.26;
+export const houseHeight=3.26,manorHeight=3.86;
 export const houseEntry={front:1.16,width:1.24,height:1.43,floor:.164};
 export const forgePrice=120_000,forgeWelcomeMana=100,forgeMinimum=5;
-export const gemMine={towerLevel:2,interval:300_000,capacity:20};
+export const gemMine={towerLevel:2,coins:150_000,mana:800,interval:300_000,capacity:20};
 export const visitorWelcomeMs=20_000;
-export const houseUpgrade={mana:30,buildMs:10_000,stars:.02};
+export const houseUpgrades=[{mana:30,buildMs:10_000,stars:.02},
+ {coins:1_000_000,mana:200,buildMs:30_000,stars:.03,towerLevel:2}];
+export const houseStars=level=>(30+houseUpgrades.slice(0,level-1).reduce((sum,tier)=>sum+Math.round(tier.stars*100),0))/100;
 export const forgeUpgrade={coins:1_000_000,mana:300,buildMs:30_000,towerLevel:2};
 export const towerUpgradeMana=500;
 const forgeTiers=[{rate:1,capacity:300},{rate:3,capacity:1200}];
@@ -16,7 +19,7 @@ export const manaIcon='/assets/kingdom/mana-orbs.webp';
 export const buildingSpecs={
  house:{name:'GD House',size:houseSize,height:houseHeight,price:housePrice},
  forge:{name:'The Mana Forge',size:{width:3.20,depth:3.20},height:3.65,price:forgePrice},
- 'gem-mine':{name:'Gem Mine',size:{width:4.15,depth:3.60},height:3.55,price:0}
+ 'gem-mine':{name:'Gem Mine',size:{width:4.15,depth:3.60},height:3.55,price:gemMine.coins}
 };
 export const plotBounds={left:-14,right:14,back:-13,front:14};
 export const lastLandLevel=5;
@@ -35,11 +38,13 @@ export const visitorSlots=[
  ['Common',.3],['Common',.6],['Uncommon',.9],['Uncommon',1.2],['Uncommon',1.5],
  ['Rare',1.8],['Rare',2.4],['Epic',3],['Epic',3.6],['Legendary',4.5]
 ].map(([rarity,stars],slot)=>({slot,rarity,stars}));
+export const maxTowerLevel=3;
 const towerTiers=[
- {limit:2,price:0},{limit:3,price:500_000,mana:towerUpgradeMana,buildMs:60_000},
- {limit:9,price:4_000_000,mana:1_000,buildMs:180_000},
+ {limit:2,price:0},{limit:3,price:500_000,mana:towerUpgradeMana,buildMs:60_000,xp:150},
+ {limit:4,price:1_000_000,mana:2_500,buildMs:180_000,xp:600},
  {limit:13,price:10_000_000,mana:towerUpgradeMana},{limit:17,price:75_000_000,mana:towerUpgradeMana}
 ];
+export const towerExperience=level=>towerTiers[level-1]?.xp||0;
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
 export const kingdomForges=wallet=>wallet?.kingdom?.forges||[];
 const kingdomGemMines=wallet=>wallet?.kingdom?.gemMines||[];
@@ -65,11 +70,15 @@ export function towerPlan(wallet,now=Date.now()){
  const valid=schedule&&target===built+1&&towerTiers[built];
  const construction=valid&&now<schedule.endsAt?{...schedule,level:target}:null;
  const level=valid&&!construction?target:built;
- return {level,limit:towerTiers[level-1].limit,next:towerTiers[level],construction};
+ return {level,limit:towerTiers[level-1].limit,next:level<maxTowerLevel?towerTiers[level]:null,construction};
 }
 export function housePlan(house,now=Date.now()){
- const construction=house.upgrade&&now<house.upgrade.endsAt?house.upgrade:null;
- return {level:house.level===2||house.upgrade&&!construction?2:1,construction};
+ const built=house.level===3?3:house.level===2?2:1;
+ const site=house.upgrade,target=site?.level??2;
+ const valid=site&&target===built+1&&houseUpgrades[built-1];
+ const construction=valid&&now<site.endsAt?{...site,level:target}:null;
+ const level=valid&&!construction?target:built;
+ return {level,construction,next:houseUpgrades[level-1]??null};
 }
 function forgeStoredAt(forge,until,rate,capacity){
  return Math.min(capacity,(forge.storedMana||0)+elapsedForgeSeconds(forge,until)*rate);
@@ -90,8 +99,7 @@ function promoteForge(forge,at){
  return upgraded;
 }
 export function kingdomRating(houses,now){
- const upgraded=houses.filter(house=>housePlan(house,now).level===2).length;
- return Math.min(500,houses.length*30+upgraded*Math.round(houseUpgrade.stars*100))/100;
+ return Math.min(500,houses.reduce((sum,house)=>sum+Math.round(houseStars(housePlan(house,now).level)*100),0))/100;
 }
 export function kingdomStats(wallet,now=Date.now()){
  const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),gemMines=kingdomGemMines(wallet),storage=kingdomStorage(wallet);
@@ -102,9 +110,10 @@ export function kingdomStats(wallet,now=Date.now()){
  const value=[...buildings,...storage].reduce((sum,building)=>{
   const kind=building.kind||'house';
   return sum+(building.price??buildingSpecs[kind].price)+
-   (kind==='forge'&&(building.level===2||building.upgrade)?forgeUpgrade.coins:0);
+   (kind==='forge'&&(building.level===2||building.upgrade)?forgeUpgrade.coins:0)+
+   (kind==='house'&&(building.level===3||building.upgrade?.level===3)?houseUpgrades[1].coins:0);
  },0)+towerTiers.slice(0,tower.level).reduce((sum,tier)=>sum+tier.price,0)+
-  (tower.construction?tower.next.price:0)+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
+  (tower.construction?towerTiers[tower.construction.level-1].price:0)+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
  return {houses,forges,gemMines,storage,buildings,tower,land,stars,value,houseLots,removedTrees,
   trees:plotTrees(buildings,removedTrees,land.bounds),mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houseLots};
 }
@@ -132,8 +141,8 @@ export function settleHouseUpgrades(wallet,now){
  const completed=[];
  for(const house of kingdomHouses(wallet)){
   if(!house.upgrade||now<house.upgrade.endsAt)continue;
+  house.level=house.upgrade.level??2;
   delete house.upgrade;
-  house.level=2;
   completed.push(house.id);
  }
  return completed;
@@ -149,6 +158,11 @@ export function settleForgeUpgrades(wallet,now){
   completed.push(forge.id);
  }
  return completed;
+}
+export function settleKingdomConstruction(wallet,now){
+ const tower=settleTower(wallet,now),houses=settleHouseUpgrades(wallet,now),forges=settleForgeUpgrades(wallet,now);
+ if(tower)awardPlayerXp(wallet,towerExperience(tower.level));
+ return {tower,houses,forges};
 }
 
 export const towerSkipCost=(site,now=Date.now())=>site?Math.max(0,Math.ceil((site.endsAt-now)/15_000)):0;
@@ -189,46 +203,60 @@ export function upgradeTower(wallet,expectedLevel,now){
 export function upgradeHouse(wallet,id,expectedLevel,now){
  const house=kingdomHouses(wallet).find(item=>item.id===id);
  if(!house)throw Error('Choose one of your houses.');
- const {level,construction}=housePlan(house,now);
+ const {level,construction,next}=housePlan(house,now);
  if(construction)throw Error('This house is already under construction.');
- if(level!==expectedLevel||level===2)throw Error('This house is already Level 2.');
- payUpgrade(wallet,houseUpgrade.mana);
- house.upgrade={startedAt:now,endsAt:now+houseUpgrade.buildMs};
- return {id,level:2,construction:house.upgrade};
+ if(!next)throw Error('This house is at its highest level.');
+ if(level!==expectedLevel)throw Error('Your house level changed. Check its new upgrade.');
+ if(next.towerLevel&&towerPlan(wallet,now).level<next.towerLevel)throw Error('Requires Tower Level '+next.towerLevel+'.');
+ payUpgrade(wallet,next.mana,next.coins);
+ house.upgrade={level:level+1,startedAt:now,endsAt:now+next.buildMs};
+ return {id,level:level+1,construction:house.upgrade};
 }
 
-export function buildingFootprint({x,z,rotation,kind='house'},margin=0){
+export function buildingFootprint({x,z,rotation=0,kind='house'},margin=0){
  const {width,depth}=buildingSpecs[kind].size;
- const wide=rotation%2===0;
- const halfWidth=(wide?width:depth)*.5+margin,halfDepth=(wide?depth:width)*.5+margin;
- return {left:x-halfWidth,right:x+halfWidth,back:z-halfDepth,front:z+halfDepth};
+ const angle=rotation*Math.PI/2,c=Math.cos(angle),s=Math.sin(angle),w=width/2+margin,d=depth/2+margin;
+ const dx=Math.abs(c)*w+Math.abs(s)*d,dz=Math.abs(s)*w+Math.abs(c)*d;
+ return {x,z,c,s,w,d,left:x-dx,right:x+dx,back:z-dz,front:z+dz};
 }
-const overlaps=(a,b)=>a.left<b.right&&a.right>b.left&&a.back<b.front&&a.front>b.back;
+export function insideFootprint({x,z},box){
+ if(box.c===undefined)return treeWithin({x,z},box);
+ const dx=x-box.x,dz=z-box.z;
+ return Math.abs(dx*box.c-dz*box.s)<=box.w&&Math.abs(dx*box.s+dz*box.c)<=box.d;
+}
+function projectsInto(a,b){
+ const dx=b.x-a.x,dz=b.z-a.z;
+ const aligned=Math.abs(a.c*b.c+a.s*b.s),cross=Math.abs(a.c*b.s-a.s*b.c);
+ return Math.abs(dx*a.c-dz*a.s)<a.w+aligned*b.w+cross*b.d&&
+  Math.abs(dx*a.s+dz*a.c)<a.d+cross*b.w+aligned*b.d;
+}
 export const towerFootprint={left:towerPlot.x-1.67,right:towerPlot.x+1.67,back:-1.67,front:1.92};
+const towerArea={x:towerPlot.x,z:(towerFootprint.back+towerFootprint.front)/2,w:1.67,d:(towerFootprint.front-towerFootprint.back)/2,c:1,s:0};
+const overlaps=(a,b)=>projectsInto(a,b)&&projectsInto(b,a);
 // Retain the trail for resident and visitor traffic.
 function crossesTrail(box){
  for(let i=0;i<trailCorners.length;i++){
   const [x,z]=trailCorners[i],[nextX,nextZ]=trailCorners[(i+1)%trailCorners.length];
   for(let j=0;j<=8;j++){
    const a=x+(nextX-x)*j/8,b=z+(nextZ-z)*j/8;
-   if(a>box.left&&a<box.right&&b>box.back&&b<box.front)return true;
+   if(insideFootprint({x:a,z:b},box))return true;
   }
  }
  return false;
 }
 export function plotTrees(buildings,removed=[],bounds=null){
  const gone=new Set(removed),footprints=buildings.map(building=>buildingFootprint(building,.14));
- return kingdomForest.filter(tree=>!gone.has(tree.id)&&(!bounds||treeWithin(tree,bounds))&&!footprints.some(box=>treeWithin(tree,box)));
+ return kingdomForest.filter(tree=>!gone.has(tree.id)&&(!bounds||treeWithin(tree,bounds))&&!footprints.some(box=>insideFootprint(tree,box)));
 }
 
 export function buildingPlacementError(buildings,proposal,bounds=plotBounds,trees=[]){
  const {x,z,rotation}=proposal;
- if(!Number.isFinite(x)||!Number.isFinite(z)||!Number.isInteger(rotation)||rotation<0||rotation>3)return 'Choose a position on your plot.';
+ if(!Number.isFinite(x)||!Number.isFinite(z)||typeof rotation!=='number'||!Number.isInteger(rotation*2)||rotation<0||rotation>=4)return 'Choose a position on your plot.';
  const box=buildingFootprint(proposal,.06);
  if(box.left<bounds.left||box.right>bounds.right||box.back<bounds.back||box.front>bounds.front)return 'Keep the building inside your plot.';
  const space=buildingFootprint(proposal,.22);
- if(overlaps(space,towerFootprint)||buildings.some(building=>overlaps(space,buildingFootprint(building,.09))))return 'There’s already a building here.';
- if(trees.some(tree=>treeWithin(tree,buildingFootprint(proposal,tree.radius+.10))))return 'Clear the tree before placing here.';
+ if(overlaps(space,towerArea)||buildings.some(building=>overlaps(space,buildingFootprint(building,.09))))return 'There’s already a building here.';
+ if(trees.some(tree=>insideFootprint(tree,buildingFootprint(proposal,tree.radius+.10))))return 'Clear the tree before placing here.';
  if(crossesTrail(buildingFootprint(proposal,trailClearance)))return 'Leave the walking trail clear.';
  return '';
 }
@@ -297,8 +325,9 @@ export function gemMineBuildError({tower,gemMines,storage}){
 export function buildGemMine(wallet,args,now){
  const plot=kingdomStats(wallet,now),problem=gemMineBuildError(plot);
  if(problem)throw Error(problem);
+ if(plot.mana<gemMine.mana)throw Error('You need '+gemMine.mana+' Mana to build a Gem Mine.');
  const kind='gem-mine',mine={...buildAt(wallet,plot,args,kind,buildingSpecs[kind].price),collectedAt:now};
- wallet.kingdom={...wallet.kingdom,gemMines:[mine]};
+ wallet.kingdom={...wallet.kingdom,gemMines:[mine],mana:plot.mana-gemMine.mana};
  return mine;
 }
 export function gemMinePlan(mine,now=Date.now()){
