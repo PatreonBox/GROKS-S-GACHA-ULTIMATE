@@ -254,6 +254,31 @@ test('power rankings backfill distinct owned cards and sort by trained card stat
  assert.equal(privateStats.profile.privateRank,false);
 });
 
+test('ranked profiles respect privacy and Trading is gated at Level 15',async()=>{
+ const f=fixture(),viewer=await f.open('profile-viewer'),owner=await f.open('profile-owner');
+ const [row]=await pool('Easy');
+ f.addCards(owner.id,[row]);
+ f.store(owner.id,w=>{w.playerXp=playerXpAt(15)});
+ f.store(viewer.id,w=>{w.playerXp=playerXpAt(14)});
+ const profile=who=>f.call('/api/players?player='+owner.id,who);
+ const {player,stats}=await (await profile(viewer)).json();
+ assert.equal(player.id,owner.id);
+ assert.equal(player.place,1);
+ assert.equal(stats.level,15);
+ assert.equal(stats.copies,2);
+ assert.equal((await f.call('/api/players?view=trading',viewer)).status,403);
+ const {rows}=await (await f.call('/api/players?view=trading',owner)).json();
+ assert.deepEqual(rows.map(row=>row.id),[owner.id]);
+ assert.equal((await f.command(owner,'profile.privacy',{hidden:'yes'})).status,400);
+ assert.equal((await f.command(owner,'profile.privacy',{hidden:true})).status,200);
+ assert.equal((await profile(viewer)).status,403);
+ assert.equal((await profile(owner)).status,200);
+ const standings=await (await f.call('/api/players',viewer)).json();
+ assert.equal(standings.rows[0].profileHidden,true);
+ assert.equal((await f.command(owner,'profile.privacy',{hidden:false})).status,200);
+ assert.equal((await profile(viewer)).status,200);
+});
+
 test('Extreme bands outrank the prior trained band and the highest pulls are rarer',async()=>{
  const rows=await pool('Extreme Demon');
  const grief=rows.find(row=>row[10]===1),thinking=rows.find(row=>row[0]===119544028);
@@ -307,6 +332,49 @@ test('house placement validates the plot and spends coins only once per request'
  assert.equal(upgraded.wallet.coins,200_000);
  assert.equal(kingdomStats(upgraded.wallet).tower.limit,6);
  assert.equal((await f.command(player,'kingdom.house',{x:-8,z:-7,rotation:0,expectedPrice:200_000})).status,200);
+});
+
+test('Mana Forges give a placement grant and collect server-timed mana while land expands five times',async t=>{
+ const start=Date.now();
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),player=await f.open(),bank=112_000_000_000;
+ const spot={x:-7.54,z:7.22,rotation:1,expectedPrice:120_000};
+ assert.equal((await f.command(player,'kingdom.forge',spot)).status,400);
+ f.store(player.id,w=>{w.coins=bank;w.playerXp=playerXpAt(8)});
+ const requestId=crypto.randomUUID();
+ const results=await Promise.all([f.command(player,'kingdom.forge',spot,requestId),f.command(player,'kingdom.forge',spot,requestId)]);
+ for(const response of results)assert.equal(response.status,200);
+ const {wallet,result}=await results[0].json(),id=result.forge.id;
+ assert.equal(wallet.coins,bank-120_000);
+ assert.equal(wallet.kingdom.mana,100);
+ assert.equal(wallet.kingdom.forges.length,1);
+ assert.equal((await f.command(player,'kingdom.house',{...spot,expectedPrice:50_000})).status,400);
+ t.mock.timers.setTime(start+4999);
+ assert.equal((await f.command(player,'kingdom.collect',{id})).status,400);
+ t.mock.timers.setTime(start+5520);
+ const claim=crypto.randomUUID(),collects=await Promise.all([f.command(player,'kingdom.collect',{id},claim),f.command(player,'kingdom.collect',{id},claim)]);
+ for(const response of collects){
+  assert.equal(response.status,200);
+  const collection=await response.json();
+  assert.equal(collection.result.earned,5);
+  assert.equal(collection.wallet.kingdom.mana,105);
+ }
+ assert.equal((await f.command(player,'kingdom.collect',{id})).status,400);
+ const outer={x:13,z:8,rotation:0,expectedPrice:120_000};
+ assert.equal((await f.command(player,'kingdom.forge',outer)).status,400);
+ let spent=120_000;
+ for(let level=0;level<5;level++){
+  const response=await f.command(player,'kingdom.expand',{level});
+  assert.equal(response.status,200);
+  const expanded=await response.json();
+  spent+=10_000_000*10**level;
+  assert.equal(expanded.wallet.coins,bank-spent);
+  assert.equal(kingdomStats(expanded.wallet).land.size,1.25**(level+1));
+ }
+ assert.equal((await f.command(player,'kingdom.expand',{level:5})).status,400);
+ const second=await f.command(player,'kingdom.forge',outer);
+ assert.equal(second.status,200);
+ assert.equal((await f.wallet(player)).kingdom.mana,205);
 });
 
 test('visitor ratings have ten anonymous slots and the lot geometry can reach five stars',()=>{
@@ -405,7 +473,10 @@ test('minigame rewards are derived by replaying legal controls',async()=>{
  assert.equal(partial.status,200);
  const saved=await f.command(player,'drill.finish',{token:drill.token,proof:{from:140,ticks,trace:[]}});
  assert.equal(saved.status,200);
- assert.equal((await saved.json()).wallet.drillBest[row[0]].saw,run.score);
+ const training=await saved.json();
+ assert.equal(training.wallet.drillBest[row[0]].saw,run.score);
+ assert.equal(training.result.playerXpEarned,Math.min(36,run.score*2)+8);
+ assert.equal(training.wallet.playerXp,playerXpAt(4)+training.result.playerXpEarned);
  assert.equal((await f.command(player,'drill.finish',{token:drill.token,proof:{ticks,trace:[]}})).status,400);
  const remix=findRemix(6508283),course=makeCourse(remix),runner=newAttempt(course);
  const attempt=await f.command(player,'remix.begin',{id:remix.id}).then(res=>res.json()).then(data=>data.result);

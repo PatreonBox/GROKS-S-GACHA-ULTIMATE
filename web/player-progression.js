@@ -23,16 +23,16 @@ export function awardPackXp(wallet,packId,count,now){
  return {xp,capped:count-packs};
 }
 
-const levelStart=level=>120*level+17*level*(level-1)+level*(level-1)*(2*level-1)/3;
+export const playerXpAtLevel=level=>120*level+17*level*(level-1)+level*(level-1)*(2*level-1)/3;
 export function playerProgress(totalXp){
  const total=Number.isSafeInteger(totalXp)&&totalXp>0?totalXp:0;
  let low=0,high=1;
- while(levelStart(high)<=total)high*=2;
+ while(playerXpAtLevel(high)<=total)high*=2;
  while(high-low>1){
   const mid=Math.floor((low+high)/2);
-  if(levelStart(mid)<=total)low=mid;else high=mid;
+  if(playerXpAtLevel(mid)<=total)low=mid;else high=mid;
  }
- const xp=total-levelStart(low),goal=levelStart(low+1)-levelStart(low);
+ const xp=total-playerXpAtLevel(low),goal=playerXpAtLevel(low+1)-playerXpAtLevel(low);
  return {level:low,xp,goal,total,ratio:xp/goal};
 }
 

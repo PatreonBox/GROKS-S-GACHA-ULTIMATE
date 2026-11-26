@@ -174,7 +174,8 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   busy=true;form.querySelector('[data-feed-submit]').disabled=true;
   try{
    const result=await feedLevelCard({targetId:card.id,sourceId:Number(form.elements.source.value),count:Number(form.elements.copies.value)});
-   feedback=card.row[1]+' gained '+numberXP(result.xp)+' XP'+(result.after>result.before?' and reached level '+result.after:'')+'.';
+   feedback=card.row[1]+' gained '+numberXP(result.xp)+' card XP'+(result.after>result.before?' and reached level '+result.after:'')+
+    ' · +'+numberXP(result.playerXpEarned)+' player XP';
    sound.play(result.after>result.before?'trainWin':'perfect',{level:.78});
    applyWallet(result.wallet);
    if(visible){announce(feedback);await refreshCollection()}
@@ -203,8 +204,9 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
    onFinish:async(token,proof)=>{
     const result=await finishDrill(token,proof);applyWallet(result.wallet);
     const old=statsFor(card.row,{...result.progress,[kind]:result.progress[kind]-result.gained}),next=statsFor(card.row,result.progress);
-    const growth=(result.growth.xp?'+'+result.growth.xp+' XP':'')+
-     (result.growth.after>result.growth.before?' · Level '+result.growth.after:'');
+    const growth=[result.growth.xp?'+'+result.growth.xp+' card XP':'',
+     result.growth.after>result.growth.before?'Card Level '+result.growth.after:'',
+     result.playerXpEarned?'+'+result.playerXpEarned+' player XP':''].filter(Boolean).join(' · ');
     if(!result.gained)return [result.newBest?'New personal best':'',growth].filter(Boolean).join(' · ')||'No upgrade this run';
     const delta=kind==='endurance'?'+'+(result.gained*.1).toFixed(1)+'s durability · +'+stat(next.maxHp-old.maxHp)+' HP':'+'+result.gained+' '+(kind==='spike'?'spike':'saw')+(result.gained===1?'':'s')+' · +'+stat(next.attack-old.attack)+' ATK';
     const gains=delta+(growth?' · '+growth:'');feedback=card.row[1]+' gained '+gains;return gains;

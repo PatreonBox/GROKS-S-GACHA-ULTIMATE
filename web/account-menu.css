@@ -66,6 +66,9 @@
 .player-dialog-head h2{margin:0;color:#f1f7ff;font:800 30px/1 Cond,sans-serif}
 .player-dialog-head button{width:38px;height:38px;font-size:24px}
 .player-dialog-body{padding:17px 18px}
+.profile-privacy{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid #4b5f78;border-radius:8px;background:#19283a;cursor:pointer}
+.profile-privacy small{display:block;color:#becfe5}
+.profile-privacy input{width:21px;height:21px;flex:none;accent-color:#92e5d6}
 .player-dialog .player-menu-heading .player-avatar{width:56px;height:56px}
 .player-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:17px 0 0}
 .player-stats>div{padding:10px;border:1px solid #394d67;border-radius:9px;background:#111927}

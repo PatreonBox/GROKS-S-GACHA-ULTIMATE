@@ -64,6 +64,19 @@
 .player-ranks-table tr.mine{background:#22525954}
 .rank-player{display:flex;align-items:center;gap:9px}
 .rank-player>b{overflow-wrap:anywhere}
+.ranked-entry{border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.players-podium .ranked-entry{width:100%;padding-inline:4px;border-bottom:1px solid #8c94b028}
+.ranked-entry:hover,.ranked-entry:focus-visible{color:#adf0ff}
+.rank-player.ranked-entry{padding:2px 0;min-height:38px}
+.rank-place{color:var(--rank-metal,#d0d8ee);font-weight:800;font-variant-numeric:tabular-nums}
+[data-place="1"]{--rank-metal:#ffd475}
+[data-place="2"]{--rank-metal:#d8e9ff}
+[data-place="3"]{--rank-metal:#f4ae88}
+.profile-rank[data-place] b{color:var(--rank-metal,#e0eefc)}
+.ranked-profile-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:11px;margin-bottom:14px}
+.ranked-profile-heading>strong{overflow-wrap:anywhere;font-size:1.2rem}
+.ranked-profile-heading .rank-avatar{width:51px;height:51px}
+.ranked-profile-heading .profile-rank{margin:0}
 @media(max-width:850px) and (min-width:681px){
  .players-podium .rank-row{grid-template-columns:24px 30px minmax(0,1fr) auto;gap:5px}
  .players-podium .rank-avatar{width:28px;height:28px}

@@ -1,12 +1,13 @@
 main:has(#kingdomRoom:not([hidden])){
- width:min(1700px,100%);padding-inline:clamp(12px,2.4vw,42px);
+ width:min(2050px,100%);padding-inline:clamp(10px,1.6vw,29px);
 }
 .kingdom-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 13px}
 .kingdom-heading h1{margin:0}
 .kingdom-summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .kingdom-summary>span{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:7px;border:1px solid #50627a;background:#192434;font-size:13px}
-.kingdom-value img,.kingdom-placement-copy img,.build-price img,.build-rating img{width:16px;height:16px;flex:none;object-fit:contain}
+.kingdom-value img,.kingdom-mana img,.kingdom-placement-copy img,.build-price img,.build-rating img,.land-expansion img,.build-catalog img{width:16px;height:16px;flex:none;object-fit:contain}
 .kingdom-value b{margin-left:4px;color:#ffdc87;font-variant-numeric:tabular-nums}
+.kingdom-mana b{margin-left:4px;color:#8eeaff;font-variant-numeric:tabular-nums}
 .kingdom-quality b{min-width:4.9ch;color:#fcdd94;white-space:nowrap;font-variant-numeric:tabular-nums}
 .kingdom-stars{--star-size:20px;display:flex;gap:3px;align-items:center}
 .kingdom-stars>span,.kingdom-stars img{position:relative;display:block;width:var(--star-size);height:var(--star-size);max-width:none;object-fit:contain}
@@ -89,7 +90,7 @@ main:has(#kingdomRoom:not([hidden])){
 .build-viewport canvas:active{cursor:grabbing}
 .build-viewport canvas:focus-visible{outline:2px solid #8be1bf;outline-offset:-3px}
 .build-viewport>span{position:absolute;inset:auto 0 6px;text-align:center;color:#c5d6d8;font-size:.69rem;pointer-events:none}
-.build-viewport:not(:has([data-house-renderer]))>span{visibility:hidden}
+.build-viewport:not(:has([data-building-renderer]))>span{visibility:hidden}
 .build-viewport p{position:absolute;inset:calc(50% - .8rem) 5px auto;margin:0;text-align:center;font-size:.8rem}
 .build-option-info{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:8px;padding:5px 7px 5px 0}
 .build-option-info h3{margin:0;font:800 30px/1 Cond,sans-serif}
@@ -98,6 +99,14 @@ main:has(#kingdomRoom:not([hidden])){
 .build-rating{color:#c6d7e4}
 .build-option-info .primary{align-self:stretch;margin-top:6px;min-height:42px;padding:6px}
 .build-option-info .primary:disabled{opacity:.62;cursor:not-allowed}
+.build-catalog{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}
+.build-catalog button,.land-expansion button,.land-expansion button span{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.build-catalog button[aria-pressed="true"]{background:#293d49;border-color:#73b9c7;color:#e4fbff}
+.build-catalog small{font-size:.7rem;color:#b1c4d8}
+.land-expansion{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;margin-top:9px;padding:9px 10px;border:1px solid #465c70;border-radius:8px;background:#152231}
+.land-expansion small{display:block;color:#bccfe1}
+.land-expansion button{border-color:#627b61;color:#e0f6bc}
+.land-expansion button span{color:#ffcf84}
 .build-menu-footer:has(p:empty):not(:has(button:not([hidden]))){display:none}
 .build-menu-footer{margin-top:10px;flex-wrap:wrap}
 .build-menu-footer p{margin:0;color:#c6d4e4;font-size:.81rem}
@@ -120,6 +129,9 @@ main:has(#kingdomRoom:not([hidden])){
 .kingdom-detail [data-plot-state]{color:#baf3dc;font-size:13px;font-weight:700}
 .kingdom-detail p{margin:5px 0;color:#bfcce0;font-size:13px}
 .kingdom-detail a{display:inline-flex;gap:3px;align-items:center;color:#aaf5d4;font-size:13px;font-weight:750}
+.kingdom-detail .mana-claim{margin:3px 0;color:#a5f2ff;border-color:#6b9fc1;background:#21394d}
+.kingdom-detail .kingdom-notice{color:#91e6f7}
+.kingdom-notice:empty{display:none}
 .kingdom-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;padding:0}
 .kingdom-stats>div{display:flex;min-width:0;flex-direction:column;justify-content:center;gap:6px;padding:11px 13px}
 .kingdom-stats>div+div{border-inline-start:1px solid #3c4658}

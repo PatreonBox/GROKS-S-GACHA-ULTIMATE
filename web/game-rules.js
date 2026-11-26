@@ -12,7 +12,7 @@ import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnloc
 import {replayDrill,replayRemix} from './game-replay.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildHouse,towerPlan,upgradeTower} from './kingdom-rules.js';
+import {buildForge,buildHouse,collectForge,expandLand,towerPlan,upgradeTower} from './kingdom-rules.js';
 
 export function newWallet() {
  return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
@@ -27,6 +27,7 @@ function requireLevel(wallet,level,name){
 const gatedActions={
  'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom',
+ 'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom',
  'upgrade.buy':'upgrades','card.feed':'training','drill.begin':'training',
  'card.merge':'merge','remix.begin':'arcade','army.begin':'army'
 };
@@ -158,6 +159,13 @@ const rules={
   awardPlayerXp(w,55);
   return {house};
  }},
+ 'kingdom.forge':{run:({w,args,now})=>({forge:buildForge(w,args,now)})},
+ 'kingdom.collect':{run:({w,args,now})=>collectForge(w,args.id,now)},
+ 'kingdom.expand':{run:({w,args})=>expandLand(w,args.level)},
+ 'profile.privacy':{run:({w,args})=>{
+  requireRule(typeof args.hidden==='boolean','Choose a profile visibility setting.');
+  w.profileHidden=args.hidden;
+ }},
  'kingdom.tower':{run:({w,args})=>{
   const plan=towerPlan(w);
   if(plan.next)requireLevel(w,towerPlayerLevel(plan.level+1),'Tower Level '+(plan.level+1));
@@ -197,8 +205,9 @@ const rules={
  'card.feed':{cards:true,run:({w,records,changes,args})=>{
   const result=applyFeeding(w,records,args);
   changes.set(result.source.id,result.source);
-  awardPlayerXp(w,Math.min(35,result.consumed*3));
-  return result;
+  const playerXpEarned=Math.min(35,result.consumed*3);
+  awardPlayerXp(w,playerXpEarned);
+  return {...result,playerXpEarned};
  }},
  'card.claim':{cards:true,prepare:async ({tier,ids},getPool)=>{
   requireRule(within(tier,1,cardCategories.length-1)&&Array.isArray(ids)&&ids.length>0&&ids.length<=20000&&ids.every(levelId),
@@ -282,8 +291,9 @@ const rules={
   requireRule(drill&&Number.isInteger(drill.seed)&&records.some(c=>c.id===drill.id&&c.copies>0),'Start a new training run.');
   const score=replayDrill(drill,proof,now).run.score;
   const result=grantTraining(w,token,score,now,drill.capacity);
-  awardPlayerXp(w,Math.min(36,score*2)+(result.newBest?8:0));
-  return result;
+  const playerXpEarned=Math.min(36,score*2)+(result.newBest?8:0);
+  awardPlayerXp(w,playerXpEarned);
+  return {...result,playerXpEarned};
  }},
  'remix.begin':{run:({w,args:{id},now})=>{
   requireRule(levelId(id)&&findRemix(id),'Choose a featured level.');

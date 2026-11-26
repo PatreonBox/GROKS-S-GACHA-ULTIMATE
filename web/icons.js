@@ -1,4 +1,5 @@
 const paths={
+ exchange:'<path d="M3 8h17m-4-4 4 4-4 4M21 16H4m4-4-4 4 4 4"/>',
  tower:'<path d="M5 21h14M7 20V9L12 3l5 6v11M5 9h14m-8 11v-5h2v5M12 11h.01"/>',
  box:'<path d="m12 2 8.7 5v10L12 22l-8.7-5V7L12 2Zm0 10 8.7-5M12 12 3.3 7M12 12v10"/>',
  pan:'<path d="M12 3v18m-9-9h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/>',

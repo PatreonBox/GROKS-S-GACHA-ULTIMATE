@@ -63,7 +63,7 @@ function drawTierNav() {
    return '<a class="tier-link standard-'+slug+(active?' selected':'')+'" href="#stars/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/'+slug+'.webp" alt=""><span><strong>'+tier.name+'</strong><small>'+range+' '+(range==='1'?'star':'stars')+'</small></span></a>';
   }).join('');
  }
- const nav=$('tierNav');nav.hidden=playerRanks()||['saved','gacha','battle','kingdom'].includes(section)||isStarList();
+ const nav=$('tierNav');nav.hidden=playerRanks()||['saved','gacha','battle','kingdom','trading'].includes(section)||isStarList();
  if(nav.hidden)return;
  nav.innerHTML=Object.entries(tierNames).map(([slug, label])=>{
   const meta=seed.demonTiers?.[slug],active=section==='demons'&&activeTier===slug;
@@ -79,10 +79,10 @@ function setSection(route){
  document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===section);if(b.dataset.tab===section)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
  $('showcase').hidden=section!=='leaderboard'||playerRanks();drawTierNav();
  ranks.show(section==='leaderboard'?(playerRanks()?'full':'spotlight'):null);
- const inArcade=['gacha','battle','kingdom'].includes(section);
+ const inArcade=['gacha','battle','kingdom','trading'].includes(section);
  document.querySelector('.board').hidden=inArcade||playerRanks();
  const blocked=arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null,selected.pack);
- guides.select(blocked?false:sectionGuideId(section,activeTier));
+ guides.select(blocked||section==='trading'?false:sectionGuideId(section,activeTier));
  if(inArcade||playerRanks()){serial++;queryAbort?.abort();return}
  $('sectiontag').textContent=isStarList()?'STAR LEVELS':section==='demons'?'DEMON LISTS':section==='saved'?'YOUR COLLECTION':'GEOMETRY DASH';
  $('boardTitle').textContent=isStarList()?starTiers[activeTier].name+' levels':section==='demons'?tierNames[activeTier]+' Demons':section==='saved'?'Saved levels':'Level leaderboard';
@@ -296,7 +296,7 @@ async function start(){
    sound,initialWallet:session.wallet,
    localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
    openLevel:row=>{storeRows([row]);showDetails(row[0])},
-   announce,onGuide:guides.select,
+   announce,onGuide:guides.select,showTrading:ranks.trading,
   });
   init();
  }catch(error){

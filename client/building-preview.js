@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
-export function createHousePreview(canvas,house){
+export function createBuildingPreview(canvas,building){
  const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.8));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
  renderer.toneMapping=THREE.ACESFilmicToneMapping;
  renderer.toneMappingExposure=1.12;
 
- const scene=new THREE.Scene(),model=house.clone();
+ const scene=new THREE.Scene();
+ let model=building.clone(),source=building;
  const camera=new THREE.OrthographicCamera(-3,3,3,-3,.1,32);
  camera.position.set(5.8,4.5,8.5);
  const sun=new THREE.DirectionalLight('#ffe5c5',2.75);
@@ -42,6 +43,12 @@ export function createHousePreview(canvas,house){
   renderer.setSize(width,height,false);
   render();
  }
+ function setModel(next){
+  if(next===source)return;
+  source=next;
+  model.removeFromParent();model=source.clone();scene.add(model);
+  render();
+ }
  const size=new ResizeObserver(resize);
  size.observe(canvas);
  const listeners=new AbortController();
@@ -54,9 +61,9 @@ export function createHousePreview(canvas,house){
   controls.update();
  },{signal:listeners.signal});
  resize();
- canvas.dataset.houseRenderer='webgl';
- return {resize,dispose(){
-  delete canvas.dataset.houseRenderer;
+ canvas.dataset.buildingRenderer='webgl';
+ return {resize,setModel,dispose(){
+  delete canvas.dataset.buildingRenderer;
   listeners.abort();size.disconnect();controls.dispose();
   for(const base of [pedestal,turf]){
    base.geometry.dispose();base.material.dispose();

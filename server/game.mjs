@@ -4,8 +4,9 @@ import {campaignStages,stageCleared} from '../web/campaign.js';
 import {mineEarnings,settleMine} from '../web/mine-economy.js';
 import {createMergePlanner,gemTenths} from '../web/card-economy.js';
 import {applySaveTransfer,prepareSaveTransfer} from './save-transfer.mjs';
-import {collectionPower,powerIsCurrent,playerRank,playerStandings,rankingVersion} from './player-rankings.mjs';
-import {playerProgress} from '../web/player-progression.js';
+import {collectionPower,powerIsCurrent,playerRank,rankedPlayer,playerStandings,rankingVersion} from './player-rankings.mjs';
+import {playerProgress,playerXpAtLevel} from '../web/player-progression.js';
+import {featureLevel} from '../web/level-access.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 
 const guestCookie='__Host-gdlb-save';
@@ -100,7 +101,7 @@ async function inventory(db,id){
  return results.map(entry=>JSON.parse(entry.card));
 }
 
-async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,admin}){
+async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,admin,knownRank}){
  const wallet=normalizeWallet(JSON.parse(record.wallet));
  const {results}=await db.prepare(`SELECT level_id,json_extract(card,'$.copies') AS copies
   FROM game_cards WHERE player_id=?`).bind(record.player_id).all();
@@ -110,7 +111,7 @@ async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,adm
   copies+=Math.max(0,entry.copies||0);
  }
  const privateRank=Boolean(admin||record.leaderboard_excluded||wallet.legacyTransfer);
- const rank=privateRank?null:await playerRank(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record.player_id,inventory});
+ const rank=privateRank?null:knownRank??await playerRank(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record.player_id,inventory});
  return {coins:wallet.coins+mineEarnings(wallet).coins,gems:wallet.gems,unique,copies,
   level:playerProgress(wallet.playerXp).level,rank,privateRank,
   power:powerIsCurrent(record)?record.collection_power:collectionPower(await inventory(db,record.player_id),wallet),
@@ -304,7 +305,23 @@ export function gameRoutes(readJson,hasArt){
     return json(body,status);
    }
    const session=await identity(request,db,initial,owner);
-   if(url.pathname==='/api/players')return await standings(request,db,session,chatgpt,adminOwner,requiresSignIn);
+   if(url.pathname==='/api/players'){
+    const target=url.searchParams.get('player');
+    if(target!==null&&request.method==='GET'){
+     if(!uuid.test(target))reject('This player profile is unavailable.',404);
+     const viewer=await profile(db,session.owner,false);
+     const options={adminOwner,discordOnly:Number(requiresSignIn),playerId:viewer?.player_id||'',inventory};
+     const player=await rankedPlayer(db,options,target);
+     if(!player)reject('This player profile is unavailable.',404);
+     const record=await one(db,'SELECT wallet,player_id,owner,leaderboard_excluded,collection_power,power_version FROM game_profiles WHERE player_id=?',target);
+     const saved=record&&JSON.parse(record.wallet);
+     if(!saved||record.leaderboard_excluded||record.owner===adminOwner||saved.legacyTransfer)reject('This player profile is unavailable.',404);
+     if(saved.profileHidden&&!player.mine)reject('This player keeps their profile private.',403);
+     const stats=await profileStats(db,record,await getCollectibleIds(),{...options,knownRank:player.place});
+     return json({player,stats});
+    }
+    return await standings(request,db,session,chatgpt,adminOwner,requiresSignIn,request.method==='GET'&&view==='trading');
+   }
    if(isTransfer)return json({...await transferSave(db,session,await readBody(request,maxTransferBody),getPool),...account});
    if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt,admin),...account});
    const record=await profile(db,session.owner,initial);
@@ -322,12 +339,18 @@ export function gameRoutes(readJson,hasArt){
  };
 }
 
-async function standings(request,db,session,accountSignIn,adminOwner,discordOnly){
+async function standings(request,db,session,accountSignIn,adminOwner,discordOnly,trading){
  const record=await profile(db,session.owner,false);
  const wallet=record&&JSON.parse(record.wallet);
  const legacyProgress=Boolean(wallet?.legacyTransfer);
  const privateProfile=Boolean(record?.leaderboard_excluded||(adminOwner&&session.owner===adminOwner));
  const canPost=Boolean(record&&!privateProfile&&!legacyProgress&&(session.signedIn||!accountSignIn));
+ if(trading){
+  const level=featureLevel('trading');
+  if(playerProgress(wallet?.playerXp).level<level)reject('Reach Level '+level+' to unlock Trading.',403);
+  const rows=await playerStandings(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record.player_id,inventory},playerXpAtLevel(level));
+  return json({rows});
+ }
  if(request.method==='POST'){
   if(privateProfile)reject('This profile is excluded from public player rankings.',403);
   if(legacyProgress)reject('Transferred browser progress is playable online. Public rankings use progress earned online.',403);

@@ -179,7 +179,7 @@ function leafSpray(){
  return geometry;
 }
 
-function treeGrove(group){
+function treeGrove(group,bounds){
  const random=randomFor(2011),matrix=new THREE.Object3D(),up=vertex(0,1,0),out=vertex(0,0,1);
  const limbParts=[],crownParts=[],leaves=[];
  const palettes=[
@@ -188,10 +188,13 @@ function treeGrove(group){
  ].map(list=>list.map(color=>new THREE.Color(color)));
  const trees=[];
  for(let i=0;i<56;i++){
-  const angle=i/56*tau+(random()-.5)*.21,radius=17.6+random()*27;
-  trees.push([Math.cos(angle)*radius,Math.sin(angle)*radius,2.7+random()*3.80,Math.floor(random()*palettes.length)]);
+  const angle=i/56*tau+(random()-.5)*.21,x=Math.cos(angle),z=Math.sin(angle);
+  const edge=Math.min((x<0?-bounds.left:bounds.right)/Math.abs(x),(z<0?-bounds.back:bounds.front)/Math.abs(z));
+  const radius=edge+2.3+random()*23;
+  trees.push([x*radius,z*radius,2.7+random()*3.80,Math.floor(random()*palettes.length)]);
  }
- trees.push([-12.8,-5.1,5,0],[10,-11.9,5.3,1],[-11.9,-12.8,5.7,2],[14.2,-4.6,4.3,3],[13.8,6.4,3.9,0],[-14.4,8.8,4.45,1]);
+ trees.push([bounds.left-2,-5.1,5,0],[10,bounds.back-2.1,5.3,1],[-11.9,bounds.back-3,5.7,2],
+  [bounds.right+2,-4.6,4.3,3],[bounds.right+2.3,6.4,3.9,0],[bounds.left-2.4,8.8,4.45,1]);
  function limb(a,b,radius){
   const delta=b.clone().sub(a);
   matrix.position.copy(a).lerp(b,.5);
@@ -252,8 +255,8 @@ function treeGrove(group){
  group.add(trunks,crowns,sprouts);
 }
 
-function vegetation(group){
- treeGrove(group);
+function vegetation(group,bounds){
+ treeGrove(group,bounds);
  const random=randomFor(2015),matrix=new THREE.Object3D();
  const rocks=new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1,0),material('#ffffff',{flatShading:true}),39);
  for(let i=0;i<rocks.count;i++){
@@ -283,11 +286,11 @@ function vegetation(group){
  group.add(grass);
 }
 
-export function makeLandscape(loader,path){
+export function makeLandscape(loader,path,bounds){
  const ground=new THREE.Group();
  const surface=makeGround(loader);
  ground.add(surface,makeTrail(path));
- vegetation(ground);
+ vegetation(ground,bounds);
  const random=randomFor(371),hills=['#6f9f99','#6e9b97','#7a9e96','#89adab'].map(color=>material(color,{flatShading:true}));
  const geometry=new THREE.IcosahedronGeometry(1,2);
  for(let i=0;i<20;i++){

@@ -18,7 +18,7 @@ export function renderPlayerMenu(signedIn, profile) {
  document.getElementById('playerProfileRefresh').hidden=Boolean(handle);
 }
 
-export function setupPlayerMenu({loadStats, sendReport}) {
+export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) {
  const menu=document.getElementById('playerMenu');
  if(!menu)return;
  const summary=menu.querySelector('summary');
@@ -27,6 +27,8 @@ export function setupPlayerMenu({loadStats, sendReport}) {
  const collectionProgress=document.getElementById('playerCollectionProgress');
  const globalRank=document.getElementById('playerGlobalRank');
  const statsStatus=document.getElementById('playerStatsStatus');
+ const settings=document.getElementById('playerSettings'),visibility=document.getElementById('profileHidden');
+ const privacyStatus=document.getElementById('profilePrivacyStatus');
  const report=document.getElementById('bugReport');
  const form=document.getElementById('bugReportForm');
  const receiptBox=document.getElementById('bugReportReceipt');
@@ -35,7 +37,7 @@ export function setupPlayerMenu({loadStats, sendReport}) {
  const status=document.getElementById('bugReportStatus');
  const send=document.getElementById('sendBugReport');
  const fields=form.querySelector('fieldset');
- let reference,submitted=false,sending=false,statsRequest=0;
+ let reference,submitted=false,sending=false,statsRequest=0,settingsRequest=0;
 
  for(const img of document.querySelectorAll('[data-player-avatar]')){
   img.addEventListener('load',()=>{img.hidden=false;});
@@ -48,7 +50,7 @@ export function setupPlayerMenu({loadStats, sendReport}) {
   if(event.key==='Escape'&&menu.open){menu.open=false;summary.focus();}
  });
  window.addEventListener('hashchange',()=>{menu.open=false;});
- for(const dialog of [profile,report]){
+ for(const dialog of [profile,settings,report]){
   for(const button of dialog.querySelectorAll('[data-close-player-dialog]')){
    button.addEventListener('click',()=>dialog.close());
   }
@@ -74,10 +76,32 @@ export function setupPlayerMenu({loadStats, sendReport}) {
    collectionProgress.max=values.collectible||1;
    collectionProgress.value=values.unique;
    globalRank.querySelector('b').textContent=values.rank?'#'+numberFormat.format(values.rank):values.privateRank?'Private':'Unranked';
+   globalRank.dataset.place=values.rank??'';
    globalRank.hidden=false;
    stats.hidden=false;
    statsStatus.textContent='';
   }catch(error){if(request===statsRequest)statsStatus.textContent=error.message;}
+ });
+
+ document.getElementById('openPlayerSettings').addEventListener('click',async()=>{
+  menu.open=false;visibility.disabled=true;privacyStatus.textContent='Loading settings…';
+  settings.showModal();
+  const request=++settingsRequest;
+  try{
+   const hidden=await loadPrivacy();
+   if(request!==settingsRequest)return;
+   visibility.checked=hidden;visibility.disabled=false;privacyStatus.textContent='';
+  }catch(error){if(request===settingsRequest)privacyStatus.textContent=error.message}
+ });
+ visibility.addEventListener('change',async()=>{
+  const hidden=visibility.checked,request=++settingsRequest;
+  visibility.disabled=true;privacyStatus.textContent='Saving…';
+  try{
+   await savePrivacy(hidden);
+   if(request===settingsRequest)privacyStatus.textContent=hidden?'Profile is private.':'Profile is visible.';
+  }catch(error){
+   if(request===settingsRequest){visibility.checked=!hidden;privacyStatus.textContent=error.message}
+  }finally{if(request===settingsRequest)visibility.disabled=false}
  });
 
  document.getElementById('openBugReport').addEventListener('click',()=>{

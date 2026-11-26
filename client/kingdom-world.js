@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {groundHeight,makeHouse,makeLandscape,makeResident,makeSky,makeTower,residentPath} from './kingdom-model.js';
-import {createHousePreview} from './house-preview.js';
-import {houseHeight,houseSize,plotBounds,visitorSlots} from '../web/kingdom-rules.js';
+import {createBuildingPreview} from './building-preview.js';
+import {makeManaBubble,makeManaForge} from './mana-forge-model.js';
+import {buildingSpecs,forgeMinimum,forgeStored,kingdomBounds,manaIcon,visitorSlots} from '../web/kingdom-rules.js';
 
 const clamp=THREE.MathUtils.clamp;
 const frameColor='#c3e5e8';
@@ -20,17 +21,17 @@ function gridGeometry(lines){
  }
  return new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
 }
-function buildGrid(){
- const {left,right,back,front}=plotBounds,edges=[
+function buildGrid({left,right,back,front}){
+ const edges=[
   [left,back,right,back],[right,back,right,front],[right,front,left,front],[left,front,left,back]
  ],lines=[];
- for(let x=left+1;x<right;x++)lines.push([x,back,x,front]);
- for(let z=back+1;z<front;z++)lines.push([left,z,right,z]);
+ for(let x=Math.ceil(left);x<right;x++)lines.push([x,back,x,front]);
+ for(let z=Math.ceil(back);z<front;z++)lines.push([left,z,right,z]);
  const grid=new THREE.Group();
  const boundaries=new THREE.LineSegments(gridGeometry(edges),new THREE.LineBasicMaterial({color:'#d8ffe9',transparent:true,opacity:.78}));
  const tiles=new THREE.LineSegments(gridGeometry(lines),new THREE.LineBasicMaterial({color:'#e2fff1',transparent:true,opacity:.26}));
- grid.add(tiles,boundaries);grid.visible=false;
- return {grid,tiles};
+ grid.add(tiles,boundaries);tiles.visible=false;
+ return {grid,tiles,boundaries};
 }
 function ringFor(){
  const geometry=new THREE.RingGeometry(.95,1,48);
@@ -49,7 +50,7 @@ function release(root){
  parts.forEach(item=>item.dispose());
 }
 
-export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
+export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot,onCollect}){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'low-power'});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -69,19 +70,26 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  sun.shadow.normalBias=.038;sun.shadow.bias=-.00018;
  scene.add(sun);
  const loader=new THREE.TextureLoader();
- const path=residentPath(),tower=makeTower(),owner=makeResident(loader),houseModel=makeHouse();
- const {ground,surface}=makeLandscape(loader,path);
- owner.setCube(cube);scene.add(ground,tower,owner.resident);
- const {grid,tiles}=buildGrid();
- scene.add(grid);
- const ghost=houseModel.clone(),ghostFinish=new THREE.MeshStandardMaterial({
+ const path=residentPath(),tower=makeTower(),owner=makeResident(loader);
+ const models={house:makeHouse(),forge:makeManaForge()},icon=loader.load(manaIcon);
+ icon.colorSpace=THREE.SRGBColorSpace;
+ const bubbleModel=makeManaBubble(icon),bursts=[];
+ let land=0,bounds=kingdomBounds(),landscape=makeLandscape(loader,path,bounds),grid=buildGrid(bounds);
+ owner.setCube(cube);scene.add(landscape.ground,grid.grid,tower,owner.resident);
+ const ghostFinish=new THREE.MeshStandardMaterial({
   color:'#6cf7b8',emissive:'#48966c',emissiveIntensity:.4,transparent:true,opacity:.52,depthWrite:false
  });
- ghost.children.forEach(part=>{part.material=ghostFinish;part.castShadow=false;part.receiveShadow=false;part.renderOrder=3});
- const footprint=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(houseSize.width,.035,houseSize.depth)),
-  new THREE.LineBasicMaterial({color:'#d7ffbc',transparent:true,opacity:.98}));
- ghost.add(footprint);ghost.visible=false;scene.add(ghost);
- const picked=new Map(),houses=new Map(),guests=new Map(),proxyMaterial=new THREE.MeshBasicMaterial();
+ const ghostOutline=new THREE.LineBasicMaterial({color:'#d7ffbc',transparent:true,opacity:.98});
+ const ghosts={};
+ for(const [kind,model] of Object.entries(models)){
+  const ghost=model.clone(),{width,depth}=buildingSpecs[kind].size;
+  ghost.traverse(part=>{if(part.isMesh){part.material=ghostFinish;part.castShadow=false;part.receiveShadow=false;part.renderOrder=3}});
+  const foundation=new THREE.BoxGeometry(width,.035,depth),edges=new THREE.EdgesGeometry(foundation);
+  foundation.dispose();
+  ghost.add(new THREE.LineSegments(edges,ghostOutline));ghost.visible=false;scene.add(ghost);
+  ghosts[kind]=ghost;
+ }
+ const picked=new Map(),structures=new Map(),guests=new Map(),proxyMaterial=new THREE.MeshBasicMaterial();
  function hitBox(id,width,height,depth,radius){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(width,height,depth),proxyMaterial);
   mesh.visible=false;mesh.userData.id=id;scene.add(mesh);
@@ -98,20 +106,42 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  hoverRing.material.color.set('#fff0be');hoverRing.material.opacity=.60;
  scene.add(selectRing,hoverRing);
 
- function setPlot(buildings,visitors,towerLevel){
+ function setLand(next){
+  if(next===land)return;
+  land=next;bounds=kingdomBounds(land);
+  landscape.ground.removeFromParent();release(landscape.ground);
+  grid.grid.removeFromParent();release(grid.grid);
+  landscape=makeLandscape(loader,path,bounds);grid=buildGrid(bounds);
+  scene.add(landscape.ground,grid.grid);
+  const shadowSpan=bounds.right+6;
+  Object.assign(sun.shadow.camera,{left:-shadowSpan,right:shadowSpan,top:shadowSpan,bottom:-shadowSpan});
+  sun.shadow.camera.updateProjectionMatrix();
+  setBuild(build);reset();
+ }
+ function setPlot(buildings,visitors,towerLevel,landLevel=0){
+  setLand(landLevel);
   tower.getObjectByName('pennant').material.color.set(['#7ce5d9','#eeb852','#f17e57','#bb81eb','#ffe398'][towerLevel-1]);
   const buildingIds=new Set(buildings.map(house=>house.id));
   const visitorIds=new Set(visitors.map(guest=>guest.id));
-  for(const [id,model] of houses)if(!buildingIds.has(id)){
-   model.removeFromParent();removePicker('house:'+id);houses.delete(id);
+  for(const [id,structure] of structures)if(!buildingIds.has(id)){
+   structure.model.removeFromParent();structure.bubble?.removeFromParent();removePicker(structure.key);structures.delete(id);
   }
-  for(const house of buildings){
-   if(houses.has(house.id))continue;
-   const model=houseModel.clone(),height=groundHeight(house.x,house.z);
-   model.position.set(house.x,height,house.z);model.rotation.y=house.rotation*Math.PI/2;
-   scene.add(model);houses.set(house.id,model);
-   const hit=hitBox('house:'+house.id,houseSize.width,houseHeight,houseSize.depth,1.94);
-   hit.position.copy(model.position);hit.position.y+=houseHeight/2;hit.rotation.y=model.rotation.y;
+  for(const building of buildings){
+   const existing=structures.get(building.id);
+   if(existing){existing.building=building;continue}
+   const {id,x,z,rotation,kind='house'}=building,{size,height}=buildingSpecs[kind],key=kind+':'+id;
+   const model=models[kind].clone();
+   model.position.set(x,groundHeight(x,z),z);model.rotation.y=rotation*Math.PI/2;
+   scene.add(model);
+   const hit=hitBox(key,size.width,height,size.depth,1.94);
+   hit.position.copy(model.position);hit.position.y+=height/2;hit.rotation.y=model.rotation.y;
+   const structure={key,model,building};
+   if(kind==='forge'){
+    const bubble=bubbleModel.clone();
+    bubble.visible=false;bubble.children[0].userData.id='mana:'+id;
+    scene.add(bubble);structure.bubble=bubble;
+   }
+   structures.set(id,structure);
   }
   for(const [id,walker] of guests)if(!visitorIds.has(id)){
    walker.resident.removeFromParent();release(walker.resident);
@@ -130,8 +160,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  const controls=new OrbitControls(camera,canvas);
  controls.enableDamping=true;controls.dampingFactor=.12;
  controls.minPolarAngle=.43;controls.maxPolarAngle=1.38;
- controls.minDistance=5.7;controls.maxDistance=35;
- controls.maxTargetRadius=13;
+ controls.minDistance=5.7;controls.maxDistance=61;
+ controls.maxTargetRadius=23;
  controls.screenSpacePanning=false;
  controls.rotateSpeed=.58;controls.zoomSpeed=.75;controls.panSpeed=.70;
  controls.listenToKeyEvents(canvas);
@@ -151,7 +181,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  size.observe(canvas);resize();
  function reset(){
   controls.target.set(build?0:-.40,build ? .55 : 1.82,.05);
-  const distance=build?(camera.aspect<.91?31:25):camera.aspect<.91?21.2:17.8;
+  const scale=bounds.right/14;
+  const distance=(build?(camera.aspect<.91?31:27):camera.aspect<.91?22.2:19)*scale;
   const start=new THREE.Spherical(distance,build ? .93 : 1.225,.41);
   camera.position.copy(controls.target).add(offset.setFromSpherical(start));
   controls.update();controls.saveState();
@@ -159,18 +190,20 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  function setBuild(next){
   const starting=!build&&next;
   build=next;
-  grid.visible=Boolean(build);tiles.visible=Boolean(build?.snap);
-  ghost.visible=Boolean(build?.spot);
+  grid.boundaries.material.opacity=build ? .79 : .32;
+  grid.tiles.visible=Boolean(build?.snap);
+  for(const [kind,ghost] of Object.entries(ghosts))ghost.visible=Boolean(build?.kind===kind&&build.spot);
   canvas.dataset.building=String(Boolean(build));
   if(starting){hover(null);reset()}
-  if(!ghost.visible)return;
+  if(!build?.spot)return;
+  const ghost=ghosts[build.kind];
   const {x,z,rotation}=build.spot;
   ghost.position.set(x,groundHeight(x,z)+.04,z);
   ghost.rotation.y=rotation*Math.PI/2;
   const good=!build.error;
   ghostFinish.color.set(good?(build.locked?'#a2ffe2':'#60eab9'):'#fa7680');
   ghostFinish.emissive.set(good?'#48966c':'#8a292e');
-  footprint.material.color.set(good?'#c6ffb4':'#ffa9a6');
+  ghostOutline.color.set(good?'#c6ffb4':'#ffa9a6');
  }
  function panMode(on){
   controls.mouseButtons.LEFT=on?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;
@@ -195,12 +228,14 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
  function pick(event){
   const point=aim(event);
   if(!point)return null;
-  const object=ray.intersectObjects([...picked.values()].map(item=>item.mesh),false)[0]?.object;
+  const targets=[...picked.values()].map(item=>item.mesh);
+  for(const {bubble} of structures.values())if(bubble?.visible)targets.push(bubble.children[0]);
+  const object=ray.intersectObjects(targets,false)[0]?.object;
   return {...point,id:object?.userData.id};
  }
  function plot(event,lock){
   if(build.locked)return;
-  const point=aim(event)&&ray.intersectObject(surface,false)[0]?.point;
+  const point=aim(event)&&ray.intersectObject(landscape.surface,false)[0]?.point;
   onPlot(point?{x:point.x,z:point.z}:null,lock);
  }
  function hover(event){
@@ -231,7 +266,8 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
    if(build)plot(event,true);
    else{
     const hit=pick(event);
-    if(hit?.id)onSelect(hit.id);
+    if(hit?.id?.startsWith('mana:'))onCollect(hit.id.slice(5));
+    else if(hit?.id)onSelect(hit.id);
    }
   }
   fingers.delete(event.pointerId);candidate=null;
@@ -265,6 +301,31 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
   ring.position.set(x,groundHeight(x,z)+.033,z);
   ring.scale.set(marker.radius,1,marker.radius);
  }
+ function popMana(id){
+  const structure=structures.get(id);
+  if(!structure?.bubble)return;
+  const effect=bubbleModel.clone(),point=structure.bubble.position.clone();
+  scene.add(effect);bursts.push({effect,point,start:elapsed});
+ }
+ function animateMana(){
+  const now=Date.now();
+  for(const {bubble,building,model} of structures.values()){
+   if(!bubble)continue;
+   const ready=!build&&forgeStored(building,now)>=forgeMinimum;
+   if(ready&&!bubble.visible)bubble.userData.appeared=elapsed;
+   bubble.visible=ready;
+   if(!ready)continue;
+   bubble.position.copy(model.position);bubble.position.y+=4.02+(motion?0:.15*Math.sin(elapsed*3));
+   const growth=motion?1:clamp((elapsed-bubble.userData.appeared)*4,0,1);
+   bubble.scale.setScalar(motion?1:Math.max(.10,Math.sin(growth*Math.PI/2)*(1+.18*Math.sin(growth*Math.PI))));
+  }
+  for(let i=bursts.length-1;i>=0;i--){
+   const {effect,point,start}=bursts[i],progress=clamp((elapsed-start)*2.4,0,1);
+   if(progress===1){effect.removeFromParent();bursts.splice(i,1);continue}
+   effect.position.copy(point);effect.position.y+=progress*.9;
+   effect.scale.setScalar((1+.55*Math.sin(progress*Math.PI))*(1-progress));
+  }
+ }
  function render(now){
   frame=0;
   if(document.hidden||!inView||disposed||previewOpen)return;
@@ -274,6 +335,7 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
   sky.position.copy(camera.position);
   walk(owner,cubeHit,elapsed,0);
   for(const guest of guests.values())walk(guest,guest.hit,elapsed,guest.phase,.81);
+  animateMana();
   showRing(selectRing,selected);
   showRing(hoverRing,hovered===selected?null:hovered);
   renderer.render(scene,camera);
@@ -283,10 +345,10 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
   if(frame||document.hidden||!inView||disposed||previewOpen)return;
   last=0;frame=requestAnimationFrame(render);
  }
- function setHousePreview(canvas){
+ function setBuildingPreview(canvas,kind){
   if(canvas){
-   if(!preview)preview=createHousePreview(canvas,houseModel);
-   else preview.resize();
+   if(!preview)preview=createBuildingPreview(canvas,models[kind]);
+   else {preview.setModel(models[kind]);preview.resize()}
   }
   previewOpen=Boolean(canvas);
   wake();
@@ -303,10 +365,10 @@ export function createKingdomWorld({canvas,cube,onSelect,onHover,onPlot}){
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
   preview?.dispose();
-  scene.add(houseModel);
+  scene.add(...Object.values(models),bubbleModel);
   release(scene);
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss();
  }
- return {select,setCube:owner.setCube,setPlot,setBuild,setHousePreview,panMode,zoom,reset,dispose};
+ return {select,setCube:owner.setCube,setPlot,setBuild,setBuildingPreview,popMana,panMode,zoom,reset,dispose};
 }
