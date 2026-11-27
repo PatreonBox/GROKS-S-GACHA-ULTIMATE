@@ -190,12 +190,12 @@ export function createPackSound(){
   const id=String(rarity).toLowerCase();
   if(chestMixes.has(id))return prepareRevealTrack(chestSource(id));
  }
- function playChestRarity(rarity){
+ function playChestRarity(rarity,elapsedSeconds=0){
   const id=String(rarity).toLowerCase();
   if(!enabled||document.hidden)return;
   stopChestAudio();
   if(!chestMixes.has(id)){
-   if(Object.hasOwn(chestAccents,id)){
+   if(elapsedSeconds===0&&Object.hasOwn(chestAccents,id)){
     const [cue,level]=chestAccents[id];
     play(cue,{level});
    }
@@ -203,10 +203,11 @@ export function createPackSound(){
   }
   const src=chestSource(id),version=chestVersion,started=performance.now();
   const ready=()=>{
-   const offset=(performance.now()-started)/1000,track=gameBuffers.get(src);
-   if(!enabled||document.hidden||version!==chestVersion||offset>.55||ctx?.state!=='running')return;
+   const delay=(performance.now()-started)/1000,offset=elapsedSeconds+delay,track=gameBuffers.get(src);
+   if(!enabled||document.hidden||version!==chestVersion||ctx?.state!=='running')return;
+   if(elapsedSeconds===0&&delay>.55){play('extreme',{level:.43});return}
    if(track&&track.duration>offset)emitClip(track,[offset,track.duration-offset],'chest',1,0,.77);
-   else play('extreme',{level:.43});
+   else if(!track&&elapsedSeconds===0)play('extreme',{level:.43});
   };
   const loading=prepareRevealTrack(src);
   if(loading)loading.then(ready);else ready();

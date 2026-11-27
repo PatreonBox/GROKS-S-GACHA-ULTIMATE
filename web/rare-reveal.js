@@ -1,5 +1,6 @@
 import {ico} from './icons.js';
 import {rareLevelTrack} from './rare-level-tracks.js';
+import {cardBackMark} from './pack-model.js';
 
 export const rareTiers=[
  {n:5000,name:'First Light',effect:'slit',ink:'#9beaff',flare:'#147eef',hit:840,ms:2050},
@@ -60,7 +61,7 @@ function turnCard(deck,tier){
  ],{duration:tier.ms,fill:'forwards'});
 }
 
-export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,hold=false,skipAll}){
+export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,hold=false,skipAll}){
  const effect=rareTiers.indexOf(tier),reduce=reducedMotion()||!Element.prototype.animate;
  const track=rareLevelTrack(levelId),src=track?.src,bed=bedSource(tier);
  const dialog=document.createElement('dialog'),prior=document.activeElement;
@@ -73,7 +74,7 @@ export function playRareReveal({tier,levelId,cardHTML,title,odds,oddsLabel,sound
   '<div class="rare-impact" aria-hidden="true"></div>'+
   '<div class="rare-head" aria-hidden="true"><span>'+tier.name+'</span><strong>'+odds+'</strong><small>'+oddsLabel+' · per card</small></div>'+
   '<div class="rare-stage" aria-hidden="true" inert><div class="rare-deck"><i class="rare-edge"></i>'+
-  '<div class="rare-back"><span class="rare-crest"><img src="/assets/player-cube.png" alt=""></span></div>'+
+  '<div class="rare-back gd-card-back">'+cardBackMark(difficulty)+'</div>'+
   '<div class="rare-front">'+cardHTML+'</div></div></div>'+
   '<p class="rare-live" role="status" aria-live="polite"></p><div class="rare-footer">'+
   (track?'<div class="rare-track-credit"><a class="rare-track" target="_blank" rel="noopener noreferrer">'+

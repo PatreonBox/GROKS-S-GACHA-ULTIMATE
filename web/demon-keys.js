@@ -23,6 +23,16 @@ export function rewardDemonKeys(wallet,count,now=Date.now()){
  return wallet.demonKeys-prior;
 }
 
+export function claimDemonKeys(wallet,now=Date.now()){
+ if(wallet.pending)throw Error('Finish your current opening before claiming keys.');
+ if(!wallet.demonKeysToClaim)throw Error('You have no Demon Keys to claim.');
+ const keys=rewardDemonKeys(wallet,wallet.demonKeysToClaim,now);
+ if(!keys)throw Error('Your Demon Key balance is full.');
+ wallet.demonKeysToClaim-=keys;
+ if(!wallet.demonKeysToClaim)delete wallet.demonKeysToClaim;
+ return {keys};
+}
+
 export function buyDemonKeys(wallet,{quantity,offer},now){
  initDemonKeys(wallet,now);
  if(offer===true){

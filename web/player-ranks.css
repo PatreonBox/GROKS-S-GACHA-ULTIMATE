@@ -109,11 +109,12 @@
 .profile-card-viewport .turn-handle:focus-visible{outline-color:var(--showcase-accent)}
 .profile-card-figure{width:178px;height:248px;margin-bottom:18px}
 .profile-card-face,.profile-card-back{
- position:absolute;inset:0;display:flex;flex-direction:column;padding:9px;gap:6px;backface-visibility:hidden;overflow:hidden;
- background:linear-gradient(151deg,#2b3b57,#101a2a 63%);border:2px solid var(--showcase-accent);border-radius:11px;
+ position:absolute;inset:0;display:flex;flex-direction:column;padding:9px;gap:6px;
+ -webkit-backface-visibility:hidden;backface-visibility:hidden;overflow:hidden;
+ border:2px solid var(--showcase-accent);border-radius:11px;
  box-shadow:0 11px 22px #030711aa,inset 0 0 13px #80b9dc2c;color:#f2f8ff;
 }
-.profile-card-face{transform:translateZ(2px)}
+.profile-card-face{transform:translateZ(2px);background:linear-gradient(151deg,#2b3b57,#101a2a 63%)}
 .profile-card-face>span,.profile-card-face>small{flex:none;line-height:1.22}
 .profile-card-face span{display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:.68rem;font-weight:700;color:#c8dff2}
 .profile-card-face>span:last-child{margin-top:auto}
@@ -127,10 +128,10 @@
 .profile-card-art img:first-child{width:66px;height:66px;object-fit:contain}
 .profile-card-art .profile-card-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .profile-card-back{
- align-items:center;justify-content:center;transform:rotateY(180deg) translateZ(2px);font:800 21px Cond,sans-serif;
- background:radial-gradient(circle,#3b6680,#142842 81%);
+ --back-metal:var(--showcase-accent);
+ align-items:center;justify-content:center;transform:rotateY(180deg) translateZ(2px);
 }
-.profile-card-back img{width:84px;height:84px;object-fit:contain}
+.profile-card-back .gd-card-back-mark{font-size:1.18rem}
 .profile-card-details h3{margin:0;font:800 clamp(25px,5vw,37px)/1 Cond,sans-serif;overflow-wrap:anywhere}
 .profile-card-details>p{margin:4px 0;color:#bdcbe0;font-size:.88rem}
 .profile-card-stats{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0}

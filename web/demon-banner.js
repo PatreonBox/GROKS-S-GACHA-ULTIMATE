@@ -4,6 +4,7 @@ import {bonusChance,cardCategories,packOddsVersion,randomBelow} from './pack-eng
 import {rankOddsVersion} from './card-economy.js';
 import {playerProgress} from './player-progression.js';
 import {featureLevel} from './level-access.js';
+import {impossibleCategory} from './impossible-cards.js';
 
 export {bannerUnlockDelay,demonKeyOffer,demonKeyPrice,keyLimit} from './demon-keys.js';
 
@@ -52,6 +53,8 @@ export function maxBannerDraws(wallet,id){
 }
 
 const catalogueCache=new WeakMap();
+const featuredPageSize=24;
+const levelNameOrder=new Intl.Collator('en',{sensitivity:'base',numeric:true});
 export function demonCatalogue(getPool){
  let load=catalogueCache.get(getPool);
  if(!load){
@@ -65,7 +68,9 @@ export function demonCatalogue(getPool){
     groups[index].push(row);groupCounts[index][category]=(groupCounts[index][category]||0)+1;
    }
    if(groups.some(group=>!group.length))throw Error('The Demon banner catalog is incomplete.');
-   return {groups,groupCounts,levels,names};
+   const featured=names.filter(({row})=>row[6]!==impossibleCategory)
+    .sort((a,b)=>levelNameOrder.compare(a.name,b.name)||a.row[0]-b.row[0]);
+   return {groups,groupCounts,levels,names,featured};
   }).catch(error=>{catalogueCache.delete(getPool);throw error;});
   catalogueCache.set(getPool,load);
  }
@@ -91,6 +96,16 @@ export async function demonTargetSearch(getPool,query,{category,impossible=false
   }else if(other.length<18)other.push(row);
  }
  return starts.concat(other).slice(0,18);
+}
+
+export async function browseDemonTargets(getPool,{query='',category,page=1}={}){
+ const {featured}=await demonCatalogue(getPool);
+ const term=query.trim().slice(0,80).toLowerCase();
+ const matches=featured.filter(({name,row})=>(!category||row[6]===category)&&name.includes(term));
+ const total=matches.length,pages=Math.max(1,Math.ceil(total/featuredPageSize));
+ const current=Math.min(pages,Number.isSafeInteger(page)?Math.max(1,page):1);
+ const start=(current-1)*featuredPageSize;
+ return {rows:matches.slice(start,start+featuredPageSize).map(({row})=>row),page:current,pages,total,start};
 }
 
 export async function prepareDemonPull({banner,targetId,category,levelId},getPool,{preview=false}={}){

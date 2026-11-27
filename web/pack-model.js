@@ -6,6 +6,10 @@ export function cardFace(category){
  const file=category.endsWith(' Demon')?'demon-'+category.split(' ')[0]:category;
  return '/assets/faces/'+file.toLowerCase()+'.webp';
 }
+export function cardBackMark(category){
+ return '<span class="gd-card-back-mark" aria-hidden="true">'+
+  '<img src="'+cardFace(category||'Auto')+'" alt=""><b>GD KINGDOM</b></span>';
+}
 
 const haloEdges=Array.from({length:16},(_,index)=>{
  const angle=index*22.5;

@@ -1,4 +1,4 @@
-import {bindTurntable,cardFace} from './pack-model.js';
+import {bindTurntable,cardFace,cardBackMark} from './pack-model.js';
 import {finishLabels} from './card-finishes.js';
 import {impossibleCover} from './impossible-cards.js';
 import {moveArt} from './combat-arts.js';
@@ -27,7 +27,7 @@ export function showBestCard(root,card,localCover){
   '<div class="profile-card-face"><span>'+rarityBadge(rarity)+'<b class="profile-card-finish">'+mark+finish+'</b></span><div class="profile-card-art"><img src="'+face+'" alt="">'+
   '<img class="profile-card-cover" src="'+escape(image)+'" alt=""></div><small>'+escape(card.difficulty)+(rank?' · #'+number.format(rank):'')+
   '</small><strong>'+escape(card.title)+'</strong><span>Level '+card.level+'</span></div>'+
-  '<div class="profile-card-back"><img src="/assets/gd-kingdom-castle-icon.png" alt=""><b>GD KINGDOM</b></div></div>'+
+  '<div class="profile-card-back gd-card-back">'+cardBackMark(card.difficulty)+'</div></div>'+
   '<div class="turn-handle" tabindex="0" role="group"></div><div class="turn-tools"><span>Drag to rotate</span>'+
   '<button type="button" data-reset-view>Reset view</button></div></div>'+
   '<div class="profile-card-details">'+rarityBadge(rarity)+'<h3>'+escape(card.title)+'</h3><p>'+escape(card.creator?card.creator+' · ':'')+

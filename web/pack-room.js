@@ -23,7 +23,7 @@ import {createTrading} from './trading.js';
 import {packPlayerXp,packXpAllowance,packXpLimit,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels} from './level-access.js';
 import {lockAttributes,lockBadge,lockedPage,setLevelLock} from './level-lock.js';
-import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,skillOwned} from './mine-economy.js';
+import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,quoteMachine,skillOwned} from './mine-economy.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
 import {createDemonBannerRoom,demonKeyIcon} from './demon-banner-room.js';
@@ -140,9 +140,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   coinMine.setWallet(w);
   banners.setWallet(w);
   const keys=w.demonKeys||0;
+  const claimable=w.demonKeysToClaim||0;
   byId('demonKeyCount').textContent=headerAmount(keys);
-  keyLink.setAttribute('aria-label',number(keys)+' Demon Keys. Open Key Shop');
-  keyLink.title=number(keys)+' Demon Keys';
+  keyLink.title=number(keys)+' Demon Keys'+(claimable?' · '+number(claimable)+' to claim':'');
+  keyLink.setAttribute('aria-label',keyLink.title+'. Open Key Shop');
   refreshCoins(true,pans,credited);
   byId('gemLink').title=number(w.gems)+' gems'+(locked('upgrades')?' · Gem Upgrades at Level '+featureLevel('upgrades'):'');
   byId('gemLink').setAttribute('aria-label',byId('gemLink').title+(locked('upgrades')?'':'. Open Gem Upgrades'));
@@ -218,7 +219,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  function sectionAlerts(){
   if(!wallet)return {};
   const canBuyMachine=mineMachines.some(machine=>!machineOwned(wallet.mine,machine.id)&&
-   !mineMachineLock(wallet.mine,machine.id)&&displayedCoins>=machine.price);
+   !mineMachineLock(wallet.mine,machine.id)&&quoteMachine({...wallet,coins:displayedCoins},machine.id).affordable);
   const canBuySkill=mineSkills.some(skill=>!skillOwned(wallet.mine,skill.id)&&
    !mineSkillLock(wallet.mine,skill.id)&&displayedCoins>=skill.price);
   return {
@@ -606,7 +607,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const {pull,index,test}=opening;
   const hand=pullCards(pull,index);
   const cards=hand.map(item=>({html:card(item.row,{deal:true,fresh:item.fresh,bonus:item.bonus,finish:item.finish,drawChance:test?null:item}),
-   title:item.row[1],rarity:cardRarity(item.row)}));
+   title:item.row[1],difficulty:item.row[6],rarity:cardRarity(item.row)}));
   prepareRareReveal(hand,sound);
   chestScene=openChestReveal({
    tier:pull.banner,cards,step:index+1,total:pull.quantity,sound,toggleSound,observeArt,
@@ -677,7 +678,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(!tier)return null;
   activeRare?.scene.close();sound.stop();
   const scene=playRareReveal({
-   tier,levelId:item.row[0],cardHTML:card(item.row,{deal:true,finish:item.finish}),
+   tier,levelId:item.row[0],difficulty:item.row[6],cardHTML:card(item.row,{deal:true,finish:item.finish}),
    title:item.row[1],odds:oneIn(item.percent),oddsLabel:rarityLabel(item),sound,toggleSound,observeArt,hold,skipAll
   });
   activeRare={scene,drawIndex:item.drawIndex};

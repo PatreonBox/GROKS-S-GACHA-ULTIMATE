@@ -1,25 +1,27 @@
 import {demonBanners,bannerOdds,bannerPity,demonPity,demonKeyPrice,demonKeyOffer} from './demon-banner.js';
 import {gameCommand} from './game-client.js';
-import {cardCategories} from './pack-engine.js';
+import {cardCategories,difficulties} from './pack-engine.js';
+import {cardFace} from './pack-model.js';
 import {ico} from './icons.js';
 import {featureLevel} from './level-access.js';
 import {lockBadge} from './level-lock.js';
 import {playerProgress} from './player-progression.js';
 import {cardRarity,rarityBadge} from './card-rarity.js';
 
-export const demonKeyIcon='<span class="demon-key-icon" aria-hidden="true"><svg viewBox="0 0 26 26" fill="none"><path d="M11 15l-8 7H1v-3l4-4 2 1 3-3m1 2a7 7 0 1 0-3-5l3 5Z" fill="#9fceec" stroke="#d0fff4" stroke-width="1.3" stroke-linejoin="round"/><path d="M12 6l1 3M20 6l-1 3" stroke="#102a55" stroke-width="1.5" stroke-linecap="round"/><path d="M13 12l2 1 3-1" stroke="#214267" stroke-width="1.15" stroke-linecap="round"/></svg></span>';
+export const demonKeyIcon=ico('demonKey');
 const gem='<img class="gd-gem" src="/assets/packs/gem.png" alt="">';
 const format=n=>(Number(n)||0).toLocaleString('en-US');
 const percentage=n=>n.toLocaleString('en-US',{maximumFractionDigits:6})+'%';
 const descriptions={
- standard:'Every rarity is in reach, including the hidden Impossible tier.',
+ standard:'Open a five-card chest for one Demon Key.',
  special:'Choose a featured level to improve your chance of pulling it.',
- pro:'Spend five keys per draw for the strongest banner odds.'
+ pro:'Open a chest for five Demon Keys.'
 };
 const orderedBanners=['standard','special','pro'];
-const bannerFaces={
- standard:['normal','hard','harder'],special:['demon-easy','demon-hard','demon-medium'],
- pro:['demon-hard','demon-extreme','demon-insane']
+const bannerScenes={
+ standard:{name:'Dark Paradise',difficulty:'Easy',cover:'/assets/shots/11280109.webp'},
+ special:{name:'KOCMOC',difficulty:'Extreme Demon',cover:'/assets/shots/hero-87665224.avif'},
+ pro:{name:'Flamewall',difficulty:'Extreme Demon',cover:'/assets/shots/126242564.webp'}
 };
 const displayName=id=>demonBanners[id]?.name||id;
 const longTime=ms=>{
@@ -28,6 +30,15 @@ const longTime=ms=>{
 };
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const currency=(icon,label)=>'<span class="banner-currency">'+icon+' <b>'+label+'</b></span>';
+const levelShot=(src,kind,lazy=false)=>'<img class="'+kind+'" src="'+esc(src)+'" data-banner-level-shot alt=""'+(lazy?' loading="lazy"':'')+'>';
+const levelFace=difficulty=>'<img class="banner-level-face" src="'+cardFace(difficulty)+'" width="36" height="36" alt="">';
+
+function bindLevelShots(scope){
+ for(const shot of scope.querySelectorAll('[data-banner-level-shot]')){
+  if(shot.complete&&!shot.naturalWidth)shot.hidden=true;
+  else shot.addEventListener('error',()=>{shot.hidden=true},{once:true});
+ }
+}
 
 export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSource,onError}){
  let body,wallet,banner='standard',page='',target,dialog,operation=false,clockOffset=0,admin=false;
@@ -62,15 +73,15 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   controls.querySelector('.banner-note').textContent=status||(locked?'Reach Level '+config().level+' to open this banner.':pending?'Finish your current opening before starting another.':keys<config().cost?'Get Demon Keys in the Key Shop.':'Each draw reveals five cards, plus a possible bonus.');
  }
  function poster(){
-  const [left,center,right]=bannerFaces[banner],face=id=>'<img src="/assets/faces/'+id+'.webp" width="52" height="52" alt="">';
-  return '<div class="demon-banner-art" aria-hidden="true"><div class="banner-orbits"></div><div class="banner-glint"></div>'+
-   '<div class="banner-card-silhouette banner-card-left">'+face(left)+'</div><div class="banner-card-silhouette banner-card-right">'+face(right)+'</div>'+
-   '<div class="banner-core"><div class="banner-core-face">'+face(center)+'</div></div></div>';
+  const scene=banner==='special'&&target?{name:target[1],difficulty:target[6],cover:coverSource(target[0])}:bannerScenes[banner];
+  return '<div class="demon-banner-art" aria-hidden="true">'+levelShot(scene.cover,'banner-scenery')+'</div>'+
+   '<figure class="banner-level-card">'+levelShot(scene.cover,'banner-level-shot')+
+   '<figcaption>'+levelFace(scene.difficulty)+'<div><strong>'+esc(scene.name)+'</strong><small>'+esc(scene.difficulty)+'</small></div></figcaption></figure>';
  }
  function featured(){
   if(banner!=='special')return '';
   const rarity=target&&cardRarity(target);
-  return '<div class="banner-featured">'+(target?'<img src="'+esc(coverSource(target[0]))+'" alt="" loading="lazy"><div><b>'+esc(target[1])+'</b>'+rarityBadge(rarity)+'</div>':
+  return '<div class="banner-featured">'+(target?levelFace(target[6])+'<div><b>'+esc(target[1])+'</b>'+rarityBadge(rarity)+'</div>':
    '<div><b>Featured level</b><small>Pick a level to boost its individual odds.</small></div>')+
    '<button type="button" class="outline" data-banner-action="featured" '+(!canPull()?'disabled':'')+'>'+(target?'Change':'Choose level')+'</button></div>';
  }
@@ -91,6 +102,9 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
  function shopMarkup(){
   return '<section class="demon-key-shop"><div class="demon-key-header"><div><h2>Key Shop</h2><p>Demon Keys open all three banners.</p></div>'+
    '<a class="outline" href="#gacha/banners">'+ico('left')+' Demon Banners</a></div>'+
+   '<div data-key-shop-claim hidden><article class="key-shop-offer"><div class="big-key">'+demonKeyIcon+'</div>'+
+   '<div><h3>Achievement Keys</h3><p>Keys earned while opening packs and banners.</p></div>'+
+   '<button type="button" class="primary" data-banner-action="claim"></button></article></div>'+
    '<div data-key-shop-offer></div><article class="key-shop-regular"><div class="big-key">'+demonKeyIcon+'</div>'+
    '<div><h3>Demon Keys</h3><p>'+format(demonKeyPrice)+' gems per key</p></div>'+
    '<form data-key-purchase><label>Quantity<input name="quantity" type="number" min="1" step="1" inputmode="numeric" value="1" required></label>'+
@@ -99,6 +113,12 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
  }
  function renderShop(){
   const slot=body?.querySelector('[data-key-shop-offer]');if(!slot)return;
+  const claim=body.querySelector('[data-key-shop-claim]'),claimable=wallet?.demonKeysToClaim||0;
+  const claimButton=claim.querySelector('button');
+  claim.hidden=!claimable;
+  claimButton.textContent='Claim '+format(claimable)+(claimable===1?' key':' keys');
+  claimButton.disabled=operation||Boolean(wallet?.pending);
+  claim.querySelector('p').textContent=wallet?.pending?'Finish your current opening to claim these keys.':'Keys earned while opening packs and banners.';
   const offer=wallet?.demonBanner||{},left=Number(offer.offerEndsAt)-now();
   const ends=slot.querySelector('[data-key-offer-countdown]');
   const active=Number.isFinite(left)&&left>0&&!offer.starterOfferBought;
@@ -120,7 +140,8 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
  function render(){
   if(!body)return;
   body.innerHTML=page==='keys'?shopMarkup():bannerMarkup();
-  if(page==='keys')renderShop();else renderControls();
+  if(page==='keys')renderShop();
+  else{renderControls();bindLevelShots(body)}
  }
  function closeDialog(){
   if(dialog?.open)dialog.close();
@@ -138,7 +159,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   return el;
  }
  function showOdds(){
-  const rows=bannerOdds(banner,playerLevel(),{target:banner==='special'&&Boolean(target),luck:wallet?.luck||0});
+  const rows=bannerOdds(banner,playerLevel(),{target:banner==='special'&&Boolean(target),luck:wallet?.luck||0}).filter(row=>row.id!=='impossible');
   const html=rows.map(({id,label,color,percent})=>'<tr><th scope="row"><span style="--odds-color:'+color+'">'+esc(label)+'</span></th><td>'+percentage(percent)+(percent>0&&percent<.001?' · 1 in '+format(Math.round(100/percent)):'')+'</td></tr>').join('');
   modal(displayName(banner)+' banner odds','<p>Each draw starts with five cards. Listed odds are per card before guarantees.'+(banner==='special'&&target?' Your chosen card gets a 6% chance within its rarity group, plus its usual chance.':'')+'</p>'+
    '<table class="banner-odds"><thead><tr><th>Rarity</th><th>Per card</th></tr></thead><tbody>'+html+'</tbody></table>'+
@@ -174,21 +195,66 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   lookup();
  }
  function chooseFeatured(){
-  const el=modal('Choose a featured level','<label class="banner-search">Find a level<input type="search" maxlength="80" placeholder="Level name or ID" data-featured-search autofocus></label>'+
-   '<div class="featured-results" aria-live="polite"></div>'+(target?'<button class="outline" type="button" data-remove-featured>Clear featured level</button>':''));
-  const results=el.querySelector('.featured-results'),search=el.querySelector('[data-featured-search]');
-  let found=[];
-  bindSearch({el,input:search,render(rows,message){
-   found=rows.filter(row=>row[6]!=='Impossible');
-   results.innerHTML=found.map(row=>'<button type="button" data-featured-id="'+row[0]+'"><span><strong>'+esc(row[1])+'</strong><small>'+
-    esc(row[6])+' · #'+row[0]+'</small></span>'+rarityBadge(cardRarity(row))+'</button>').join('')||'<p>'+esc(message)+'</p>';
-  }});
+  const el=modal('Choose a featured level','<div class="featured-filters"><label>Level name<input type="search" maxlength="80" placeholder="Search levels" data-featured-search autofocus></label>'+
+   '<label>Difficulty<select data-featured-difficulty><option value="">All difficulties</option>'+difficulties.map(d=>'<option>'+esc(d)+'</option>').join('')+
+   '</select></label></div><p class="featured-status" role="status"></p><div class="featured-results"></div>'+
+   '<div class="featured-pagination" hidden><button class="outline" type="button" data-featured-previous>Previous</button>'+
+   '<span data-featured-page></span><button class="outline" type="button" data-featured-next>Next</button></div>'+
+   (target?'<button class="outline" type="button" data-remove-featured>Clear featured level</button>':''));
+  el.classList.add('featured-dialog');
+  const results=el.querySelector('.featured-results'),search=el.querySelector('[data-featured-search]'),category=el.querySelector('[data-featured-difficulty]');
+  const status=el.querySelector('.featured-status'),pagination=el.querySelector('.featured-pagination');
+  const previous=el.querySelector('[data-featured-previous]'),next=el.querySelector('[data-featured-next]'),pageLabel=el.querySelector('[data-featured-page]');
+  let found=[],currentPage=1,controller,timer;
+  function clearResults(){
+   found=[];results.replaceChildren();results.setAttribute('aria-busy','true');
+   previous.disabled=next.disabled=true;status.textContent='Loading levels…';
+  }
+  async function load(page){
+   clearTimeout(timer);controller?.abort();clearResults();
+   const request=new AbortController();controller=request;
+   const params=new URLSearchParams({view:'demon-featured-levels',q:search.value.trim(),category:category.value,page});
+   try{
+    const response=await fetch('/api/game?'+params,{signal:request.signal,cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||'Could not load the level catalog.');
+    if(request.signal.aborted||!el.open)return;
+    found=data.rows;
+    currentPage=data.page;
+    results.innerHTML=found.map((row,index)=>'<button type="button" data-featured-index="'+index+'"'+(target?.[0]===row[0]?' aria-current="true"':'')+'>'+
+     '<span class="featured-result-art">'+levelFace(row[6])+levelShot(coverSource(row[0]),'featured-result-shot',true)+'</span>'+
+     '<span class="featured-result-name"><strong>'+esc(row[1])+'</strong><small>'+esc(row[6])+(row[2]?' · '+esc(row[2]):'')+'</small></span>'+
+     rarityBadge(cardRarity(row))+'</button>').join('');
+    bindLevelShots(results);results.scrollTop=0;
+    status.textContent=found.length?format(data.start+1)+'–'+format(data.start+found.length)+' of '+format(data.total)+' levels':'No matching levels.';
+    pagination.hidden=data.pages<2;
+    pageLabel.textContent='Page '+format(currentPage)+' of '+format(data.pages);
+    previous.disabled=currentPage<=1;
+    next.disabled=currentPage>=data.pages;
+   }catch(error){
+    if(request.signal.aborted||!el.open)return;
+    status.textContent=error.message;
+    pagination.hidden=true;
+   }finally{
+    if(!request.signal.aborted)results.removeAttribute('aria-busy');
+   }
+  }
+  search.addEventListener('input',()=>{
+   controller?.abort();clearTimeout(timer);clearResults();
+   timer=setTimeout(()=>load(1),180);
+  });
+  category.addEventListener('change',()=>load(1));
+  previous.addEventListener('click',()=>load(currentPage-1));
+  next.addEventListener('click',()=>load(currentPage+1));
+  el.addEventListener('close',()=>{clearTimeout(timer);controller?.abort()},{once:true});
   results.addEventListener('click',e=>{
-   const button=e.target.closest('[data-featured-id]');if(!button)return;
-   target=found.find(row=>row[0]===Number(button.dataset.featuredId));
+   const button=e.target.closest('[data-featured-index]');if(!button)return;
+   target=found[Number(button.dataset.featuredIndex)];
+   sound.play('select');
    el.close();render();body.querySelector('[data-banner-action="featured"]')?.focus();
   });
   el.querySelector('[data-remove-featured]')?.addEventListener('click',()=>{target=null;el.close();render();body.querySelector('[data-banner-action="featured"]')?.focus()});
+  load(1);
  }
  function testDialog(){
   const el=modal('Test opening','<p>Choose a banner and a card. Test openings spend zero keys and give zero rewards.</p>'+
@@ -222,10 +288,11 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   const requestHost=body;
   operation=true;status='';if(page==='keys')renderShop();else renderControls();
   try{
-   const {wallet:next}=await gameCommand(action,args,action);
+   const {wallet:next,result}=await gameCommand(action,args,action);
    applyWallet(next);
    if(requestHost===body){
     if(action==='demon.pull')begin(next.pending);
+    else if(action==='demon.keys.claim')status=format(result.keys)+(result.keys===1?' key claimed.':' keys claimed.');
     else status='Keys added to your wallet.';
    }
   }catch(error){status=error.message;onError(error)}
@@ -247,6 +314,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   else if(action==='featured')chooseFeatured();
   else if(action==='admin'&&admin)testDialog();
   else if(action==='offer')transact('demon.keys.buy',{offer:true});
+  else if(action==='claim')transact('demon.keys.claim');
   else if(action==='resume')begin(wallet.pending);
  }
  function submit(e){

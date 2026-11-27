@@ -2,8 +2,8 @@ import {cardCategories,difficulties,packs,rollPacks,upgrades,quoteUpgrade,random
  grantCoinCode,applyFeeding,fuseCollection} from './pack-engine.js';
 import {createMergePlanner,extremeTable,gemTenths,levelRewardTenths} from './card-economy.js';
 import {starterCube,cubeCatalogVersion,claimCube,ownsCube} from './cube-catalog.js';
-import {settleMine,creditMineTaps,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines,mineSkill} from './mine-economy.js';
-import {coinDivisor,coinEconomyVersion,startingCoins} from './coin-economy.js';
+import {settleMine,creditMineTaps,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines} from './mine-economy.js';
+import {coinEconomyVersion,startingCoins} from './coin-economy.js';
 import {combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
@@ -18,7 +18,7 @@ import {buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,co
 import {validTradeMinimum} from './trade-rules.js';
 import {achievementBoost} from './achievement-boosts.js';
 import {bannerPrice,demonBanners,maxBannerDraws,prepareDemonPull,rollDemonBanner} from './demon-banner.js';
-import {buyDemonKeys,campaignKeyReward,initDemonKeys,rewardDemonKeys} from './demon-keys.js';
+import {buyDemonKeys,campaignKeyReward,claimDemonKeys,initDemonKeys,rewardDemonKeys} from './demon-keys.js';
 import {packAvailability,packStockLimit,spendPackStock} from './pack-stock.js';
 
 export function newWallet() {
@@ -181,14 +181,14 @@ const rules={
  }},
  'mine.skill':{run:({w,args,now})=>{
   requireRule(key(args.id),'Choose a mine skill.');
-  buyMineSkill(w,args.id,now);
-  awardPlayerXp(w,10+Math.floor(6*Math.log10(mineSkill(args.id).price*coinDivisor)));
+  const skill=buyMineSkill(w,args.id,now);
+  awardPlayerXp(w,skill.purchaseXp);
  }},
  'mine.code':{run:({w,args})=>{requireRule(key(args.code),'Enter a valid code.');return {amount:grantCoinCode(w,args.code)};}},
  'cube.equip':{run:({w,args})=>{
   requireRule(key(args.id),'Choose a cube.');
   const buying=!ownsCube(w,args.id),cube=claimCube(w,args.id);
-  if(buying)awardPlayerXp(w,6+Math.floor(4*Math.log10(cube.price*coinDivisor)));
+  if(buying)awardPlayerXp(w,cube.purchaseXp);
   return {cube};
  }},
  'kingdom.house':{run:({w,args,now})=>{
@@ -241,6 +241,7 @@ const rules={
   return {pack,pools:await allPools(getPool,pack.id==='godly'?cardCategories:difficulties)};
  },run:({w,records,changes,args,prepared,now})=>awardPack(w,records,changes,prepared.pack,args.quantity,prepared.pools,now)},
  'demon.keys.buy':{run:({w,args,now})=>buyDemonKeys(w,args,now)},
+ 'demon.keys.claim':{run:({w,now})=>claimDemonKeys(w,now)},
  'demon.pull':{cards:true,prepare:async (args,getPool)=>{
   requireRule(args.quantity==='max'||[1,10,50].includes(args.quantity),'Choose 1, 10, 50, or Max draws.');
   return prepareDemonPull(args,getPool);

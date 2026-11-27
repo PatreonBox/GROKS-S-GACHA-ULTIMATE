@@ -3,7 +3,7 @@ import {pickExtreme,extremeOdds,compareMergeStrength,mergeGems,extremeTable,gemT
 import {impossibleCategory,impossibleCount,impossibleTier,impossiblePercent} from './impossible-cards.js';
 import {finishVersion,finishPercent,rollFinish,bestFinish,finishAt,finishOrder} from './card-finishes.js';
 import {gameRead,gameCommand} from './game-client.js';
-import {normalizeCoinWallet} from './coin-economy.js';
+import {coinPrice,normalizeCoinWallet} from './coin-economy.js';
 export {onOtherTab} from './game-client.js';
 
 export const difficulties=['Auto','Easy','Normal','Hard','Harder','Insane','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'];
@@ -26,7 +26,7 @@ export const packs=[
   base:[0,0,0,0,0,0,0,0,2,88,10]},
  {id:'godly',name:'Godly',price:300000000,color:'#ffedaa',dark:'#8a652e',
   base:[0,0,0,0,0,0,0,0,0,0,100]},
-];
+].map(pack=>({...pack,price:coinPrice(pack.price)}));
 
 export const packOddsVersion=3;
 export const mythicExtremeCap=15;

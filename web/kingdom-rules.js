@@ -1,22 +1,23 @@
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
 import {achievementBoost} from './achievement-boosts.js';
+import {coinPrice,previousCoinPrice} from './coin-economy.js';
 
 import {gemTenths} from './card-economy.js';
 import {awardPlayerXp} from './player-progression.js';
 import {spikeInvestment,spikeKind,spikePlan,spikePrice} from './kingdom-defences.js';
 
-export const housePrice=5_000;
+export const housePrice=coinPrice(5_000);
 export const houseSize={width:3.15,depth:2.72};
 export const houseHeight=3.26,manorHeight=3.86;
 export const houseEntry={front:1.16,width:1.24,height:1.43,floor:.164};
-export const forgePrice=12_000,forgeWelcomeMana=100,forgeMinimum=5;
-export const gemMine={towerLevel:2,coins:15_000,mana:800,interval:300_000,capacity:20};
+export const forgePrice=coinPrice(12_000),forgeWelcomeMana=100,forgeMinimum=5;
+export const gemMine={towerLevel:2,coins:coinPrice(15_000),mana:800,interval:300_000,capacity:20};
 export const visitorWelcomeMs=20_000;
 export const houseUpgrades=[{mana:30,buildMs:10_000,stars:.02},
- {coins:100_000,mana:200,buildMs:30_000,stars:.03,towerLevel:2}];
+ {coins:coinPrice(100_000),mana:200,buildMs:30_000,stars:.03,towerLevel:2}];
 const houseHp=[150,220,310];
 export const houseStars=level=>(30+houseUpgrades.slice(0,level-1).reduce((sum,tier)=>sum+Math.round(tier.stars*100),0))/100;
-export const forgeUpgrade={coins:100_000,mana:300,buildMs:30_000,towerLevel:2};
+export const forgeUpgrade={coins:coinPrice(100_000),mana:300,buildMs:30_000,towerLevel:2};
 export const towerUpgradeMana=500;
 const forgeTiers=[{rate:1,capacity:300},{rate:3,capacity:1200}];
 export const manaIcon='/assets/kingdom/mana-orbs.webp';
@@ -28,7 +29,7 @@ export const buildingSpecs={
 };
 export const plotBounds={left:-14,right:14,back:-13,front:14};
 export const lastLandLevel=5;
-const landCost=level=>1_000_000*10**level;
+const landCost=level=>coinPrice(1_000_000*10**level);
 export function kingdomBounds(level=0){
  const scale=Math.sqrt(1.25**level);
  return Object.fromEntries(Object.entries(plotBounds).map(([edge,point])=>[edge,point*scale]));
@@ -45,9 +46,9 @@ export const visitorSlots=[
 ].map(([rarity,stars],slot)=>({slot,rarity,stars}));
 export const maxTowerLevel=3;
 const towerTiers=[
- {limit:2,price:0,hp:1000},{limit:3,price:50_000,mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
- {limit:4,price:100_000,mana:2_500,buildMs:180_000,xp:600,hp:2200},
- {limit:13,price:1_000_000,mana:towerUpgradeMana,hp:3000},{limit:17,price:7_500_000,mana:towerUpgradeMana,hp:4000}
+ {limit:2,price:0,hp:1000},{limit:3,price:coinPrice(50_000),mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
+ {limit:4,price:coinPrice(100_000),mana:2_500,buildMs:180_000,xp:600,hp:2200},
+ {limit:13,price:coinPrice(1_000_000),mana:towerUpgradeMana,hp:3000},{limit:17,price:coinPrice(7_500_000),mana:towerUpgradeMana,hp:4000}
 ];
 export const towerExperience=level=>towerTiers[level-1]?.xp||0;
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
@@ -108,6 +109,8 @@ function promoteForge(forge,at){
 export function kingdomRating(houses,now){
  return Math.min(500,houses.reduce((sum,house)=>sum+Math.round(houseStars(housePlan(house,now).level)*100),0))/100;
 }
+const towerInvestment=(kingdom,level)=>kingdom?.towerInvestment??towerTiers.slice(0,level).reduce((sum,tier)=>sum+previousCoinPrice(tier.price),0);
+const landInvestment=(kingdom,level)=>kingdom?.landInvestment??Array.from({length:level},(_,i)=>previousCoinPrice(landCost(i))).reduce((sum,price)=>sum+price,0);
 export function kingdomStats(wallet,now=Date.now()){
  const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),gemMines=kingdomGemMines(wallet),defences=kingdomDefences(wallet),storage=kingdomStorage(wallet);
  const buildings=[...houses,...forges,...gemMines,...defences],removedTrees=wallet?.kingdom?.removedTrees||[];
@@ -117,12 +120,12 @@ export function kingdomStats(wallet,now=Date.now()){
  const stars=kingdomRating(houses,now);
  const value=[...buildings,...storage].reduce((sum,building)=>{
   const kind=building.kind||'house';
-  return sum+(building.price??buildingSpecs[kind].price)+
-   (kind==='forge'&&(building.level===2||building.upgrade)?forgeUpgrade.coins:0)+
-   (kind==='house'&&(building.level===3||building.upgrade?.level===3)?houseUpgrades[1].coins:0)+
-   (kind===spikeKind?spikeInvestment(building):0);
- },0)+towerTiers.slice(0,tower.level).reduce((sum,tier)=>sum+tier.price,0)+
-  (tower.construction?towerTiers[tower.construction.level-1].price:0)+Array.from({length:land.level},(_,i)=>landCost(i)).reduce((sum,price)=>sum+price,0);
+  const base=building.price??previousCoinPrice(buildingSpecs[kind].price);
+  const upgrade=kind===spikeKind?spikeInvestment(building):building.upgradeCoinInvestment??(
+   (kind==='forge'&&(building.level===2||building.upgrade)?previousCoinPrice(forgeUpgrade.coins):0)+
+   (kind==='house'&&(building.level===3||building.upgrade?.level===3)?previousCoinPrice(houseUpgrades[1].coins):0));
+  return sum+base+upgrade;
+ },0)+towerInvestment(wallet?.kingdom,tower.construction?.level??tower.level)+landInvestment(wallet?.kingdom,land.level);
  return {houses,forges,gemMines,defences,storage,buildings,tower,land,stars,value,houseLots,defenceLots,removedTrees,
   trees:plotTrees(buildings,removedTrees,land.bounds),mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houseLots};
 }
@@ -133,7 +136,7 @@ export function expandLand(wallet,expectedLevel){
  if(nextPrice===null)throw Error('Your land is fully expanded.');
  if(wallet.coins<nextPrice)throw Error('You need '+nextPrice.toLocaleString('en-US')+' coins to expand.');
  wallet.coins-=nextPrice;
- wallet.kingdom={...wallet.kingdom,landLevel:level+1};
+ wallet.kingdom={...wallet.kingdom,landLevel:level+1,landInvestment:landInvestment(wallet.kingdom,level)+nextPrice};
  return {level:level+1,price:nextPrice};
 }
 
@@ -143,7 +146,8 @@ export function settleTower(wallet,now){
  delete kingdom.towerConstruction;
  const level=construction.level??2,tier=towerTiers[level-1];
  kingdom.towerLevel=level;
- return {level,limit:tier.limit,price:tier.price,completed:true};
+ const price=kingdom.towerInvestment===undefined?previousCoinPrice(tier.price):tier.price;
+ return {level,limit:tier.limit,price,completed:true};
 }
 
 export function settleHouseUpgrades(wallet,now){
@@ -207,6 +211,7 @@ export function upgradeTower(wallet,expectedLevel,now){
  if(!next)throw Error('Your tower is at its highest level.');
  if(houses.length<limit)throw Error('Fill the current house lots before upgrading.');
  payUpgrade(wallet,next.mana,next.price);
+ wallet.kingdom.towerInvestment=towerInvestment(wallet.kingdom,level)+next.price;
  if(next.buildMs){
   const schedule={level:level+1,startedAt:now,endsAt:now+next.buildMs};
   wallet.kingdom={...wallet.kingdom,towerConstruction:schedule};
@@ -225,6 +230,7 @@ export function upgradeHouse(wallet,id,expectedLevel,now){
  if(level!==expectedLevel)throw Error('Your house level changed. Check its new upgrade.');
  if(next.towerLevel&&towerPlan(wallet,now).level<next.towerLevel)throw Error('Requires Tower Level '+next.towerLevel+'.');
  payUpgrade(wallet,next.mana,next.coins);
+ if(next.coins)house.upgradeCoinInvestment=next.coins;
  house.upgrade={level:level+1,startedAt:now,endsAt:now+next.buildMs};
  return {id,level:level+1,construction:house.upgrade};
 }
@@ -319,6 +325,7 @@ export function upgradeSpikeShooter(wallet,id,expectedLevel,now){
  if(level!==expectedLevel)throw Error('Your Spike Shooter level changed. Review its next upgrade.');
  if(towerPlan(wallet,now).level<next.towerLevel)throw Error('Requires Tower Level '+next.towerLevel+'.');
  payUpgrade(wallet,next.mana,next.coins);
+ if(next.coins)defence.upgradeCoinInvestment=spikeInvestment(defence)+next.coins;
  defence.upgrade={level:level+1,startedAt:now,endsAt:now+next.buildMs};
  return {id,level:level+1,construction:defence.upgrade};
 }
@@ -334,6 +341,7 @@ export function upgradeForge(wallet,id,expectedLevel,now){
  if(level!==expectedLevel||level===2)throw Error('This Mana Forge is already Level 2.');
  if(towerPlan(wallet,now).level<forgeUpgrade.towerLevel)throw Error('Upgrade your tower to Level 2 first.');
  payUpgrade(wallet,forgeUpgrade.mana,forgeUpgrade.coins);
+ forge.upgradeCoinInvestment=forgeUpgrade.coins;
  forge.upgrade={startedAt:now,endsAt:now+forgeUpgrade.buildMs};
  return {id,level:2,construction:forge.upgrade};
 }

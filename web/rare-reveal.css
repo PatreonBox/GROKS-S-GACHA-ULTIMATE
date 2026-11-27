@@ -58,14 +58,14 @@ dialog.rare-reveal[open]{
 .rare-reveal[data-revealed] .rare-head :is(strong,small){opacity:1;transform:none}
 .rare-stage{position:relative;width:100%;min-height:0;min-width:0;display:grid;place-items:center;perspective:1000px;pointer-events:none}
 .rare-deck{display:grid;position:relative;width:clamp(118px,min(75vw,46dvh),325px);transform-style:preserve-3d;transform:rotateY(180deg)}
-.rare-back,.rare-front{grid-area:1/1;display:grid;place-items:stretch;backface-visibility:hidden;border-radius:13px}
+.rare-back,.rare-front{grid-area:1/1;display:grid;place-items:stretch;-webkit-backface-visibility:hidden;backface-visibility:hidden;border-radius:13px}
 .rare-edge{position:absolute;inset:1px;border-radius:12px;transform-style:preserve-3d;background:var(--rarity)}
 .rare-edge::before,.rare-edge::after{content:"";position:absolute;top:7px;bottom:7px;width:8px;transform:rotateY(90deg);
  background:linear-gradient(90deg,var(--flare),var(--rarity) 42%,#faf5ff 63%,var(--flare))}
 .rare-edge::before{left:-4px}.rare-edge::after{right:-4px}
 .rare-front{position:relative;transform:translateZ(4px);overflow:hidden;background:#11111d;
  box-shadow:0 19px 43px #010108bb,0 0 38px color-mix(in srgb,var(--flare) 33%,transparent)}
-.rare-deck .level-card{width:100%;min-height:0;padding:7px 7px 12px;border-width:2px;border-radius:12px}
+.rare-deck .level-card{width:100%;min-height:0;padding:7px 7px 12px;border-width:2px;border-radius:inherit}
 .rare-deck .level-card:not(.holo-card,.antimatter-card){border-color:color-mix(in srgb,var(--rarity) 78%,#332b56)}
 .rare-deck .card-art{aspect-ratio:1.62}
 .rare-deck .level-card>strong{font-size:clamp(18px,3vw,31px);line-height:1.05;overflow-wrap:anywhere}
@@ -75,16 +75,10 @@ dialog.rare-reveal[open]{
  transform:translateX(-120%);opacity:.68}
 .rare-reveal[data-revealed]:not([data-still]) .rare-front::after{animation:rare-sweep 1.1s cubic-bezier(.2,.8,.25,1) .16s forwards}
 @keyframes rare-sweep{to{transform:translateX(130%);opacity:0}}
-.rare-back{position:absolute;inset:0;transform:translateZ(-4px) rotateY(180deg);place-items:center;border:1px solid var(--rarity);
- background:repeating-linear-gradient(132deg,#d7c7ff1a 0 1px,transparent 1px 16px),
- radial-gradient(ellipse at 44% 41%,color-mix(in srgb,var(--flare) 32%,#171426),#080713 79%);
+.rare-back{--back-metal:var(--rarity);--back-halo:color-mix(in srgb,var(--flare) 52%,#1e294a);
+ position:absolute;inset:0;transform:translateZ(-4px) rotateY(180deg);place-items:center;border:1px solid var(--back-metal);
  box-shadow:inset 0 0 25px #a499f737,0 16px 31px #010108a8,0 0 32px color-mix(in srgb,var(--flare) 47%,transparent)}
-.rare-back::before{content:"";position:absolute;inset:6px;border:1px solid color-mix(in srgb,var(--rarity) 35%,transparent);border-radius:9px}
-.rare-crest{position:relative;display:grid;place-items:center;width:44%;aspect-ratio:1;border:1px solid var(--rarity);
- border-radius:16%;transform:rotate(45deg);background:#0e0b1ad9;
- box-shadow:0 0 30px color-mix(in srgb,var(--flare) 67%,transparent),inset 0 0 22px color-mix(in srgb,var(--flare) 44%,transparent);
- animation:rare-charge var(--charge) ease-in both}
-.rare-crest img{width:68%;transform:rotate(-45deg);filter:grayscale(1) brightness(1.4) drop-shadow(0 0 6px var(--flare))}
+.rare-back .gd-card-back-mark{animation:rare-charge var(--charge) ease-in both}
 @keyframes rare-charge{from{opacity:.55;scale:.84}to{opacity:1;scale:1.08}}
 .rare-reveal:not([data-revealed]) .rare-front .level-card{visibility:hidden}
 .rare-footer{display:grid;justify-items:center;gap:10px;z-index:2;text-align:center}
@@ -165,6 +159,6 @@ dialog.rare-reveal[open]{
  .rare-footer{min-width:0}
 }
 @media(prefers-reduced-motion:reduce){
- .vault-shell,.rare-crest,.rare-impact,.rare-reveal[data-revealed] .rare-front::after{animation:none}
+ .vault-shell,.rare-back .gd-card-back-mark,.rare-impact,.rare-reveal[data-revealed] .rare-front::after{animation:none}
  .rare-hero,.rare-head strong,.rare-head small,.rare-environment,.rare-reveal>canvas{transition:none}
 }

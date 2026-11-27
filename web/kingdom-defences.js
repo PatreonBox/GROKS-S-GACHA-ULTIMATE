@@ -1,12 +1,14 @@
+import {coinPrice,previousCoinPrice} from './coin-economy.js';
+
 export const spikeKind='spike-shooter';
 export const spikeIcon='/assets/training/spike.webp';
-export const spikePrice=8_000;
+export const spikePrice=coinPrice(8_000);
 export const spikeDamage=[10,15,22,28,36];
 const spikeHp=[200,250,320,410];
 const spikeUpgrades=[
  {towerLevel:1,coins:0,mana:30,buildMs:10_000},
- {towerLevel:2,coins:12_000,mana:100,buildMs:20_000},
- {towerLevel:3,coins:30_000,mana:200,buildMs:30_000}
+ {towerLevel:2,coins:coinPrice(12_000),mana:100,buildMs:20_000},
+ {towerLevel:3,coins:coinPrice(30_000),mana:200,buildMs:30_000}
 ];
 
 export function spikePlan(building,now=Date.now()){
@@ -22,5 +24,5 @@ export function spikePlan(building,now=Date.now()){
 
 export function spikeInvestment(building){
  const investedLevel=Math.max(building.level||1,building.upgrade?.level||1);
- return spikeUpgrades.slice(0,investedLevel-1).reduce((sum,tier)=>sum+tier.coins,0);
+ return building.upgradeCoinInvestment??spikeUpgrades.slice(0,investedLevel-1).reduce((sum,tier)=>sum+previousCoinPrice(tier.coins),0);
 }

@@ -3,6 +3,9 @@ export const coinDivisor=10;
 export const startingCoins=150;
 
 export const oldCoinAmount=value=>Math.floor(Math.max(0,value)/coinDivisor);
+const coinPriceMultiplier=1.5;
+export const coinPrice=amount=>Math.ceil(amount*coinPriceMultiplier);
+export const previousCoinPrice=amount=>Math.floor(amount/coinPriceMultiplier);
 
 function rescale(record,fields){
  if(!record)return;

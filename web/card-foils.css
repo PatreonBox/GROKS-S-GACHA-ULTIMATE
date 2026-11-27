@@ -46,9 +46,6 @@
 @media(prefers-reduced-motion:reduce){
  .profile-best-card[data-finish="holo"] :is(.profile-card-face,.profile-card-back)::before{animation:none}
 }
-.profile-best-card[data-finish="holo"] .profile-card-back>img{
- filter:drop-shadow(-6px 1px 10px #ffa0d577) drop-shadow(6px 2px 10px #90f8d68c);
-}
 .profile-best-card[data-finish="holo"] .profile-card-finish,.trade-card[data-finish="holo"] .trade-card-kind b{
  color:#171938;background:linear-gradient(115deg,#ffe0b4,#adf4e6 48%,#e9bbff);
 }
@@ -72,7 +69,6 @@
  background:radial-gradient(ellipse 48% 37% at 50% 50%,#020108 37%,#1f0d3f 48%,#c887ffdd 52%,#7754d3ac 60%,#28155980 75%,transparent 94%);
 }
 .profile-best-card[data-finish="antimatter"] .profile-card-back>*{position:relative}
-.profile-best-card[data-finish="antimatter"] .profile-card-back img{filter:drop-shadow(0 0 12px #a86ce7c0)}
 .profile-best-card[data-finish="antimatter"] .profile-card-finish,.trade-card[data-finish="antimatter"] .trade-card-kind b{
  color:#f1d5ff;border:1px solid #8d70ba;background:linear-gradient(110deg,#231844,#110d24 58%,#263762);
 }

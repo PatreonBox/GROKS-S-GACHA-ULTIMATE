@@ -129,7 +129,7 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  document.getElementById('gameAuthRetry').hidden=true;
  if(locked)for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  renderPlayerProgress(locked?null:wallet,saveRevision);
- if(locked||wallet)document.dispatchEvent(new CustomEvent('gdlb-achievements',{detail:{earned:locked?null:wallet.achievements||{},saveRevision:saveRevision??0,pending:Boolean(wallet?.pending)}}));
+ if(locked||wallet)document.dispatchEvent(new CustomEvent('gdlb-achievements',{detail:{earned:locked?null:wallet.achievements||{},saveRevision:saveRevision??0,pending:Boolean(wallet?.pending),keysToClaim:wallet?.demonKeysToClaim||0}}));
  if(account){
   account.hidden=!locked||Boolean(banned);
   account.dataset.provider=accountProvider||'';

@@ -299,3 +299,28 @@
 
 .qty-options button{min-width:0;padding-inline:clamp(6px,1.05vw,10px)}
 .qty-options small{min-width:0;font-variant-numeric:tabular-nums}
+.gd-card-back{
+ --back-metal:#a3c6de;
+ --back-halo:#42799b;
+ overflow:hidden;border-color:var(--back-metal);
+ background:radial-gradient(ellipse at 50% 40%,color-mix(in srgb,var(--back-halo) 75%,#15253d),transparent 66%),
+  repeating-linear-gradient(135deg,#b9dcff0d 0 1px,transparent 1px 13px),linear-gradient(153deg,#1e3450,#111a30 66%,#21364a);
+}
+.gd-card-back::after{
+ content:"";position:absolute;pointer-events:none;inset:clamp(4px,.44vw,8px);
+ border:1px solid color-mix(in srgb,var(--back-metal) 50%,transparent);border-radius:var(--back-inner-radius,8px);
+}
+.gd-card-back-mark{
+ position:relative;z-index:1;display:grid;justify-items:center;gap:clamp(4px,.8vw,13px);
+ width:min(78%,155px);white-space:nowrap;color:#f2f7ff;text-align:center;
+ font:800 clamp(.70rem,1.55vw,1.52rem)/1 Cond,sans-serif;letter-spacing:.07em;
+ text-shadow:0 2px 8px #0006;
+}
+.gd-card-back-mark img{
+ display:block;width:57%;max-width:92px;aspect-ratio:1;object-fit:contain;
+ filter:url('/card-back-ink.svg#white-ink') drop-shadow(0 0 10px #9dc6ef50);
+}
+.level-card:not(.holo-card,.antimatter-card){
+ background:radial-gradient(ellipse at 100% 106%,color-mix(in srgb,var(--rarity-color,var(--card-color)) 22%,transparent),transparent 53%),
+  linear-gradient(153deg,color-mix(in srgb,var(--card-color) 15%,#1b202a),#1a1a25 46%,#11121c);
+}

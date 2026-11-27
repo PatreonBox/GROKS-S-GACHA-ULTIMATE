@@ -177,7 +177,7 @@ export function setupAchievementBanners(sound){
  if(typeof banner.showPopover==='function')banner.setAttribute('popover','manual');
  document.body.append(banner,announcement);
  const queue=[],reduced=matchMedia('(prefers-reduced-motion: reduce)');
- let seen=null,revision=-1,timer=0,opening=false,current=null;
+ let seen=null,revision=-1,timer=0,opening=false,current=null,keysToClaim=0;
  function hide(){
   clearTimeout(timer);timer=0;
   if(banner.hidePopover&&banner.matches(':popover-open'))banner.hidePopover();
@@ -204,10 +204,12 @@ export function setupAchievementBanners(sound){
   const many=unlocked.length>1,label=many?unlocked.length+' achievement stages earned':'Achievement stage earned';
   const showing=current={since:performance.now()};
   const payout=many?'<span class="achievement-rewards"><b>+'+number.format(xp)+' XP</b><span>Permanent boosts earned</span>'+keyReward(keys)+'</span>':rewards(item);
+  const claim=keys&&keysToClaim?number.format(keysToClaim)+(keysToClaim===1?' key':' keys')+' ready to claim in the Key Shop':'';
   banner.innerHTML=badge(item,true)+'<div><small>'+label+'</small><strong>'+item.name+'</strong>'+
    '<span class="achievement-stage-meta">'+difficulty(item)+'<span class="achievement-stage-number">Stage '+item.stage+' of '+item.stageCount+'</span></span>'+
-   payout+'</div>'+ico('right');
-  announcement.textContent=label+'. '+item.name+', stage '+item.stage+'. '+xp+' XP'+(keys?' and '+keys+' Demon '+(keys===1?'Key':'Keys'):'')+' earned.';
+   payout+(claim?'<small>'+claim+'</small>':'')+'</div>'+ico('right');
+  announcement.textContent=label+'. '+item.name+', stage '+item.stage+'. '+xp+' XP'+(keys?' and '+keys+' Demon '+(keys===1?'Key':'Keys'):'')+' earned.'+
+   (claim?' '+claim+'.':'');
   banner.dataset.phase='enter';banner.hidden=false;
   if(banner.hasAttribute('popover'))banner.showPopover();
   sound.playGameReady('gdAchievement',{level:.88},()=>current===showing&&banner.dataset.phase==='enter');
@@ -219,7 +221,7 @@ export function setupAchievementBanners(sound){
    seen=null;revision=-1;queue.length=0;announcement.textContent='';hide();return;
   }
   if(saveRevision<revision)return;
-  revision=saveRevision;opening=Boolean(pending);
+  revision=saveRevision;opening=Boolean(pending);keysToClaim=event.detail.keysToClaim||0;
   const now=new Set(Object.keys(earned));
   if(seen)for(const id of now){
    const item=achievementById(id);

@@ -1,5 +1,6 @@
 import {ico} from './icons.js';
 import {cardRarities} from './card-rarity.js';
+import {cardBackMark} from './pack-model.js';
 
 const trims={
  standard:{name:'Standard Chest',accent:'#92defd'},
@@ -26,6 +27,21 @@ function timeline(rarity){
  const mark=t=>descent+t*scale;
  return {descent,landing:mark(1.14),settle:mark(1.50),turnStart:mark(2.33),turnEnd:mark(2.93),open:mark(3.59)};
 }
+function cardFlight(origin,slot,index){
+ const x=origin.x-slot.left-slot.width/2,y=origin.y-slot.top-slot.height/2;
+ const rise=Math.max(60,Math.min(150,slot.height*.46));
+ const spread=Math.max(-1,Math.min(1,-x/320));
+ const pose=(dx,dy,pitch,yaw,roll,scale)=>
+  `translate3d(${dx}px,${dy}px,0) rotateX(${pitch}deg) rotateY(${yaw}deg) rotateZ(${roll}deg) scale(${scale})`;
+ const lean=spread||((index%2)*2-1)*.17;
+ return [
+  {offset:0,opacity:0,transform:pose(x,y+8,-58,lean*13,lean*8,.18),easing:'cubic-bezier(.18,.56,.4,.94)'},
+  {offset:.23,opacity:1,transform:pose(x*.95,y-rise*.62,-24,lean*24,lean*12,.41),easing:'cubic-bezier(.22,.55,.35,1)'},
+  {offset:.48,opacity:1,transform:pose(x*.63,y-rise,15,lean*34,lean*15,.71),easing:'cubic-bezier(.25,.55,.39,1)'},
+  {offset:.81,opacity:1,transform:pose(x*.07,-11,5,lean*7,lean*3,1.015),easing:'cubic-bezier(.22,.7,.3,1)'},
+  {offset:1,opacity:1,transform:pose(0,0,0,0,0,1)}
+ ];
+}
 function sceneMarkup(config,cards,step,total){
  return '<div class="chest-stage" aria-hidden="true"><canvas></canvas><div class="chest-fallback">'+
   '<div class="chest-fallback-glow"></div><div class="chest-fallback-box"><i></i><b></b></div>'+
@@ -33,11 +49,11 @@ function sceneMarkup(config,cards,step,total){
   '<header class="chest-head"><div><h2 id="chestRevealTitle">'+config.name+'</h2>'+
   (total>1?'<p>Draw '+step+' of '+total+'</p>':'')+
   '</div><button class="chest-close" type="button" data-chest-close aria-label="Close chest opening">'+ico('x')+'</button></header>'+
-  '<section class="chest-content" hidden aria-label="Cards in this chest"><p class="chest-hint">Flip each card to reveal it</p>'+
-  '<div class="chest-cards" style="--cards:'+cards.length+'">'+cards.map(({html},i)=>
-   '<div class="chest-card" style="--card-slot:'+i+'"><div class="chest-card-shell">'+
-   '<button class="chest-card-back" type="button" aria-label="Flip card '+(i+1)+'" data-chest-card="'+i+'">'+
-   '<span class="chest-card-rune" aria-hidden="true">'+ico('spark')+'</span><span class="chest-card-label">Flip card</span></button>'+
+  '<section class="chest-content" hidden inert aria-label="Cards in this chest"><p class="chest-hint">Flip each card to reveal it</p>'+
+  '<div class="chest-cards" style="--cards:'+cards.length+'">'+cards.map(({html,difficulty},i)=>
+   '<div class="chest-card"><div class="chest-card-shell">'+
+   '<button class="chest-card-back gd-card-back" type="button" disabled aria-label="Flip card '+(i+1)+'" data-chest-card="'+i+'">'+
+   cardBackMark(difficulty)+'</button>'+
    '<div class="chest-card-front" inert aria-hidden="true">'+html+'</div></div></div>').join('')+'</div></section>'+
   '<footer class="chest-actions"><span class="chest-count" hidden></span><div class="chest-buttons">'+
   '<button type="button" class="outline" data-chest-mute></button>'+
@@ -48,6 +64,7 @@ function sceneMarkup(config,cards,step,total){
 
 export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,toggleSound,observeArt,step=1,total=1}){
  const config=trims[tier]||trims.standard,rarity=highestRarity(cards),timePlan=timeline(rarity),still=reducedMotion();
+ const finalHand=step>=total;
  const dialog=document.createElement('dialog'),prior=document.activeElement;
  dialog.className='chest-reveal';dialog.dataset.tier=tier;dialog.dataset.rarity=rarity;
  dialog.dataset.phase='cinematic';dialog.dataset.stage=timePlan.descent?'descent':'drop';
@@ -61,15 +78,15 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,
  const get=selector=>dialog.querySelector(selector);
  const canvas=get('canvas'),closeButton=get('[data-chest-close]'),skipButton=get('[data-chest-skip]');
  const mute=get('[data-chest-mute]'),next=get('[data-chest-next]'),content=get('.chest-content'),live=get('.chest-live'),count=get('.chest-count');
- const buttons=[...dialog.querySelectorAll('[data-chest-card]')];
+ const buttons=[...dialog.querySelectorAll('[data-chest-card]')],slots=[...dialog.querySelectorAll('.chest-card')];
  for(const preview of dialog.querySelectorAll('.chest-card-front>button')){
   const art=document.createElement('article');
   for(const {name,value} of preview.attributes)if(name!=='type')art.setAttribute(name,value);
   art.append(...preview.childNodes);preview.replaceWith(art);
  }
  const delay=still?0:285,flipped=new Set();
- const tasks=new Set();
- let closed=false,flipping=false,submitting=false,world,frame=0,resize,resolve;
+ const tasks=new Set(),flights=[];
+ let closed=false,flipping=false,submitting=false,world,frame=0,resize,resolve,rarityStarted;
  const done=new Promise(r=>{resolve=r});
  const start=performance.now();
  function schedule(fn,milliseconds){
@@ -85,6 +102,7 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,
  function close(){
   if(closed)return;closed=true;
   tasks.forEach(clearTimeout);tasks.clear();
+  flights.forEach(animation=>animation.cancel());
   canvas.removeEventListener('webglcontextlost',stopWorld);
   window.removeEventListener('pagehide',close);
   stopWorld();sound.stopChestAudio?.();
@@ -101,21 +119,39 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,
   mute.innerHTML=ico(sound.enabled?'volume':'muted');
  }
  function status(){
+  const ready=dialog.dataset.phase==='cards',complete=flipped.size===cards.length&&!flipping;
+  const finished=ready&&finalHand&&complete;
+  dialog.toggleAttribute('data-complete',finished);
   count.textContent=flipped.size+' / '+cards.length+' revealed';
-  for(const [i,button] of buttons.entries())button.disabled=flipped.has(i)||flipping||submitting;
-  next.disabled=flipping||submitting||flipped.size!==cards.length;
+  count.hidden=!ready||finished;
+  mute.hidden=skipButton.hidden=finished;
+  next.hidden=!ready;
+  next.textContent=finished?'Click anywhere to continue':'Continue';
+  for(const [i,button] of buttons.entries())button.disabled=!ready||flipped.has(i)||flipping||submitting;
+  next.disabled=!complete||submitting;
   skipButton.disabled=submitting||flipping;closeButton.disabled=submitting;
-  if(flipped.size===cards.length)get('.chest-hint').textContent='All cards revealed';
+  if(complete)get('.chest-hint').textContent=finished?'':'All cards revealed';
  }
  function makeAvailable(){
   if(closed)return;
-  dialog.dataset.phase='cards';content.hidden=false;
-  count.hidden=next.hidden=false;
-  sound.stopChestAudio?.();status();
+  dialog.dataset.phase='cards';content.hidden=false;content.inert=false;
+  status();
   live.textContent=cards.length+' face-down cards ready to flip.';
   if(document.activeElement===closeButton||dialog.contains(document.activeElement)&&!document.activeElement.matches('[data-chest-mute], [data-chest-skip]')){
    buttons[0]?.focus({preventScroll:true});
   }
+ }
+ function dealCards(){
+  if(!slots[0]?.animate){makeAvailable();return}
+  const point=world?.getCardOrigin?.(),surface=(point?canvas:get('.chest-fallback-box')).getBoundingClientRect();
+  const origin={x:surface.left+surface.width*(point?.x??.5),y:surface.top+surface.height*(point?.y??.16)};
+  dialog.dataset.phase='dealing';content.hidden=false;
+  const destinations=slots.map(slot=>slot.getBoundingClientRect());
+  playCue('sweep',.49);
+  slots.forEach((slot,i)=>{
+   flights.push(slot.animate(cardFlight(origin,destinations[i],i),{duration:970,delay:i*76,fill:'backwards'}));
+  });
+  Promise.allSettled(flights.map(animation=>animation.finished)).then(makeAvailable);
  }
  async function submit(action){
   if(submitting||flipping||closed||!action)return;
@@ -126,6 +162,10 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,
   }
  }
  function playCue(name,level){sound.play?.(name,{level})}
+ function playRarity(){
+  rarityStarted=performance.now();
+  sound.playChestRarity?.(rarity);
+ }
  function draw(){
   frame=0;
   if(closed||!world)return;
@@ -144,15 +184,19 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,
  mute.onclick=()=>{
   if(toggleSound)toggleSound();else sound.toggle();
   if(!sound.enabled)sound.stopChestAudio?.();
+  else if(rarityStarted!==undefined)sound.playChestRarity?.(rarity,(performance.now()-rarityStarted)/1000);
   else sound.prepareChestRarity?.(rarity);
   setMute();
  };
  canvas.addEventListener('webglcontextlost',stopWorld,{once:true});
  dialog.addEventListener('cancel',event=>{event.preventDefault();abandon()});
  dialog.addEventListener('close',abandon);
+ dialog.addEventListener('click',event=>{
+  if(dialog.hasAttribute('data-complete')&&!event.target.closest('button, a'))submit(advance);
+ });
  window.addEventListener('pagehide',close);
  for(const [i,button] of buttons.entries())button.onclick=()=>{
-  if(closed||flipping||submitting||flipped.has(i))return;
+  if(closed||dialog.dataset.phase!=='cards'||flipping||submitting||flipped.has(i))return;
   const card=button.closest('.chest-card'),front=card.querySelector('.chest-card-front'),item=cards[i];
   flipping=true;flipped.add(i);status();
   card.dataset.flipped='';playCue('sweep',.64);
@@ -175,19 +219,20 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,sound,
  setMute();sound.unlock?.();sound.prepareChestRarity?.(rarity);
  observeArt?.(dialog);
  if(still){
+  if(rarity!=='common')playRarity();
   dialog.dataset.still='true';dialog.dataset.stage='open';makeAvailable();
   return {close,done};
  }
  runStep('drop',timePlan.descent,()=>{if(timePlan.descent)playCue('tear',.38)});
- if(rarity==='impossible')sound.playChestRarity?.(rarity);
+ if(rarity==='impossible')playRarity();
  runStep('landing',timePlan.landing,()=>{
   playCue('stack',.63);
-  if(rarity!=='common'&&rarity!=='impossible')sound.playChestRarity?.(rarity);
+  if(rarity!=='common'&&rarity!=='impossible')playRarity();
  });
  runStep('key',timePlan.settle,()=>playCue('sweep',.48));
  runStep('turn',timePlan.turnStart,()=>playCue('forge',.47));
  runStep('open',timePlan.turnEnd,()=>playCue('tear',.68));
- schedule(makeAvailable,timePlan.open*1000);
+ schedule(dealCards,timePlan.open*1000);
  prepareChestReveal()?.then(module=>{
   if(closed||!module)return;
   try{

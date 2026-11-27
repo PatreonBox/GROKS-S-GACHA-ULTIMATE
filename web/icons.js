@@ -1,5 +1,4 @@
 const paths={
- demonKey:'<path d="M3 7 1.8 3.2 6 5l3-1.8L12 5l2.4-1.7-.6 4.3v3.1l-2.4 2.8H5.1L3 11zM5.3 8.8l1.35 1m4-1-1.35 1m4.25-.4h8.6v4.6h-2.5v-1.4h-2.1v2.6h-2.7v-2.6h-2.95"/>',
  exchange:'<path d="M3 8h17m-4-4 4 4-4 4M21 16H4m4-4-4 4 4 4"/>',
  tower:'<path d="M5 21h14M7 20V9L12 3l5 6v11M5 9h14m-8 11v-5h2v5M12 11h.01"/>',
  box:'<path d="m12 2 8.7 5v10L12 22l-8.7-5V7L12 2Zm0 10 8.7-5M12 12 3.3 7M12 12v10"/>',
@@ -38,4 +37,4 @@ export function ratingLabel(value,platformer=false){
  const label=count+' '+(platformer?'moon':'star')+(count===1?'':'s');
  return '<span class="gd-rating" aria-label="'+label+'" title="'+label+'">'+count+' '+ratingIcon(platformer)+'</span>';
 }
-export function ico(k){if(k==='star')return ratingIcon();return '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(paths[k]||'')+'</svg>'}
+export function ico(k){if(k==='star')return ratingIcon();if(k==='demonKey')return '<img class="demon-key-icon" src="/assets/ui/demon-key.svg" alt="" aria-hidden="true">';return '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(paths[k]||'')+'</svg>'}

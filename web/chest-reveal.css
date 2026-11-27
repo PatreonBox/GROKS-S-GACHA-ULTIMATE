@@ -26,6 +26,7 @@ dialog.chest-reveal{
  transition:background-color .46s ease;
 }
 .chest-reveal[data-phase="cards"] .chest-shade{background-color:#080c18b8}
+.chest-reveal[data-phase="dealing"] .chest-shade{background-color:#080c1833}
 .chest-reveal[data-stage="descent"] .chest-shade{animation:chest-cave-transition 1.17s ease-out both}
 .chest-head,.chest-actions{display:flex;align-items:flex-start;justify-content:space-between;position:relative;z-index:1}
 .chest-head{grid-row:1;align-self:start;padding:clamp(14px,3.5vw,38px);padding-top:max(env(safe-area-inset-top),clamp(14px,3.5vw,38px))}
@@ -39,43 +40,31 @@ dialog.chest-reveal{
 .chest-close,.chest-buttons [data-chest-mute]{width:44px;padding:0}
 .chest-close svg,.chest-buttons svg{width:18px;height:18px}
 .chest-content{grid-row:2;align-self:center;width:min(100%,1250px);margin-inline:auto;padding:0 clamp(12px,3vw,30px);text-align:center}
-.chest-hint{margin:0 0 clamp(12px,2.4vh,26px);font-size:clamp(.91rem,2.1vw,1.15rem);font-weight:750;text-shadow:0 2px 10px #01040d}
+.chest-hint{margin:0 0 clamp(12px,2.4vh,26px);font-size:clamp(.91rem,2.1vw,1.15rem);font-weight:750;text-shadow:0 2px 10px #01040d;opacity:0;transition:opacity .25s ease}
+.chest-reveal[data-phase="cards"] .chest-hint{opacity:1}
+.chest-reveal[data-complete] .chest-hint{min-height:1.4em}
 .chest-cards{display:grid;grid-template-columns:repeat(var(--cards),minmax(0,1fr));gap:clamp(7px,1.36vw,18px);perspective:1100px}
-.chest-card{
- min-width:0;perspective:850px;
- animation:chest-card-deal .67s cubic-bezier(.19,.88,.26,1.18) both;
- animation-delay:calc(var(--card-slot)*68ms);
-}
+.chest-card{--card-corner:13px;min-width:0;perspective:850px}
 .chest-card-shell{position:relative;display:grid;transform-style:preserve-3d;transition:transform .54s cubic-bezier(.22,.61,.26,1)}
 .chest-card[data-flipped]>.chest-card-shell{transform:rotateY(180deg)}
-.chest-card-back,.chest-card-front{grid-area:1/1;width:100%;min-width:0;border-radius:13px;backface-visibility:hidden}
+.chest-card-back,.chest-card-front{
+ grid-area:1/1;width:100%;min-width:0;border-radius:var(--card-corner);
+ -webkit-backface-visibility:hidden;backface-visibility:hidden;
+}
 .chest-card-back{
- min-height:clamp(148px,24vw,268px);display:grid;place-content:center;justify-items:center;gap:10px;position:relative;
- cursor:pointer;overflow:hidden;color:#eaf3ff;
- border:1px solid color-mix(in srgb,var(--chest-plate) 65%,#414962);
- background:
- repeating-linear-gradient(49deg,#edf7ff0b 0 1px,transparent 1px 11px),
- radial-gradient(ellipse at 48% 40%,color-mix(in srgb,var(--chest-wall) 94%,#a0caff),#121828 78%);
- box-shadow:0 15px 26px #05091296,inset 0 0 31px #111425;
+ --back-metal:color-mix(in srgb,var(--chest-plate) 75%,#414962);
+ --back-halo:color-mix(in srgb,var(--chest-accent) 29%,var(--chest-wall));
+ position:relative;min-height:clamp(148px,24vw,268px);display:grid;place-items:center;padding:0;
+ cursor:pointer;color:#eaf3ff;border:1px solid var(--back-metal);
+ transform:translateZ(.75px);box-shadow:0 15px 26px #05091296,inset 0 0 31px #111425;
  transition:filter .2s,box-shadow .2s;
 }
-.chest-card-back::before,.chest-card-back::after{
- content:"";position:absolute;pointer-events:none;inset:6px;border:1px solid color-mix(in srgb,var(--chest-plate) 41%,transparent);border-radius:9px;
-}
-.chest-card-back::after{inset:10px;border-color:#e4edff21}
 .chest-card-back:enabled:hover,.chest-card-back:focus-visible{
  filter:brightness(1.22);box-shadow:0 12px 30px color-mix(in srgb,var(--chest-accent) 33%,#0d1017);
 }
-.chest-card-rune{
- display:grid;place-items:center;width:clamp(35px,6vw,75px);aspect-ratio:1;
- transform:rotate(45deg);border:1px solid var(--chest-plate);border-radius:10%;
- background:linear-gradient(145deg,#171f2b,#0a101d);
- color:var(--chest-accent);box-shadow:0 0 23px color-mix(in srgb,var(--chest-accent) 32%,transparent);
-}
-.chest-card-rune svg{width:60%;height:60%;transform:rotate(-45deg)}
-.chest-card-label{padding-top:10px;color:#e1eafa;font-size:clamp(10px,1.3vw,14px);letter-spacing:.025em;font-weight:750}
-.chest-card-front{transform:rotateY(180deg);background:#151725;overflow:hidden}
-.chest-card-front .level-card{width:100%;height:100%;min-height:0}
+.chest-card-front{transform:rotateY(180deg) translateZ(.75px)}
+.chest-card-front .level-card{width:100%;height:100%;min-height:0;border-radius:inherit}
+.chest-card-front .level-card:hover{transform:none}
 .chest-card-front .level-card>strong{overflow-wrap:anywhere}
 .chest-actions{
  grid-row:3;align-items:center;align-self:end;gap:9px;padding:clamp(12px,3.1vw,32px);
@@ -86,6 +75,9 @@ dialog.chest-reveal{
 .chest-buttons{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px;margin-left:auto}
 .chest-buttons :is(.outline,.primary){padding:5px 13px;font-size:.87rem}
 .chest-buttons .primary{background:var(--chest-plate);color:#111b29;border-color:var(--chest-plate)}
+.chest-reveal[data-complete]{cursor:pointer}
+.chest-reveal[data-complete] .chest-buttons{margin-inline:auto}
+.chest-reveal[data-complete] .chest-buttons .primary{color:#eef7ff;background:none;border-color:transparent;font-size:1rem}
 .chest-buttons :disabled,.chest-close:disabled{opacity:.55;cursor:default}
 .chest-reveal :focus-visible{outline:2px solid var(--chest-accent);outline-offset:3px}
 .chest-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
@@ -128,7 +120,6 @@ dialog.chest-reveal{
 .chest-reveal[data-stage="turn"] .chest-fallback-key{animation:chest-fallback-turn var(--chest-turn) ease-in-out both}
 .chest-reveal[data-stage="open"] .chest-fallback-box i{animation:chest-fallback-lid var(--chest-open) ease-out both}
 .chest-reveal[data-stage="open"] .chest-fallback-glow{animation:chest-fallback-light .66s ease-out both}
-@keyframes chest-card-deal{from{transform:translateY(42px) rotateX(-20deg) scale(.87);opacity:0}to{transform:none;opacity:1}}
 @keyframes chest-cave-transition{0%,20%,100%{background-color:transparent}55%{background-color:#05040bea}}
 @keyframes chest-fallback-sink{0%{transform:translateY(-12%);opacity:.28}100%{transform:translateY(38%);opacity:0}}
 @keyframes chest-fallback-drop{0%{transform:translateY(-67vh) rotate(14deg);opacity:0}73%{transform:perspective(650px) rotateX(13deg);opacity:1}86%{transform:translateY(-7%)}100%{transform:perspective(650px) rotateX(11deg)}}
@@ -141,10 +132,10 @@ dialog.chest-reveal{
  .chest-card-back{min-height:133px}
 }
 @media(max-width:510px){
+ .chest-card{--card-corner:9px}
  .chest-card-back{min-height:clamp(94px,15vh,138px)}
- .chest-card-back,.chest-card-front{border-radius:9px}
- .chest-card-back::before{inset:4px;border-radius:6px}.chest-card-back::after{inset:7px;border-radius:5px}
- .chest-card-front .level-card{padding:3px 3px 6px;border-radius:7px}
+ .chest-card-back{--back-inner-radius:5px}
+ .chest-card-front .level-card{padding:3px 3px 6px}
  .chest-card-front .level-card>strong{font-size:.75rem;line-height:1.06}
  .chest-card-front .level-card>small,.chest-card-front .card-type{font-size:.61rem}
  .chest-count{font-size:.72rem}

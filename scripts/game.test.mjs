@@ -92,12 +92,16 @@ test('pack purchase commits the debit, cards, and receipt together',async()=>{
   f.command(session,'pack.buy',{packId:'common',quantity:1},id)]);
  const pulls=await Promise.all(requests.map(async res=>{assert.equal(res.status,200);return (await res.json()).wallet.pending;}));
  assert.equal(pulls[0].id,pulls[1].id);
- assert.equal((await f.wallet(session)).coins,140);
+ const paid=await f.wallet(session);
+ assert.equal(paid.coins,135);
+ assert.equal(paid.demonKeys,starterDemonKeys);
+ assert.ok(paid.demonKeysToClaim>0);
  const {cards}=await (await f.call('/api/game?view=cards',session)).json();
  assert.equal(cards.reduce((sum,entry)=>sum+entry.copies,0),5);
  assert.equal((await f.command(session,'pack.buy',{packId:'common',quantity:1})).status,400);
  assert.equal((await f.command(session,'pack.advance',{id:pulls[0].id,opened:1})).status,200);
  assert.equal((await f.wallet(session)).pending,null);
+ assert.equal((await f.wallet(session)).demonKeys,starterDemonKeys);
 });
 
 test('Gacha activity reports fresh cards, unclaimed gems, and eligible merges',async()=>{
@@ -170,6 +174,24 @@ test('server-clock mine earnings and idempotent credits',async()=>{
  const receipt=await f.command(session,'mine.collect').then(res=>res.json()).then(data=>data.result.receipt);
  assert.equal(receipt.elapsed,5*60*60*1000);
  assert(receipt.coins>0);
+});
+
+test('mine and cube purchases charge the rounded coin prices without changing earning rates',async t=>{
+ const now=Date.now();
+ t.mock.timers.enable({apis:['Date'],now});
+ const f=fixture(),player=await f.open();
+ f.store(player.id,w=>{w.playerXp=playerXpAt(8);w.coins=67;});
+ const buy=(action,args)=>f.command(player,action,args).then(response=>response.json());
+ const machine=await buy('mine.machine',{id:'cursor',mode:1});
+ assert.deepEqual(machine.result,{count:1,cost:3});
+ assert.equal(machine.wallet.coins,64);
+ assert.equal(mineWalletRate(machine.wallet),.1);
+ const skill=await buy('mine.skill',{id:'pick'});
+ assert.equal(skill.wallet.coins,59);
+ assert.equal((await f.command(player,'cube.equip',{id:'02'})).status,400);
+ f.store(player.id,w=>{w.coins=60;});
+ assert.equal((await buy('cube.equip',{id:'02'})).wallet.coins,0);
+ assert.equal((await buy('cube.equip',{id:'02'})).wallet.coins,0);
 });
 
 test('legacy coin balances, building costs and current battle payouts rebase once across requests',async t=>{
@@ -402,14 +424,14 @@ test('Extreme bands outrank the prior trained band and the highest pulls are rar
  }
 });
 
-test('house lots unlock after the 50K coin and 500 Mana one-minute tower upgrade',async t=>{
+test('house lots unlock after the 75K coin and 500 Mana one-minute tower upgrade',async t=>{
  const start=Date.now();
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),player=await f.open();
  const args={x:-7.54,z:7.22,rotation:1};
  assert.equal((await f.command(player,'kingdom.house',args)).status,400);
  assert.deepEqual((await f.wallet(player)).discoveredVisitors,[]);
- f.store(player.id,w=>{w.coins=85_000;w.playerXp=playerXpAt(8)});
+ f.store(player.id,w=>{w.coins=127_500;w.playerXp=playerXpAt(8)});
  for(const invalid of [{x:-2.65,z:0,rotation:0},{x:6.5,z:2.1,rotation:0},{x:30,z:7,rotation:0},{x:0,z:0,rotation:4}]){
   assert.equal((await f.command(player,'kingdom.house',invalid)).status,400);
  }
@@ -421,18 +443,18 @@ test('house lots unlock after the 50K coin and 500 Mana one-minute tower upgrade
  const buildings=wallet.kingdom.houses;
  assert.equal(buildings.length,1);
  assert.equal(buildings[0].rotation,1);
- assert.equal(wallet.coins,80_000);
+ assert.equal(wallet.coins,120_000);
  assert.equal(nonAchievementXp(wallet),playerXpAt(8)+55);
- assert.deepEqual([kingdomStats(wallet).stars,kingdomStats(wallet).value,wallet.discoveredVisitors.length],[.3,5_000,0]);
+ assert.deepEqual([kingdomStats(wallet).stars,kingdomStats(wallet).value,wallet.discoveredVisitors.length],[.3,7_500,0]);
  assert.ok(wallet.visitorRefreshAt>=start+60_000&&wallet.visitorRefreshAt<=start+180_000);
- const second={x:7.54,z:7.22,rotation:0,expectedPrice:10_000};
+ const second={x:7.54,z:7.22,rotation:0,expectedPrice:15_000};
  assert.equal((await f.command(player,'kingdom.house',{...second,expectedPrice:5_000})).status,400);
  assert.equal((await f.command(player,'kingdom.tower',{level:1})).status,400);
  assert.equal((await f.command(player,'kingdom.house',second)).status,200);
- assert.equal((await f.command(player,'kingdom.house',{x:-8,z:-7,rotation:0,expectedPrice:20_000})).status,400);
+ assert.equal((await f.command(player,'kingdom.house',{x:-8,z:-7,rotation:0,expectedPrice:30_000})).status,400);
  const full=await f.wallet(player);
- assert.equal(full.coins,70_000);
- assert.equal(kingdomStats(full).value,15_000);
+ assert.equal(full.coins,105_000);
+ assert.equal(kingdomStats(full).value,22_500);
  assert.deepEqual(full.discoveredVisitors,[]);
  const unfunded=await f.command(player,'kingdom.tower',{level:1});
  assert.equal(unfunded.status,400);
@@ -444,12 +466,12 @@ test('house lots unlock after the 50K coin and 500 Mana one-minute tower upgrade
   assert.equal(response.status,200);
   const {wallet,result}=await response.json();
   assert.deepEqual(result.tower.construction,{level:2,startedAt:start,endsAt:start+60_000});
-  assert.equal(wallet.coins,20_000);
+  assert.equal(wallet.coins,30_000);
   assert.equal(wallet.kingdom.mana,21);
   assert.equal(nonAchievementXp(wallet),playerXpAt(8)+110);
   assert.equal(kingdomStats(wallet).tower.limit,2);
  }
- const third={x:-8,z:-7,rotation:0,expectedPrice:20_000};
+ const third={x:-8,z:-7,rotation:0,expectedPrice:30_000};
  assert.equal((await f.command(player,'kingdom.tower',{level:1})).status,400);
  t.mock.timers.setTime(start+59_999);
  assert.equal((await f.command(player,'kingdom.tower.finish')).status,400);
@@ -465,7 +487,8 @@ test('house lots unlock after the 50K coin and 500 Mana one-minute tower upgrade
   assert.equal(wallet.kingdom.towerLevel,2);
   assert.equal(wallet.kingdom.towerConstruction,undefined);
   assert.equal(nonAchievementXp(wallet),playerXpAt(8)+110+150);
-  assert.equal(wallet.coins,20_000);
+  assert.equal(wallet.coins,30_000);
+  assert.equal(kingdomStats(wallet).value,97_500);
  }
  assert.equal((await f.command(player,'kingdom.house',third)).status,200);
 });
@@ -541,18 +564,18 @@ test('the six-minute phases advance with the clock and cubes can use rotated hou
 test('Mana Forges give a placement grant and collect server-timed mana while land expands five times',async t=>{
  const start=Date.now();
  t.mock.timers.enable({apis:['Date'],now:start});
- const f=fixture(),player=await f.open(),bank=11_200_000_000;
- const spot={x:-7.54,z:7.22,rotation:1,expectedPrice:12_000};
+ const f=fixture(),player=await f.open(),bank=16_800_000_000;
+ const spot={x:-7.54,z:7.22,rotation:1,expectedPrice:18_000};
  assert.equal((await f.command(player,'kingdom.forge',spot)).status,400);
  f.store(player.id,w=>{w.coins=bank;w.playerXp=playerXpAt(8)});
  const requestId=crypto.randomUUID();
  const results=await Promise.all([f.command(player,'kingdom.forge',spot,requestId),f.command(player,'kingdom.forge',spot,requestId)]);
  for(const response of results)assert.equal(response.status,200);
  const {wallet,result}=await results[0].json(),id=result.forge.id;
- assert.equal(wallet.coins,bank-12_000);
+ assert.equal(wallet.coins,bank-18_000);
  assert.equal(wallet.kingdom.mana,100);
  assert.equal(wallet.kingdom.forges.length,1);
- assert.equal((await f.command(player,'kingdom.house',{...spot,expectedPrice:5_000})).status,400);
+ assert.equal((await f.command(player,'kingdom.house',{...spot,expectedPrice:7_500})).status,400);
  t.mock.timers.setTime(start+4999);
  assert.equal((await f.command(player,'kingdom.collect',{id})).status,400);
  t.mock.timers.setTime(start+5520);
@@ -564,14 +587,14 @@ test('Mana Forges give a placement grant and collect server-timed mana while lan
   assert.equal(collection.wallet.kingdom.mana,105);
  }
  assert.equal((await f.command(player,'kingdom.collect',{id})).status,400);
- const outer={x:13,z:8,rotation:0,expectedPrice:12_000};
+ const outer={x:13,z:8,rotation:0,expectedPrice:18_000};
  assert.equal((await f.command(player,'kingdom.forge',outer)).status,400);
- let spent=12_000;
+ let spent=18_000;
  for(let level=0;level<5;level++){
   const response=await f.command(player,'kingdom.expand',{level});
   assert.equal(response.status,200);
   const expanded=await response.json();
-  spent+=1_000_000*10**level;
+  spent+=1_500_000*10**level;
   assert.equal(expanded.wallet.coins,bank-spent);
   assert.equal(kingdomStats(expanded.wallet).land.size,1.25**(level+1));
  }
@@ -586,12 +609,12 @@ test('forge caps and carries over storage and produces three Mana per second aft
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),player=await f.open(),id='forge',args={id,level:1};
  const legacy={id,x:7,z:7,rotation:0,kind:'forge',price:12_000,collectedAt:start-900_000};
- f.store(player.id,w=>{w.coins=100_000;w.playerXp=playerXpAt(8);w.kingdom={forges:[legacy],mana:0}});
+ f.store(player.id,w=>{w.coins=150_000;w.playerXp=playerXpAt(8);w.kingdom={forges:[legacy],mana:0}});
  assert.deepEqual(forgePlan(legacy),{level:1,rate:1,capacity:300,stored:300,construction:null});
  assert.equal((await f.command(player,'kingdom.forge.upgrade',args)).status,400);
  const initial=await (await f.command(player,'kingdom.collect',{id})).json();
  assert.equal(initial.result.earned,300);
- assert.equal(initial.wallet.coins,100_000);
+ assert.equal(initial.wallet.coins,150_000);
  assert.equal((await f.command(player,'kingdom.collect',{id})).status,400);
  t.mock.timers.setTime(start+8000);
  const locked=await f.command(player,'kingdom.forge.upgrade',args);
@@ -664,7 +687,7 @@ test('sign-in claims a verified guest save and preserves its cards',async()=>{
  assert((await signIn.json()).signedIn);
  assert.match(signIn.headers.get('set-cookie'),/Max-Age=0/);
  const synced=await f.wallet({subject:'fixture-account'});
- assert.equal(synced.coins,140);
+ assert.equal(synced.coins,135);
  const {cards}=await f.call('/api/game?view=cards',{subject:'fixture-account'}).then(res=>res.json());
  assert.equal(cards.reduce((sum,card)=>sum+card.copies,0),5);
 });
@@ -871,16 +894,16 @@ test('Level 3 tower requires Level 15 and the new costs, grants 600 XP once, and
  const f=fixture(),player=await f.open(),houses=[
   {id:'north',x:-8,z:-7,rotation:0},{id:'west',x:-8,z:7,rotation:1},{id:'east',x:8,z:7,rotation:0}
  ];
- f.store(player.id,w=>{w.playerXp=playerXpAt(14);w.coins=150_000;w.gems=12.5;w.kingdom={towerLevel:2,mana:2499,houses};});
+ f.store(player.id,w=>{w.playerXp=playerXpAt(14);w.coins=225_000;w.gems=12.5;w.kingdom={towerLevel:2,mana:2499,houses};});
  const command=(action,args,id)=>f.command(player,'kingdom.'+action,args,id);
  assert.match((await (await command('tower',{level:2})).json()).error,/Level 15/);
  f.store(player.id,w=>{w.playerXp=playerXpAt(15);});
  assert.match((await (await command('tower',{level:2})).json()).error,/2,500 Mana/);
  f.store(player.id,w=>{w.kingdom.mana=2600;});
- assert.equal((await command('house',{x:8,z:-7,rotation:0,expectedPrice:40_000})).status,400);
+ assert.equal((await command('house',{x:8,z:-7,rotation:0,expectedPrice:60_000})).status,400);
  const upgrade=await command('tower',{level:2}).then(r=>r.json());
  assert.deepEqual(upgrade.result.tower.construction,{level:3,startedAt:start,endsAt:start+180_000});
- assert.equal(upgrade.wallet.coins,50_000);
+ assert.equal(upgrade.wallet.coins,75_000);
  assert.equal(upgrade.wallet.kingdom.mana,100);
  assert.equal((await command('tower.skip',{maxGems:11})).status,400);
  t.mock.timers.setTime(start+60_000);
@@ -896,10 +919,10 @@ test('Level 3 tower requires Level 15 and the new costs, grants 600 XP once, and
  }
  assert.equal((await command('tower.skip',{maxGems:8})).status,400);
  assert.equal((await command('tower',{level:3})).status,400);
- const fourth=await command('house',{x:8,z:-7,rotation:.5,expectedPrice:40_000});
+ const fourth=await command('house',{x:8,z:-7,rotation:.5,expectedPrice:60_000});
  assert.equal(fourth.status,200);
  assert.equal((await fourth.json()).result.house.rotation,.5);
- assert.equal((await command('house',{x:10,z:9,rotation:0,expectedPrice:80_000})).status,400);
+ assert.equal((await command('house',{x:10,z:9,rotation:0,expectedPrice:120_000})).status,400);
  assert.equal(kingdomStats({kingdom:{towerLevel:2,houses:houses.concat(houses)}}).houses.length,6);
 });
 
@@ -909,7 +932,7 @@ test('Level 3 houses wait for Tower Level 2, charge both resources once and keep
  const f=fixture(),owner=await f.open('manor-owner'),viewer=await f.open('manor-visitor');
  const house={id:'home',x:-8,z:7,rotation:1,level:2,price:50_000};
  f.store(owner.id,w=>{
-  w.playerXp=playerXpAt(8);w.coins=110_000;
+  w.playerXp=playerXpAt(8);w.coins=165_000;
   w.kingdom={towerLevel:1,houses:[house],mana:240};
  });
  const command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
@@ -921,7 +944,7 @@ test('Level 3 houses wait for Tower Level 2, charge both resources once and keep
   assert.equal(response.status,200);
   const {wallet,result}=await response.json();
   assert.deepEqual(result.house.construction,{level:3,startedAt:start,endsAt:start+30_000});
-  assert.equal(wallet.coins,10_000);
+  assert.equal(wallet.coins,15_000);
   assert.equal(wallet.kingdom.mana,40);
   assert.equal(kingdomStats(wallet).stars,.32);
  }
@@ -950,8 +973,8 @@ test('suggested Kingdom upgrades follow current gates, costs and construction ti
  const locked=options(start,12_000,14).find(item=>item.id==='tower:3');
  assert.equal(locked.ready,false);
  assert.match(kingdomSuggestionStatus(locked,start),/14 \/ 15 player level/);
- assert.match(kingdomSuggestionStatus(locked,start),/12,000 \/ 100,000 coins/);
- assert.equal(recommendedKingdomUpgrade(options(start,100_000,15)).id,'tower:3');
+ assert.match(kingdomSuggestionStatus(locked,start),/12,000 \/ 150,000 coins/);
+ assert.equal(recommendedKingdomUpgrade(options(start,150_000,15)).id,'tower:3');
  kingdom.towerConstruction={level:3,startedAt:start,endsAt:start+180_000};
  const tracked=recommendedKingdomUpgrade(options(start+90_000,100_000,15));
  assert.equal(tracked.progress,.5);
@@ -1009,7 +1032,7 @@ test('A visitor stays across saves and a restored house starts a fresh wait befo
  const start=Date.now();
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),owner=await f.open('resident-owner'),viewer=await f.open('resident-viewer');
- f.store(owner.id,w=>{w.coins=5_000;w.playerXp=playerXpAt(8);});
+ f.store(owner.id,w=>{w.coins=7_500;w.playerXp=playerXpAt(8);});
  const command=(action,args)=>f.command(owner,'kingdom.'+action,args);
  const spot={x:-8,z:7,rotation:1};
  const built=await (await command('house',spot)).json(),id=built.result.house.id;
@@ -1120,8 +1143,8 @@ test('A Gem Mine unlocks at Tower Level 2, banks offline production, and caps an
  const start=Date.now(),tick=gemMine.interval;
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),owner=await f.open('gem-miner'),viewer=await f.open('mine-viewer');
- const spot={x:8,z:7,rotation:0,expectedPrice:15_000},command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
- f.store(owner.id,w=>{w.playerXp=playerXpAt(8);w.coins=15_023;w.gems=2.5;});
+ const spot={x:8,z:7,rotation:0,expectedPrice:22_500},command=(action,args,receipt)=>f.command(owner,'kingdom.'+action,args,receipt);
+ f.store(owner.id,w=>{w.playerXp=playerXpAt(8);w.coins=22_523;w.gems=2.5;});
  assert.match((await (await command('gem-mine',spot)).json()).error,/Tower Level 2/);
  f.store(owner.id,w=>{w.kingdom={towerLevel:2,mana:799};});
  assert.match((await (await command('gem-mine',spot)).json()).error,/800 Mana/);
@@ -1338,15 +1361,28 @@ test('Demon banner groups, feature gates, key prices and pity are server-proven'
   assert.equal(after.pending.quantity,12);
   assert.equal(after.pending.keyCost,60);
   assert.equal(after.pending.rows.length,60);
-  // Newly discovered cards may earn keys but both receipts reflect the same single debit.
-  assert.equal(after.demonKeys,4+Object.keys(after.achievementRewards||{}).reduce((sum,id)=>sum+achievementById(id).keys,0));
+  assert.equal(after.demonKeys,4);
+  assert.equal(after.demonKeysToClaim,Object.keys(after.achievementRewards||{}).reduce((sum,id)=>sum+achievementById(id).keys,0));
   assert.deepEqual(bannerPity(after,'standard'),{legendary:40,mythic:50});
  }
  assert.equal((await pull('standard',1)).status,400);
+ assert.equal((await f.command(player,'demon.keys.claim')).status,400);
  assert.equal((await f.command(player,'pack.advance',{id:results[0].wallet.pending.id,opened:12})).status,200);
  const saved=await f.wallet(player);
  assert.equal(saved.lastPull.playerXpEarned,12*44);
  assert.equal(saved.pending,null);
+ assert.equal(saved.demonKeys,4);
+ assert.equal(saved.demonKeysToClaim,results[0].wallet.demonKeysToClaim+achievementById('opened-packs:1').keys);
+ const claimRequest=crypto.randomUUID();
+ const claims=await Promise.all([f.command(player,'demon.keys.claim',{},claimRequest),f.command(player,'demon.keys.claim',{},claimRequest)]);
+ for(const response of claims){
+  assert.equal(response.status,200);
+  const {wallet,result}=await response.json();
+  assert.equal(result.keys,saved.demonKeysToClaim);
+  assert.equal(wallet.demonKeys,4+saved.demonKeysToClaim);
+  assert.equal(wallet.demonKeysToClaim,undefined);
+ }
+ assert.equal((await f.command(player,'demon.keys.claim')).status,400);
 });
 
 test('Coin pack stock is per pack, capped, and regenerated by server time',async t=>{
@@ -1371,6 +1407,27 @@ test('Coin pack stock is per pack, capped, and regenerated by server time',async
  await open(refill);
  t.mock.timers.setTime(start+300*packRestockMs);
  assert.equal(packAvailability(await f.wallet(player),'common').quantity,packStockLimit);
+});
+
+test('Special banner picker browses every eligible level without exposing hidden levels',async()=>{
+ const f=fixture(),player=await f.open();
+ const browse=async params=>{
+  const response=await f.call('/api/game?'+new URLSearchParams({view:'demon-featured-levels',...params}),player);
+  assert.equal(response.status,200);
+  return response.json();
+ };
+ const first=await browse({}),second=await browse({page:'2'});
+ const eligible=new Set((await Promise.all(difficulties.map(pool))).flat().map(row=>row[0]));
+ assert.equal(first.total,eligible.size);
+ assert.equal(first.page,1);
+ assert.equal(second.page,2);
+ assert.equal(second.start,first.rows.length);
+ assert(first.rows.every(row=>eligible.has(row[0])&&!second.rows.some(other=>row[0]===other[0])));
+ const named=await browse({q:'Dark Paradise',category:'Easy'});
+ assert(named.rows.some(row=>row[1]==='Dark Paradise'));
+ assert(named.rows.every(row=>row[6]==='Easy'));
+ assert.deepEqual((await browse({q:'11280109'})).rows,[]);
+ assert.deepEqual((await browse({category:'Impossible',impossible:'1'})).rows,[]);
 });
 
 test('Owner-only chest test can select all ten Impossible cards and leaves the save untouched',async()=>{

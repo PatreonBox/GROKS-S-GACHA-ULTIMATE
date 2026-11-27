@@ -1,3 +1,5 @@
+import {packs} from './pack-engine.js';
+
 export const sectionGuides={
  'level-leaderboard':{title:'Level leaderboard',art:'/assets/faces/demon-extreme.webp',steps:[
   ['Find a level','Search by name, creator, or level ID. Filter by difficulty and sort by downloads, likes, or newest.'],
@@ -12,15 +14,15 @@ export const sectionGuides={
   ['Narrow it down','Search a level or creator. Use the format and sort controls to find the type of level you want.']
  ]},
  'demon-banners':{title:'Demon Banners',art:'/assets/faces/demon-extreme.webp',steps:[
-  ['Start with 30 Demon Keys','Open the Standard chest with one Demon Key, then flip its five cards. Earn more keys from campaign first clears and achievement stages.'],
-  ['Unlock stronger banners','At Level 5, Special lets you feature a level. At Level 20, Pro costs five keys and has twenty times the Legendary-and-higher odds.'],
+  ['Start with 30 Demon Keys','Open the Standard chest with one Demon Key, then flip its five cards. Earn keys from campaign clears and achievements. Claim keys earned during pulls in the Key Shop.'],
+  ['Unlock stronger banners','At Level 5, Special lets you browse and feature a level. At Level 20, Pro costs five keys and has twenty times the Legendary-and-higher odds.'],
   ['Check the guarantees','Each banner tracks its own progress toward Legendary or better at 150 draws and Mythic or better at 600.']
  ]},
  'demon-key-shop':{title:'Demon Key Shop',art:'/assets/packs/gem.png',steps:[
   ['Trade gems for keys','Buy a Demon Key for 10 gems. The one-time starter offer gives you 50 keys for 20 gems during your first 24 hours.']
  ]},
  'pack-shop':{title:'Coin Packs',art:'/assets/packs/common.png',steps:[
-  ['Open a Common pack','A Common pack costs 10 coins and deals at least five cards. Different packs have their own difficulty odds and stock.'],
+  ['Open a Common pack','A Common pack costs '+packs[0].price+' coins and deals at least five cards. Different packs have their own difficulty odds and stock.'],
   ['Watch the stock','Each pack type stores up to 20 packs, or 100 base cards, and refills by one pack per minute, even while you’re away.']
  ]},
  'pack-results':{title:'Pack results',art:'/assets/packs/common.png',steps:[
@@ -36,7 +38,7 @@ export const sectionGuides={
   ['Claim gems','Collect the one-time gem reward for each discovered level with an available claim. Harder levels award more gems.']
  ]},
  'secret-vault':{title:'Secret vault',art:'/assets/impossible/mark.webp',steps:[
-  ['Discover Impossible cards','Demon Banners and Godly coin packs can reveal a hidden level. A vault entry shows its identity after you discover it.'],
+  ['Review discovered cards','Select a discovered card to see its level details and claim its index reward.'],
   ['Check your collection','Return here to see which secrets you’ve uncovered.']
  ]},
  'merge-station':{title:'Merge station',art:'/assets/packs/gem.png',steps:[

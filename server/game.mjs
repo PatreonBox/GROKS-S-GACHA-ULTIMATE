@@ -17,7 +17,7 @@ import {trading} from './trading.mjs';
 import {trainingLevels,updateAchievements} from '../web/progression-rules.js';
 import {achievementActionEvents,refreshAchievementWallet,seedAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
-import {demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
+import {browseDemonTargets,demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
 import {initDemonKeys} from '../web/demon-keys.js';
 
 const guestCookie='__Host-gdlb-save';
@@ -267,7 +267,8 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    try{prepared??=await prepareGameAction(action,args,getPool,hasArt);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
    if(prepared.cards)records=await inventory(db,record.player_id);
-   await seedAchievements(db,record.player_id,wallet,now,records);
+   const deferDemonKeys=Boolean(wallet.pending)||['pack.buy','pack.advance','demon.pull'].includes(action);
+   await seedAchievements(db,record.player_id,wallet,now,records,deferDemonKeys);
    const lastTraining=trainingAction?trainingLevels(wallet):0;
    const kingdomAction=action.startsWith('kingdom.');
    const before={battleActive:battleWasActive,kills:wallet.battle?.kills||0,
@@ -276,7 +277,7 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    try{result=prepared.apply(wallet,records||[],changes,now,true);}
    catch(error){reject(error instanceof TypeError?'Choose a valid game action.':error.message);}
    if(kingdomAction)settleKingdomVisitors(wallet,now,true);
-   updateAchievements(wallet,{records:changes.size?records:undefined,changes,
+   updateAchievements(wallet,{records:changes.size?records:undefined,changes,deferDemonKeys,
     wins:Number(action==='arena.move'&&battleWasActive&&wallet.battle?.status==='won'),
     trained:trainingAction?Math.max(0,trainingLevels(wallet)-lastTraining):0,
     events:achievementActionEvents(wallet,action,result,before),
@@ -443,6 +444,9 @@ export function gameRoutes(readJson,hasArt){
    }
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
+   if(view==='demon-featured-levels')return json(await browseDemonTargets(getPool,{
+    query:url.searchParams.get('q')||'',category:url.searchParams.get('category'),page:Number(url.searchParams.get('page'))
+   }));
    if(view==='demon-targets'){
     const category=url.searchParams.get('category');
     const impossible=url.searchParams.get('impossible')==='1'||category==='Impossible';

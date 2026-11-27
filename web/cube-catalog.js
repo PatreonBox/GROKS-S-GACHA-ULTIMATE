@@ -1,3 +1,5 @@
+import {coinDivisor,coinPrice} from './coin-economy.js';
+
 export const cubeRarities={
  Common:'#b6c9dc',Uncommon:'#6ff4ae',Rare:'#71c2ff',Epic:'#c19aff',Legendary:'#ffcd6a',Mythic:'#ff7bc9'
 };
@@ -23,7 +25,8 @@ export const cubeCatalog=[
  ['170','Void Maw','Mythic',1800000,'#ff779c'],
  ['462','Lunar Scarab','Mythic',4200000,'#b9a3ff'],
  ['classic','Classic','Mythic',10000000,'#58edf6']
-].map(([id,name,rarity,price,color])=>({id,name,rarity,price,color,
+].map(([id,name,rarity,price,color])=>({id,name,rarity,price:coinPrice(price),color,
+ purchaseXp:price>0?6+Math.floor(4*Math.log10(price*coinDivisor)):0,
  icon:id==='classic'?'/assets/player-cube.png':'/assets/cubes/'+id+'.webp'}));
 
 const cubesById=new Map(cubeCatalog.map(cube=>[cube.id,cube]));

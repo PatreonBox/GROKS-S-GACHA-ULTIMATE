@@ -8,7 +8,7 @@ import {initDemonKeys} from '../web/demon-keys.js';
 export const needsAchievementSeed=wallet=>wallet.achievementProgress?.version!==achievementVersion;
 const olderBattleWins=wallet=>Object.keys(wallet.campaign||{}).length+Object.values(wallet.remixWins||{}).reduce((sum,wins)=>sum+wins,0);
 
-export async function seedAchievements(db,player,wallet,now,records){
+export async function seedAchievements(db,player,wallet,now,records,deferDemonKeys){
  initDemonKeys(wallet,now);
  if(!needsAchievementSeed(wallet))return;
  const progress=wallet.achievementProgress??={};
@@ -20,7 +20,7 @@ export async function seedAchievements(db,player,wallet,now,records){
  progress.packs=Math.max(progress.packs||0,(wallet.lastPull?.opened||0)+(wallet.pending?.opened||0));
  progress.merges=Math.max(progress.merges||0,wallet.lastMerge?.count||0);
  progress.version=achievementVersion;
- updateAchievements(wallet,{records:cardRows,train:true,visitors:discoveredVisitors(wallet,now).length},now);
+ updateAchievements(wallet,{records:cardRows,train:true,visitors:discoveredVisitors(wallet,now).length,deferDemonKeys},now);
 }
 
 export async function refreshAchievementWallet(db,record,now=Date.now()){

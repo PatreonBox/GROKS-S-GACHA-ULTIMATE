@@ -366,11 +366,11 @@ test('the HTTP server keeps the wallet and cards across a restart',async()=>{
   assert.equal(attempt.status,403);
   const bought=await fetch(base+'/api/game',{method:'POST',body,headers});
   assert.equal(bought.status,200);
-  assert.equal((await bought.json()).wallet.coins,140);
+  assert.equal((await bought.json()).wallet.coins,135);
   await stop(child);
   child=await launch(port,volume);
   const save=await fetch(base+'/api/game',{headers:{cookie}});
-  assert.equal((await save.json()).wallet.coins,140);
+  assert.equal((await save.json()).wallet.coins,135);
   const inventory=await fetch(base+'/api/game?view=cards',{headers:{cookie}});
   assert.equal((await inventory.json()).cards.reduce((sum,entry)=>sum+entry.copies,0),5);
   const ranks=await fetch(base+'/api/players',{headers:{cookie}});

@@ -9,9 +9,9 @@ const smooth=t=>t*t*(3-2*t);
 const out=t=>1-(1-t)**3;
 const v=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const selectTier={
- standard:{body:'#4b6388',grain:'#354a69',plate:'#b8d9fc',edge:'#59709f',radiance:'#42dffe',iris:'#66edff',room:'#142440'},
- special:{body:'#434e67',grain:'#34445f',plate:'#ffcb59',edge:'#a4632d',radiance:'#5fb9ff',iris:'#79d6ff',room:'#102a3b'},
- pro:{body:'#533484',grain:'#402b65',plate:'#ffcc62',edge:'#a66235',radiance:'#a9f95e',iris:'#bdff71',room:'#211441'}
+ standard:{body:'#353638',grain:'#25262c',plate:'#e1e7ed',edge:'#626976',radiance:'#42dffe',iris:'#52e8ff',room:'#142440'},
+ special:{body:'#4a4350',grain:'#302933',plate:'#ffbf34',edge:'#944814',radiance:'#5fb9ff',iris:'#65dcff',room:'#102a3b'},
+ pro:{body:'#462769',grain:'#281942',plate:'#ffbc26',edge:'#914415',radiance:'#a9f95e',iris:'#a8ff47',room:'#211441'}
 };
 const empty='#080a17';
 const hints={
@@ -68,7 +68,7 @@ function disc(parent,rad,depth,finish,x=0,y=0,z=0,count=24){
 }
 function horn(parent,side,finish){
  const center=new THREE.CatmullRomCurve3([v(.34*side,.11,0),v(.51*side,.25,.025),
-  v(.65*side,.37,.11),v(.73*side,.62,.12)]);
+  v(.67*side,.39,.11),v(.74*side,.62,.12)]);
  const positions=[],faces=[],sides=10,steps=10;
  for(let j=0;j<=steps;j++){
   const t=j/steps,p=center.getPoint(t),along=center.getTangent(t).normalize();
@@ -90,19 +90,24 @@ function horn(parent,side,finish){
 function badge(parent,gear,style,key=false){
  const {frame,trim,bright,iris,edge,dark}=style;
  if(gear){
-  const c=12,shape=Array.from({length:c*4},(_,i)=>{
-   const r=i%4===0||i%4===3?.55:.67,a=turn*i/(c*4)+.02;
-   return [Math.cos(a)*r,Math.sin(a)*r];
+  const c=8,teeth=Array.from({length:c*4},(_,i)=>{
+   const r=i%4===0||i%4===3?.54:.67,a=turn*i/(c*4)-pi/32;
+   return [Math.sin(a)*r,Math.cos(a)*r];
   });
-  plate(parent,shape,.10,dark,0,0,-.025);
-  plate(parent,shape.map(([x,y])=>[x*.91,y*.91]),.145,frame,0,0,.055);
-  disc(parent,.40,.16,trim,0,0,.146,20);
-  disc(parent,.325,.09,frame,0,0,.24,20);
+  const mask=[[-.18,.52],[0,.45],[.18,.52],[.29,.35],[.51,.31],[.46,.069],[.59,-.11],
+   [.42,-.24],[.37,-.47],[.14,-.51],[0,-.65],[-.14,-.51],[-.37,-.47],[-.42,-.24],
+   [-.59,-.11],[-.46,.069],[-.51,.31],[-.29,.35]];
+  plate(parent,teeth,.105,dark,0,0,-.01,null,.035);
+  plate(parent,teeth.map(([x,y])=>[x*.91,y*.91]),.130,trim,0,0,.056,null,.022);
+  plate(parent,mask,.14,dark,0,0,.12,null,.033);
+  plate(parent,mask.map(([x,y])=>[x*.87,y*.87]),.145,frame,0,0,.22,null,.025);
+  plate(parent,[[0,.410],[.16,.461],[.26,.30],[.44,.27],[.405,.06],[.508,-.091],
+   [.363,-.205],[.322,-.412],[.124,-.447],[0,-.568]],.02,edge,0,0,.297,null,.008);
   for(const side of [-1,1]){
-   disc(parent,.134,.054,edge,side*.17,.075,.31,16);
-   disc(parent,.092,.055,iris,side*.17,.075,.34,16);
+   disc(parent,.159,.055,dark,side*.203,.069,.321,22);
+   disc(parent,.122,.058,iris,side*.203,.069,.344,22);
+   disc(parent,.066,.045,bright,side*.203,.069,.371,18);
   }
-  box(parent,[.23,.11,.07],dark,0,-.225,.30,.025);
   return;
  }
  const face=[[-.54,.08],[-.46,.29],[0,.43],[.46,.29],[.54,.08],[.48,-.30],[.30,-.45],[0,-.51],[-.30,-.45],[-.48,-.30]];
@@ -111,6 +116,7 @@ function badge(parent,gear,style,key=false){
  plate(parent,[[-.478,.15],[-.43,.295],[0,.395],[.43,.295],[.478,.15],[.23,-.02],[0,-.06],[-.23,-.02]],.107,frame,0,0,.23);
  for(const side of [-1,1]){
   horn(parent,side,frame);
+  horn(parent,side,dark).scale.set(1.09,1.06,.87);
   const eye=[[-.433,.087],[-.14,-.059],[-.10,-.16],[-.214,-.208],[-.365,-.135],[-.448,-.019]]
    .map(([x,y])=>[x*side,y]);
   plate(parent,eye,.082,dark,0,0,.24,null,.021);
@@ -125,6 +131,22 @@ function badge(parent,gear,style,key=false){
  if(!key)box(parent,[.27,.052,.036],trim,0,-.397,.24,.013);
 }
 
+function lidPlank(parent,width,start,end,zCenter,material){
+ const section=[];
+ const samples=4;
+ for(let i=0;i<=samples;i++){
+  const angle=start+(end-start)*i/samples;
+  section.push([Math.sin(angle)*.864,.048+Math.cos(angle)*.49]);
+ }
+ for(let i=samples;i>=0;i--){
+  const angle=start+(end-start)*i/samples;
+  section.push([Math.sin(angle)*.790,.015+Math.cos(angle)*.42]);
+ }
+ const plank=plate(parent,section,width,material,0,0,zCenter,null,.014);
+ plank.rotation.y=pi/2;
+ return plank;
+}
+
 function chestModel(parent,style,tier){
  const {body,wood,lining,frame,edge,trim,bright,dark}=style;
  const rig=group(parent),base=group(rig);
@@ -135,41 +157,49 @@ function chestModel(parent,style,tier){
   const z=side*.806,x=side*1.375;
   const panel=box(base,[2.74,.945,.16],body,0,.624,z,.040);panel.castShadow=true;
   box(base,[.15,.94,1.56],body,x,.62,0,.046);
-  box(base,[2.47,.14,.040],wood,0,.492,z+side*.093,.009);
-  box(base,[2.47,.14,.040],wood,0,.768,z+side*.093,.009);
-  box(base,[2.63,.11,.068],trim,0,1.01,z+side*.073,.020);
+  for(const y of [.427,.660,.890])box(base,[2.48,.046,.042],wood,0,y,z+side*.093,.009);
+  const faceRail=[[-1.42,-.096],[-1.23,-.096],[-1.108,-.044],[1.108,-.044],[1.23,-.096],
+   [1.42,-.096],[1.42,.114],[1.17,.114],[1.012,.023],[-1.012,.023],[-1.17,.114],[-1.42,.114]];
+  plate(base,faceRail,.085,edge,0,1.005,z+side*.080,null,.025);
+  box(base,[2.75,.085,.070],frame,0,1.065,z+side*.147,.024);
   box(base,[1.58,.12,.15],lining,0,1.050,z-side*.01,.027);
   for(const left of [-1,1]){
    box(base,[.224,.96,.212],edge,left*1.26,.618,z+side*.045,.045);
    box(base,[.120,.824,.046],frame,left*1.26,.618,z+side*.162,.020);
-   for(const y of [.308,.874])disc(base,.059,.032,bright,left*1.26,y,z+side*.194,8);
+   for(const y of [.208,1.032]){
+    disc(base,.085,.045,dark,left*1.26,y,z+side*.194,14);
+    disc(base,.048,.052,frame,left*1.26,y,z+side*.224,12);
+   }
   }
   box(base,[.28,.32,.52],edge,x,.69,0,.061);
   const handle=mesh(base,new THREE.TorusGeometry(.202,.051,8,16),frame,x+side*.17,.682,0);
   handle.rotation.y=pi/2;
  }
  const hinge=group(rig,0,1.10,-.79);
- const roof=mesh(hinge,new RoundedBoxGeometry(2.93,.34,1.75,2,.12),body,0,.15,.79);
+ const roof=box(hinge,[2.77,.15,1.70],wood,0,.062,.79,.045);
  roof.castShadow=true;
- for(let i=0;i<4;i++){
-  const x=.493*(i-1.5);
-  box(hinge,[.422,.049,1.48],i%2?wood:body,x,.328,.78,.017);
+ for(let i=0;i<7;i++){
+  const start=-pi/2+i*pi/7+.012,end=-pi/2+(i+1)*pi/7-.012;
+  lidPlank(hinge,2.74,start,end,.79,i%3===0?wood:body).castShadow=true;
  }
  for(const s of [-1,1]){
-  box(hinge,[.235,.431,1.76],edge,s*1.28,.17,.79,.064);
-  box(hinge,[.126,.049,1.76],frame,s*1.28,.398,.80,.018);
-  box(hinge,[.141,.329,.103],frame,s*1.28,.183,1.71,.024);
-  for(const z of [.18,1.45]){
-   const bolt=mesh(hinge,new THREE.CylinderGeometry(.054,.054,.027,8),bright,s*1.28,.432,z);
-   bolt.rotation.y=pi/8;
+  for(let i=0;i<7;i++){
+   const start=-pi/2+i*pi/7-.006,end=-pi/2+(i+1)*pi/7+.006;
+   const band=lidPlank(hinge,.146,start,end,.79,frame);
+   band.position.set(s*1.283,.017,.79);
+   band.scale.x=1.028;
   }
+  box(hinge,[.142,.224,.084],edge,s*1.283,.099,1.688,.02);
+  disc(hinge,.084,.046,dark,s*1.283,.084,1.729,14);
+  disc(hinge,.048,.050,frame,s*1.283,.084,1.757,12);
   box(hinge,[.312,.222,.18],trim,s*.76,.02,-.072,.04);
  }
- box(hinge,[2.97,.13,.164],frame,0,.064,1.666,.031);
+ box(hinge,[2.98,.118,.147],edge,0,.033,1.650,.026);
+ box(hinge,[2.73,.066,.075],frame,0,.059,1.716,.022);
  box(hinge,[2.48,.054,1.46],lining,0,-.033,.773,.027);
- const mask=group(hinge,0,.16,1.83);mask.scale.setScalar(.91);
+ const mask=group(hinge,0,.115,1.795);mask.scale.setScalar(tier==='special'?.80:.91);
  badge(mask,tier==='special',style);
- const collar=group(base,0,.783,.991);
+ const collar=group(base,0,.741,.988);
  const outer=[[-.34,-.12],[-.23,-.25],[.23,-.25],[.34,-.12],[.34,.24],[-.34,.24]];
  const socket=[[-.081,-.115],[.081,-.115],[.049,-.020],[.088,.066],[.047,.134],[-.047,.134],[-.088,.066],[-.049,-.020]];
  plate(collar,outer,.104,edge);
@@ -177,17 +207,17 @@ function chestModel(parent,style,tier){
  plate(collar,socket.map(([x,y])=>[x*1.05,y*1.05]),.036,dark,0,0,.102,null,.015);
  return {rig,hinge};
 }
-function demonKey(parent,style,tier){
+function demonKey(parent,style){
  const {frame,edge,trim,bright,iris,dark}=style;
  const key=group(parent),head=group(key);
- head.scale.setScalar(.40);
- badge(head,tier==='special',{frame,edge,trim,bright,iris,dark},true);
- box(key,[1.087,.204,.184],edge,.714,0,0,.027);
- box(key,[1.050,.149,.170],frame,.738,.026,.019,.025);
- box(key,[.172,.291,.175],frame,1.113,-.076,0,.021);
- box(key,[.124,.226,.166],frame,1.316,-.067,0,.019);
- box(key,[.122,.200,.208],bright,.474,.014,.013,.018);
- box(key,[.084,.155,.205],trim,.774,.010,.010,.015);
+ head.scale.setScalar(.47);
+ badge(head,false,{frame,edge,trim,bright,iris,dark},true);
+ const shaft=[[.13,.104],[.93,.104],[.93,-.172],[.804,-.172],[.804,-.049],
+  [.683,-.049],[.683,-.171],[.521,-.171],[.521,-.053],[.13,-.053]];
+ plate(key,shaft,.179,dark,0,0,-.031,null,.025);
+ plate(key,shaft,.136,frame,0,0,.018,null,.013);
+ box(key,[.682,.029,.028],bright,.551,.092,.085,.009);
+ box(key,[.404,.030,.028],edge,.325,-.041,.093,.009);
  return key;
 }
 function makeRoom(parent,colors,cave){
@@ -348,12 +378,12 @@ export function createChestRevealWorld(canvas,tier,rarity){
  };
  const chest=chestModel(rig,accents,tier);
  const keyColor=hint.key?new THREE.Color(hint.key):null;
- const keyParts=keyColor?{
-  ...accents,frame:flatMaterial(keyColor,{metalness:.46,roughness:.29}),
-  edge:flatMaterial(keyColor.clone().multiplyScalar(.33),{metalness:.4,roughness:.4}),
-  iris:new THREE.MeshBasicMaterial({color:hint.color,toneMapped:false})
- }:accents;
- const key=demonKey(chest.rig,keyParts,tier),flecks=particles(group(rig,0,caveFloor,0),hint);
+ const keyParts={
+  ...accents,frame:flatMaterial(keyColor||'#edf3fb',{metalness:.40,roughness:.30}),
+  edge:flatMaterial(keyColor?keyColor.clone().multiplyScalar(.33):'#747c87',{metalness:.32,roughness:.42}),
+  iris:new THREE.MeshBasicMaterial({color:keyColor?hint.color:'#49e8ff',toneMapped:false})
+ };
+ const key=demonKey(chest.rig,keyParts),flecks=particles(group(rig,0,caveFloor,0),hint);
  batchModels(chest.rig);batchModels(room);if(hall)batchModels(hall);
  const bloom=glowPlane(rig,hint.color,5,.0),keyGlow=glowPlane(rig,hint.color,1.14,0);
  const under=glowPlane(rig,hint.color,7.1,.25);
@@ -375,6 +405,8 @@ export function createChestRevealWorld(canvas,tier,rarity){
  scene.add(hemi);
  const view=new THREE.PerspectiveCamera(39,1,.06,42);
  const focus=v(),bow=v(),spinAxis=v(1,0,0),upAxis=v(0,1,0),aim=new THREE.Quaternion(),spin=new THREE.Quaternion();
+ const projectedMouth=v();
+ let cardOrigin=null;
  let width=0,height=0,disposed=false;
  function draw(ms,timePlan,phase){
   if(disposed||context.isContextLost())return false;
@@ -401,12 +433,12 @@ export function createChestRevealWorld(canvas,tier,rarity){
   const fly=smooth(fraction(t,settle,turnStart)),twist=fraction(t,turnStart,turnEnd);
   const withdraw=smooth(fraction(t,turnEnd-.035,turnEnd+.39));
   key.visible=t>=settle&&t<turnEnd+.4;
-  key.position.set((1-fly)*2.8+withdraw*1.04,.786+(1-fly)*2.01+withdraw*.94,2.186+(1-fly)*1.35+withdraw*1.56);
+  key.position.set(.07+(1-fly)*2.8+withdraw*1.04,.773+(1-fly)*2.01+withdraw*.94,2.023+(1-fly)*1.35+withdraw*1.56);
   aim.setFromAxisAngle(upAxis,-.39+2.04*fly);spin.setFromAxisAngle(spinAxis,(1-fly)*-.5-1.30*smooth(twist)+.47*withdraw);
   key.quaternion.copy(aim).multiply(spin);
   const cameraWide=Math.min(1,view.aspect)/.9;
   const distance=8.1+Math.max(0,1-cameraWide)*4.35;
-  const gallery=phase==='cards';
+  const gallery=phase==='cards'?1:phase==='dealing'?smooth(fraction(t,open,open+.65)):0;
   rig.position.y=-caveFloor*smooth(fraction(descend,.09,.93));
   room.visible=!cave||descend>=.45;
   if(hall)hall.visible=descend<.51;
@@ -418,23 +450,27 @@ export function createChestRevealWorld(canvas,tier,rarity){
   keyGlow.quaternion.copy(view.quaternion);
   keyGlow.material.uniforms.power.value=key.visible?hint.power*(1-withdraw)*.44:0;
   bloom.position.set(0,caveFloor+1.17+.54*p,.48);bloom.quaternion.copy(view.quaternion);
-  bloom.material.uniforms.power.value=(p*.87+shaking*.37)*(.70+hint.power*.15)*(gallery?.63:1);
+  bloom.material.uniforms.power.value=(p*.87+shaking*.37)*(.70+hint.power*.15)*(1-.37*gallery);
   under.position.y=caveFloor-.023;
   flood.position.y=caveFloor+1.15;
   flood.intensity=1.8+p*18+shaking*7;
   under.material.uniforms.power.value=.19+shaking*.63+p*.45;
   hemi.intensity=cave?1.29-descend*.28+smooth(descend)*.48:2.17;
   front.intensity=cave?2.03-.96*Math.sin(pi*descend):2.65;
-  sky.near=gallery?9:11;
+  sky.near=11-2*gallery;
   rim.intensity=cave?13+descend*6:19;
   rays.forEach((beam,i)=>{
    beam.material.uniforms.power.value=(shaking+.36*fly+p*1.12)*(.22+.09*Math.cos(i*1.5+t*2.4));
   });
   flecks.draw(t,landing,turnEnd);
   renderer.render(scene,view);
+  if(p>.8){
+   chest.rig.localToWorld(projectedMouth.set(0,1.13,.36)).project(view);
+   cardOrigin={x:(projectedMouth.x+1)/2,y:(1-projectedMouth.y)/2};
+  }
   return true;
  }
- return {draw,dispose(){
+ return {draw,getCardOrigin:()=>cardOrigin,dispose(){
   if(disposed)return;
   disposed=true;disposeScene(scene);renderer.dispose();
   if(!context.isContextLost())renderer.forceContextLoss();

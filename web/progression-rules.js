@@ -5,7 +5,7 @@ import {spikeKind,spikePlan} from './kingdom-defences.js';
 import {campaignStages,medalCount,stageCleared} from './campaign.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {awardPlayerXp} from './player-progression.js';
-import {rewardDemonKeys} from './demon-keys.js';
+import {keyLimit,rewardDemonKeys} from './demon-keys.js';
 
 export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js';
 export const achievementVersion=2;
@@ -216,7 +216,7 @@ function updateCollection(state,records){
  Object.assign(state,{byDifficulty,unique,demons,holos,antimatter,index});
 }
 
-export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train=false,trained=0,events={},visitors}={},now=Date.now()){
+export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train=false,trained=0,events={},visitors,deferDemonKeys=Boolean(wallet.pending)}={},now=Date.now()){
  const state=wallet.achievementProgress??={};
  if(records){
   const owned=new Map(records.map(card=>[card.id,card]));
@@ -255,6 +255,9 @@ export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train
  }
  wallet.achievementRewardXp=(wallet.achievementRewardXp||0)+xp;
  awardPlayerXp(wallet,xp);
- rewardDemonKeys(wallet,keys,now);
+ if(deferDemonKeys){
+  const balance=wallet.demonKeysToClaim||0;
+  wallet.demonKeysToClaim=balance+Math.min(keyLimit-balance,keys);
+ }else rewardDemonKeys(wallet,keys,now);
  return awarded;
 }
