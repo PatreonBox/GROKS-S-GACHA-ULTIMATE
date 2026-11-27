@@ -18,14 +18,15 @@
 .army-field{
  --sky:none;position:relative;isolation:isolate;overflow:hidden;height:clamp(315px,min(42vw,calc(100dvh - 388px)),540px);
  background-image:linear-gradient(180deg,#0b1129a9 0%,#12142f08 43%,#0a0f1e55 77%,#0a0e1dda),var(--sky);
- background-color:#141c33;background-size:cover;background-position:center 45%;
- border-bottom:1px solid var(--army-line);cursor:grab;touch-action:pan-y;
+ background-color:#141c33;background-size:cover;background-position:calc(50% + var(--army-sky-x,0%)) calc(45% + var(--army-sky-y,0%));
+ border-bottom:1px solid var(--army-line);cursor:grab;touch-action:none;
 }
-.army-field[data-map="foundry"]{
+.army-field:is([data-backdrop="molten-circuit"],[data-backdrop="ember-foundry"],[data-backdrop="golden-temple"]){
  background-image:linear-gradient(180deg,#24121aa8,#1f111807 42%,#140d1671 79%,#100e1cdd),var(--sky);
- background-position:center 42%;background-color:#2e1e2c;
+ background-color:#2e1e2c;
 }
 .army-field:active{cursor:grabbing}
+.army-field:focus-visible{outline:2px solid var(--army-teal);outline-offset:-3px}
 .army-canvas{width:100%;height:100%;position:absolute;inset:0;pointer-events:none}
 .army-field-head,.army-score{position:absolute;z-index:1;inset-inline:clamp(12px,2.3vw,25px);pointer-events:none}
 .army-field-head{top:clamp(12px,1.8vw,20px);align-items:flex-start;text-shadow:0 2px 16px #000b}
@@ -53,6 +54,7 @@
 .army-strip{border-bottom:1px solid #282f42;background:#181d2b;min-height:51px}
 .army-feed{font-weight:650;font-size:13px;color:#e2eaf7;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .army-camera{display:flex;gap:4px}
+.army-camera button[data-army-act="up"] svg{transform:rotate(180deg)}
 #armyRoom .iconbtn{display:grid;place-items:center;width:33px;height:33px;padding:0;border-radius:5px}
 #armyRoom .iconbtn svg{width:17px;height:17px}
 .army-command{justify-content:end;min-height:60px}
@@ -174,7 +176,9 @@ main:has(#armyRoom:not([hidden])){width:min(1710px,100%);padding-inline:max(clam
 .army-actions{margin-left:auto;justify-content:flex-end}
 .army-money{display:inline-flex;align-items:center;gap:4px;color:#ffda8f;font-size:13px;font-weight:750;white-space:nowrap}
 .army-money[data-currency="gems"]{color:#9fe9ff}
+.army-money[data-currency="demonKeys"]{color:#e5d4ff}
 .army-money img{width:17px;height:17px;object-fit:contain}
+.army-money[data-currency="demonKeys"] img{width:23px}
 .army-result-loot{justify-content:center;margin-top:9px;color:#d5dfee;font-size:13px}
 .army-result-loot .army-money{background:#101622;border:1px solid #677e9b70;border-radius:6px;padding:4px 6px}
 .army-saving{font-size:13px;color:var(--army-muted)}
@@ -222,6 +226,12 @@ main:has(#armyRoom:not([hidden])){width:min(1710px,100%);padding-inline:max(clam
  .army-actions{width:100%;justify-content:space-between}
 }
 @media(max-height:575px) and (orientation:landscape){#armyRoom .army-field{height:clamp(300px,91dvh,453px)}}
+@media(max-width:620px){
+ .army-strip{flex-wrap:wrap}
+ #armyRoom .army-camera .iconbtn{width:28px;height:32px}
+ .army-camera{gap:3px}
+ .army-camera output{min-width:31px}
+}
 @media(prefers-reduced-motion:reduce){.army-outcome{animation:none}}
 
 .army-trilogy{

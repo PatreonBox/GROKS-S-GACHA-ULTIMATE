@@ -113,7 +113,7 @@ function refreshDiscordProfile(automatic=false) {
  form.submit();
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error,discordKeyBonusClaimed}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error,discordKeyBonusClaimed,achievementKeysReleased}) {
  const account=document.getElementById('gameAccount');
  const logout=document.getElementById('gameSignOut');
  const transfer=document.getElementById('gameTransfer');
@@ -134,8 +134,12 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  document.getElementById('gameAuthRetry').hidden=true;
  if(locked)for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  renderPlayerProgress(locked?null:wallet,saveRevision);
- if(locked||wallet)document.dispatchEvent(new CustomEvent('gdlb-key-balance',{detail:{keys:locked?null:wallet.demonKeys||0,revision:saveRevision??0}}));
- if(locked||wallet)document.dispatchEvent(new CustomEvent('gdlb-achievements',{detail:{earned:locked?null:wallet.achievements||{},saveRevision:saveRevision??0,pending:Boolean(wallet?.pending),keysToClaim:wallet?.demonKeysToClaim||0}}));
+ if(locked||wallet){
+  const keys=locked?null:wallet.demonKeys||0,paid=wallet?.achievementKeysPaid||0;
+  document.dispatchEvent(new CustomEvent('gdlb-achievements',{detail:{earned:locked?null:wallet.achievements||{},saveRevision:saveRevision??0,
+   pending:Boolean(wallet?.pending),keys,paid,initialKeys:achievementKeysReleased||0}}));
+  document.dispatchEvent(new CustomEvent('gdlb-key-balance',{detail:{keys,paid,revision:saveRevision??0}}));
+ }
  if(account){
   account.hidden=!locked||Boolean(banned);
   account.dataset.provider=accountProvider||'';

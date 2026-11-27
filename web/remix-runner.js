@@ -1,9 +1,9 @@
-import {VIEW_WIDTH as WIDTH,VIEW_HEIGHT as HEIGHT,STEP,makeCourse,newAttempt,advanceRunner} from './remix-physics.js';
+import {VIEW_WIDTH as WIDTH,VIEW_HEIGHT as HEIGHT,STEP,makeCourse,createEndlessCourse,newAttempt,advanceRunner} from './remix-physics.js';
 import {openLimboFinale} from './limbo-finale.js';
 import {createRemixArt} from './remix-art.js';
 import {helpButton,installMinigameGuide,remixGuide} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
-import {remixMusic,remixTracks} from './remix-media.js';
+import {remixMusic,remixMusicCredit} from './remix-media.js';
 
 export {makeCourse,newAttempt,advanceRunner} from './remix-physics.js';
 
@@ -11,15 +11,18 @@ import {runnerInput} from './game-replay.js';
 
 const controls=['Space','ArrowUp','KeyW'];
 const launchTime=.56;
-export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starterCube}){
- const course=makeCourse(remix),dialog=document.createElement('dialog');
+const clock=s=>Math.floor(s/60)+':'+String(Math.floor(s)%60).padStart(2,'0');
+export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,mode='normal',avatar=starterCube}){
+ const endless=mode==='endless';
+ let course=endless?createEndlessCourse(remix,remix.id):makeCourse(remix);
+ const dialog=document.createElement('dialog');
  dialog.className='runner-modal';dialog.setAttribute('aria-label',remix.name);dialog.style.setProperty('--remix',remix.color);
  const instruction=course.mode==='cube'?'Tap or press Space to jump.':remix.mode==='wave'?'Hold to climb. Release to dive.':'Hold for thrust. Release to descend.';
  const orbHint=course.finale?' Tap again inside each pink orb.':'';
- dialog.innerHTML='<div class="runner-bar"><div class="runner-title"><img class="runner-avatar" src="'+avatar.icon+'" title="'+avatar.name+'" alt=""><div><span>MEME ARCADE · '+remix.mode.toUpperCase()+'</span><h2>'+remix.name+'</h2>'+
-  (remix.music?'<p class="runner-track">♫ '+remixTracks[remix.music]+'</p>':'')+'</div></div><div class="minigame-actions">'+
+ dialog.innerHTML='<div class="runner-bar"><div class="runner-title"><img class="runner-avatar" src="'+avatar.icon+'" title="'+avatar.name+'" alt=""><div><span>MINI GAMES · '+mode.toUpperCase()+' · '+remix.mode.toUpperCase()+'</span><h2>'+remix.name+'</h2>'+
+  remixMusicCredit(remix.music,remix.id)+'</div></div><div class="minigame-actions">'+
   (remix.music?'<button type="button" class="runner-music" data-music aria-label="Level music"></button>':'')+helpButton+'<button type="button" data-close aria-label="Close level">×</button></div></div>'+
-  '<div class="runner-frame"><canvas tabindex="0" aria-label="'+remix.mode+' course. Use Space, Up, or touch."></canvas><div class="runner-status"><span class="runner-attempt">READY</span><span class="runner-progress">0%</span></div></div>'+
+  '<div class="runner-frame"><canvas tabindex="0" aria-label="'+remix.mode+' course. Use Space, Up, or touch."></canvas><div class="runner-status"><span class="runner-attempt">READY</span><span class="runner-progress">'+(endless?'0:00':'0%')+'</span></div></div>'+
   '<div class="runner-controls"><div class="runner-message" aria-live="polite"></div><button type="button" class="runner-touch game-touch" hidden>'+(course.mode==='cube'?'Tap to jump':'Hold to climb')+'</button><div class="runner-buttons"></div></div>';
  document.body.append(dialog);dialog.showModal();
  const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),message=dialog.querySelector('.runner-message'),buttons=dialog.querySelector('.runner-buttons');
@@ -30,24 +33,27 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const particles=[],keys=new Set();
  let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,closed=false,lastPercent=-1,highWater=0,practice=false,pointer=null;
- let launch=0,ticks=0,trace=[],token=null,closeFinale;
- const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running');
- const paint=createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
- const guide=installMinigameGuide(dialog,remixGuide(remix,avatar.icon),pause);
+ let launch=0,ticks=0,trace=[],traceStart=0,token=null,closeFinale,finalSave;
+ let interval=0,keysRemaining=0,nextCheckpoint=Infinity,keysEarned=0,xpEarned=0;
+ const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running',{loop:true});
+ const makeArt=()=>createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
+ let paint=makeArt();
+ const guide=installMinigameGuide(dialog,remixGuide(remix,avatar.icon,{endless}),pause);
  function resize(){
   if(closed)return;
   const {clientWidth:width,clientHeight:height}=viewport;
   if(!width||!height)return;
   const dpr=Math.min(2,devicePixelRatio||1);
   canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
-  scale=Math.min(width/(width<520?392:644),height/HEIGHT);
+  scale=Math.min(width/(width<520?378:700),height/(HEIGHT+18));
   viewWidth=width/scale;viewHeight=height/scale;
   ctx.setTransform(dpr*scale,0,0,dpr*scale,0,0);
   draw();
  }
  function draw(){
   const state=phase==='running'&&!launch&&carry?{...s,x:s.x+carry*course.speed,y:s.y+carry*s.vy}:s;
-  canvas.parentElement.style.setProperty('--runner-progress',Math.min(1,s.x/course.end));
+  const progress=endless?(interval?(ticks*STEP%interval)/interval:0):s.x/course.end;
+  canvas.parentElement.style.setProperty('--runner-progress',Math.min(1,progress));
   paint(state,{phase,particles,reduced,width:viewWidth,height:viewHeight});
  }
  function action(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;buttons.append(b);return b}
@@ -66,6 +72,39 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
    if(attemptToken!==token)return;
    highWater=0;if(!closed)message.textContent='Your record could not be saved.';
   });
+ }
+ function proof(){return {ticks,trace:trace.slice(),from:traceStart}}
+ function endlessProgress(){
+  const elapsed=ticks*STEP;
+  return clock(elapsed)+(keysRemaining>0?' · Key in '+Math.max(0,Math.ceil(nextCheckpoint-elapsed))+'s':' · Key limit reached');
+ }
+ function updateEndlessReceipt(result){
+  if(!result)return;
+  keysEarned+=result.demonKeys||0;
+  xpEarned+=result.playerXpEarned||0;
+  keysRemaining=result.keysRemaining??keysRemaining;
+ }
+ function collectCheckpoint(){
+  if(!endless||!token||ticks*STEP+1e-7<nextCheckpoint)return;
+  nextCheckpoint+=interval;
+  const run=token,snapshot=proof();
+  Promise.resolve(onCheckpoint?.(run,snapshot)).then(result=>{
+   if(token!==run||closed)return;
+   const verified=result?.verifiedTicks??0;
+   if(verified>traceStart){traceStart=verified;trace=trace.filter(input=>input[0]>=traceStart)}
+   updateEndlessReceipt(result);
+   if(phase==='running'&&result?.demonKeys)message.textContent='+'+result.demonKeys+' Demon '+(result.demonKeys===1?'Key':'Keys')+' · '+keysRemaining+' left in this six-hour window';
+  }).catch(()=>{});
+ }
+ function sendEndlessResult(){
+  if(!token||finalSave||!ticks)return finalSave;
+  const run=token;
+  finalSave=Promise.resolve(onResult(run,proof())).then(result=>{
+   if(token!==run||closed)return;
+   updateEndlessReceipt(result);
+   message.textContent='Survived '+clock(result.survivedSeconds??ticks*STEP)+' · +'+keysEarned+' Demon '+(keysEarned===1?'Key':'Keys')+' · +'+xpEarned+' XP';
+  }).catch(()=>{if(!closed&&token===run)message.textContent='Your endless result could not be saved.'});
+  return finalSave;
  }
  function burst(x,y,count,color){
   if(reduced)return;
@@ -89,7 +128,13 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
  function finish(won,key=null){
   music?.pause();closeFinale?.();closeFinale=null;
   phase=won?'won':'lost';pad.hidden=true;resetInput();buttons.replaceChildren();
-  if(won){
+  if(endless){
+   readout.textContent=clock(ticks*STEP);
+   message.textContent='Saving your endless run…';
+   sendEndlessResult();
+   burst(s.x,s.y,won?26:18,remix.color);
+   if(won)sound.play(remix.cue);else sound.playGame('gdDeath',{level:.62});
+  }else if(won){
    persist(100,key);readout.textContent=remix.finish?remix.finish+'% · CUT!':'100%';
    message.textContent=practice?'Finale cleared in practice.':remix.quote;
    burst(s.x,s.y,26,remix.color);sound.play(remix.cue);
@@ -99,7 +144,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
    message.textContent=(practice?'Practice':'Attempt '+attempt)+' · '+n+'%. '+(wrong?'Wrong key.':s.x>=course.end&&course.finale?'Tap all three pink orbs.':'Try again.');
    sound.playGame('gdDeath',{level:.62});
   }
-  action(won?'Replay level':'Retry',()=>start(practice)).focus({preventScroll:true});
+  action(endless?'Try endless again':won?'Replay level':'Retry',()=>start(practice)).focus({preventScroll:true});
   if(course.finale)action(practice?'Start full level':'Practice finale',()=>start(!practice));
   action('Back to levels',()=>dialog.close());
   let at=performance.now();
@@ -112,7 +157,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
  }
  async function onClear(){
   music?.pause();
-  if(remix.mark!=='KEY'){finish(true);return;}
+  if(endless||remix.mark!=='KEY'){finish(true);return;}
   phase='key';pad.hidden=true;resetInput();
   message.textContent='Opening the key chamber…';buttons.replaceChildren();draw();
   const attemptToken=token;
@@ -159,9 +204,10 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
    }
    if(status==='crash'){finish(false);return}
    if(status==='clear'){onClear();return}
+   collectCheckpoint();
   }
-  draw();const n=displayed();
-  if(n!==lastPercent){readout.textContent=n+'%';lastPercent=n}
+  draw();const progress=endless?endlessProgress():displayed()+'%';
+  if(progress!==lastPercent){readout.textContent=progress;lastPercent=progress}
   frame=requestAnimationFrame(tick);
  }
  function running(){
@@ -173,10 +219,18 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
   cancelAnimationFrame(frame);closeFinale?.();closeFinale=null;
   phase='starting';message.textContent='Preparing attempt…';buttons.replaceChildren();
   try {
-   const session=isPractice?null:await onStart();
+   if(finalSave)await finalSave;
+   const session=isPractice?null:await onStart(mode);
    if(closed)return;
    token=session?.token||null;
-   ticks=0;trace=[];particles.length=0;practice=isPractice;s=newAttempt(course,practice?course.finale:0);resetInput();
+   ticks=0;trace=[];traceStart=0;particles.length=0;
+   finalSave=null;keysEarned=0;xpEarned=0;highWater=0;
+   if(endless){
+    course=createEndlessCourse(remix,session.seed);paint=makeArt();
+    interval=session.interval;keysRemaining=session.keysRemaining;nextCheckpoint=interval;
+    readout.textContent=endlessProgress();
+   }else readout.textContent='0%';
+   practice=isPractice;s=newAttempt(course,practice?course.finale:0);resetInput();
    music?.reset();
    attempt++;launch=launchTime;attemptLabel.textContent='GET READY';
    lastPercent=-1;sound.prepareGame();sound.prepareGame('gdDeath');sound.playGame('gdPlay',{level:.62});draw();running();
@@ -190,6 +244,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
   music?.pause();
   phase='paused';pad.hidden=true;resetInput();cancelAnimationFrame(frame);message.textContent='Paused · '+instruction;
   buttons.replaceChildren();action('Resume',running).focus({preventScroll:true});
+  if(endless)action('Finish and save',()=>finish(false));
  }
  function key(e){
   if(controls.includes(e.code)&&phase==='running'&&(e.target===pad||!e.target.closest('button'))){
@@ -217,11 +272,13 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
  dialog.querySelector('[data-close]').onclick=()=>dialog.close();
  const observer=new ResizeObserver(resize);observer.observe(viewport);
  dialog.addEventListener('close',()=>{
-  closed=true;closeFinale?.();music?.close();observer.disconnect();cancelAnimationFrame(frame);sound.stop();window.removeEventListener('keyup',keyup);
+  closed=true;
+  if(endless)sendEndlessResult();
+  closeFinale?.();music?.close();observer.disconnect();cancelAnimationFrame(frame);sound.stop();window.removeEventListener('keyup',keyup);
   window.removeEventListener('blur',pause);document.removeEventListener('visibilitychange',hidden);dialog.remove();
  },{once:true});
- resize();message.textContent=remix.hint+' '+instruction;
- action('Start level',()=>start()).focus({preventScroll:true});
+ resize();message.textContent=(endless?'Survive as long as you can. Keys are shared across all courses and reset every six hours.':remix.hint)+' '+instruction;
+ action(endless?'Start endless':'Start level',()=>start()).focus({preventScroll:true});
  if(course.finale)action('Practice finale',()=>start(true));
  guide.welcome();
  return dialog;

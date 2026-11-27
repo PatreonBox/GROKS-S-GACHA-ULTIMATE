@@ -19,7 +19,8 @@ dialog.chest-reveal{
 }
 .chest-stage canvas{width:100%;height:100%;display:block;opacity:0;transition:opacity .26s ease}
 .chest-reveal[data-world-ready] canvas{opacity:1}
-.chest-reveal[data-world-ready] .chest-fallback{visibility:hidden}
+.chest-fallback{visibility:hidden}
+.chest-reveal[data-fallback] .chest-fallback{visibility:visible}
 .chest-shade{
  background:linear-gradient(#07091380,transparent 20%,transparent 59%,#080a11ba),
  radial-gradient(ellipse at 50% 45%,transparent 55%,#0709134d);
@@ -44,7 +45,17 @@ dialog.chest-reveal{
 .chest-reveal[data-phase="cards"] .chest-hint{opacity:1}
 .chest-reveal[data-complete] .chest-hint{min-height:1.4em}
 .chest-cards{display:grid;grid-template-columns:repeat(var(--cards),minmax(0,1fr));gap:clamp(7px,1.36vw,18px);perspective:1100px}
+.chest-reveal[data-bulk] .chest-head{padding-bottom:10px}
+.chest-reveal[data-bulk] .chest-card-back{min-height:clamp(132px,21dvh,232px)}
+.chest-pages{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px}
+.chest-pages button{min-height:35px;padding:5px 10px}
+.chest-pages button:disabled{opacity:.48}
+.chest-pages span{font-size:.86rem;white-space:nowrap}
 .chest-card{--card-corner:13px;min-width:0;perspective:850px}
+.chest-card[data-charging]{position:relative;z-index:2;animation:chest-card-charge .43s cubic-bezier(.18,.75,.2,1) forwards}
+.chest-card[data-charging] .chest-card-back{box-shadow:0 0 35px color-mix(in srgb,var(--chest-accent) 60%,transparent);filter:brightness(1.33)}
+.chest-card[data-cinematic-seen]>.chest-card-shell{transition:none}
+@keyframes chest-card-charge{from{transform:translateY(0) scale(1)}to{transform:translateY(-9px) scale(1.09)}}
 .chest-card-shell{position:relative;display:grid;transform-style:preserve-3d;transition:transform .54s cubic-bezier(.22,.61,.26,1)}
 .chest-card[data-flipped]>.chest-card-shell{transform:rotateY(180deg)}
 .chest-card-back,.chest-card-front{
@@ -134,6 +145,7 @@ dialog.chest-reveal{
 @media(max-width:510px){
  .chest-card{--card-corner:9px}
  .chest-card-back{min-height:clamp(94px,15vh,138px)}
+ .chest-reveal[data-bulk] .chest-card-back{min-height:clamp(90px,13dvh,126px)}
  .chest-card-back{--back-inner-radius:5px}
  .chest-card-front .level-card{padding:3px 3px 6px}
  .chest-card-front .level-card>strong{font-size:.75rem;line-height:1.06}

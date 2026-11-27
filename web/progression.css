@@ -124,6 +124,7 @@
  color:#fff0d6;background:radial-gradient(ellipse at 8% 0,#4b3a5c,#282337 70%);border:1px solid #dcbb73;border-radius:11px;
  box-shadow:0 15px 45px #000a;text-decoration:none}
 .achievement-toast[hidden]{display:none}
+.achievement-toast[data-key-payout]{top:max(76px,calc(env(safe-area-inset-top) + 62px))}
 .achievement-toast:hover{border-color:#ffe0a1}
 .achievement-toast[data-phase=enter]{animation:achievement-enter .32s cubic-bezier(.19,.75,.32,1.02) both}
 .achievement-toast[data-phase=enter] .achievement-badge{animation:achievement-medal .39s .035s cubic-bezier(.18,.77,.39,1.2) both}

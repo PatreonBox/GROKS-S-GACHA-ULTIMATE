@@ -77,10 +77,12 @@ export function extremeBandOdds(index,table,tierPercent,referenceTickets){
 export const gemTenths=amount=>Math.round(amount*10);
 export const indexBaseTenths=[0,2,5,10,15,20,25,40,80,120,130];
 export function levelRewardTenths(tier,rank,lastRank){
- if(tier===impossibleTier)return impossibleGems*10;
- if(tier!==10||!(rank>0)||!(lastRank>1))return indexBaseTenths[tier]??0;
- const standing=Math.max(0,Math.min(1,(lastRank-rank)/(lastRank-1)));
- return 130+Math.round(170*standing);
+ let base=tier===impossibleTier?impossibleGems*10:indexBaseTenths[tier]??0;
+ if(tier===10&&rank>0&&lastRank>1){
+  const standing=Math.max(0,Math.min(1,(lastRank-rank)/(lastRank-1)));
+  base=130+Math.round(170*standing);
+ }
+ return Math.round(base/(tier>=8?1.8:1.5));
 }
 export const mergeGems=tier=>[1,1,2,2,3,4,6,8,11,15,22][tier];
 const duration={Tiny:0,Short:1,Medium:2,Long:3,XL:4,Platformer:2};

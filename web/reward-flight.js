@@ -4,16 +4,20 @@ import {roundCoins} from './coin-economy.js';
 const currencies={
  gems:{file:'gem',label:'Gems',badge:'gemLink',count:'gemCount',tint:'#9ae8ff'},
  coins:{file:'coin',label:'Coins',badge:'walletLink',count:'walletCount',tint:'#ffdf7e'},
+ demonKeys:{src:'/assets/ui/demon-key.svg',label:'Demon Keys',badge:'demonKeyLink',count:'demonKeyCount',tint:'#a9dafa'},
  mana:{src:'/assets/kingdom/mana-orbs.webp',label:'Mana',badge:'kingdomManaBadge',count:'kingdomManaCount',tint:'#79ecff'}
 };
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 const ease=t=>t*t*(3-2*t);
 const money=n=>n.toLocaleString('en-US',{maximumFractionDigits:1});
+const compact=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1});
+export const headerAmount=value=>value<10000?money(value):compact.format(value);
 const spriteLimit=15;
 const coinCadence=125;
 export function rewardSpriteCount(kind,amount){
  if(!Number.isFinite(amount)||amount<=0)return 0;
  if(kind==='mana')return Math.min(9,3+Math.floor(Math.log2(Math.max(1,amount))));
+ if(kind==='demonKeys')return Math.min(11,Math.ceil(amount));
  const quantity=kind==='gems'?Math.ceil(amount):1+Math.floor(Math.log2(Math.max(1,amount)));
  return Math.min(spriteLimit,quantity);
 }
@@ -23,10 +27,10 @@ export function rewardOrigin(element){
  return {x:clamp(r.left+r.width/2,20,innerWidth-20),y:clamp(r.top+r.height/2,18,innerHeight-22)};
 }
 
-export function createRewardFlight(sound,format){
- const totals={coins:0,gems:0,mana:0},owed={coins:0,gems:0,mana:0},images={};
+export function createRewardFlight(sound,format=headerAmount){
+ const totals={coins:0,gems:0,mana:0,demonKeys:0},owed={coins:0,gems:0,mana:0,demonKeys:0},images={};
  const tickets=new Set(),bursts=[];
- let layer,canvas,ctx,meter,raf=0,removeTimer=0,lastChime=0,width=0,height=0;
+ let layer,canvas,ctx,meter,coveringDialog,raf=0,removeTimer=0,lastChime=0,width=0,height=0;
  let nextCoin=0,queuedCoin=null,lastCoinPulse=-Infinity;
  function visual(kind){
   return Math.max(0,kind==='mana'?totals.mana-Math.round(owed.mana/10):roundCoins(totals[kind]-owed[kind]/10));
@@ -40,7 +44,7 @@ export function createRewardFlight(sound,format){
    if(counter.textContent!==label)counter.textContent=label;
   }
  }
- function balance(wallet){for(const kind of Object.keys(totals)){totals[kind]=wallet[kind]??0;paint(kind)}}
+ function balance(wallet){for(const kind of Object.keys(totals))if(Object.hasOwn(wallet,kind)){totals[kind]=wallet[kind]??0;paint(kind)}}
  function settle(ticket){
   if(!tickets.delete(ticket))return;
   owed[ticket.kind]-=ticket.units-ticket.landed;ticket.landed=ticket.units;paint(ticket.kind);
@@ -56,13 +60,22 @@ export function createRewardFlight(sound,format){
   meter.innerHTML='<img alt=""><b></b>';layer.append(canvas,meter);document.body.append(layer);
   ctx=canvas.getContext('2d');
  }
+ function topLayer(){
+  if(typeof layer.showPopover!=='function')return;
+  if(layer.matches(':popover-open'))layer.hidePopover();
+  layer.setAttribute('popover','manual');layer.showPopover();
+ }
  function destination(kind,forced){
   const badge=document.getElementById(currencies[kind].badge);
   const rect=badge?.getBoundingClientRect();
-  if(!forced&&rect?.width&&rect.top>=3&&rect.bottom<=innerHeight&&rect.right<=innerWidth){
+  const onScreen=rect?.width&&rect.top>=3&&rect.left>=0&&rect.bottom<=innerHeight&&rect.right<=innerWidth;
+  if(!forced&&onScreen){
    meter.hidden=true;return {point:rewardOrigin(badge.querySelector('img')||badge),badge};
   }
   if(meter.dataset.kind!==kind){meter.dataset.kind=kind;meter.querySelector('img').src=images[kind].src}
+  if(kind==='demonKeys'&&onScreen){
+   meter.style.top=rect.top+'px';meter.style.right=Math.max(8,innerWidth-rect.right)+'px';
+  }else{meter.style.removeProperty('top');meter.style.removeProperty('right')}
   meter.hidden=false;paint(kind);
   return {point:rewardOrigin(meter.querySelector('img')),badge:meter};
  }
@@ -80,7 +93,8 @@ export function createRewardFlight(sound,format){
    if(now-lastCoinPulse<205)return;
    lastCoinPulse=now;
   }
-  badge?.animate?.([{filter:'brightness(1.9)',scale:'1.12'},{filter:'brightness(1)',scale:'1'}],{duration:b.reduce?120:230,easing:'ease-out'});
+  badge?.animate?.([{filter:'brightness(1.9)',scale:b.reduce?'1':'1.12'},{filter:'brightness(1)',scale:'1'}],{duration:b.reduce?120:260,easing:'ease-out'});
+  if(b.kind==='demonKeys'){sound.keyReward();return}
   if(!b.quiet&&performance.now()-lastChime>105){lastChime=performance.now();sound.play(b.kind==='coins'?'mineAccent':'bonus',{rate:1.2,level:.41})}
  }
  function frame(now){
@@ -94,8 +108,13 @@ export function createRewardFlight(sound,format){
    canvas.width=Math.round(w*d);canvas.height=Math.round(h*d);ctx?.setTransform(d,0,0,d,0,0);
   }
   ctx?.clearRect(0,0,w,h);
+  if(bursts.some(b=>b.kind==='demonKeys')){
+   const dialog=Array.from(document.querySelectorAll('dialog[open]')).at(-1);
+   if(dialog&&dialog!==coveringDialog)topLayer();
+   coveringDialog=dialog;
+  }
   for(let i=bursts.length-1;i>=0;i--){
-   const b=bursts[i],age=now-b.at,{point:to,badge}=destination(b.kind,b.force||document.querySelector('.fusion-show,[data-fusion-overlay]'));
+   const b=bursts[i],age=now-b.at,{point:to,badge}=destination(b.kind,b.force||(b.kind==='demonKeys'?coveringDialog:document.querySelector('.fusion-show,[data-fusion-overlay]')));
    const {x,y}=b.from,tint=currencies[b.kind].tint;
    if(!ctx||!to||b.reduce){
     if(age>100||!ctx||!to){hit(b,badge);bursts.splice(i,1)}
@@ -150,9 +169,14 @@ export function createRewardFlight(sound,format){
   else {raf=0;removeTimer=setTimeout(cleanup,meter?.hidden?80:650)}
  }
  function cleanup(){
-  clearTimeout(removeTimer);cancelAnimationFrame(raf);raf=0;layer?.remove();layer=null;meter=null;canvas=null;ctx=null;width=height=0;
+  clearTimeout(removeTimer);cancelAnimationFrame(raf);raf=0;layer?.remove();layer=null;meter=null;canvas=null;ctx=null;coveringDialog=null;width=height=0;
  }
- function clear(){queuedCoin=null;nextCoin=0;bursts.length=0;for(const t of tickets)settle(t);cleanup()}
+ function clear({keepKeys=false}={}){
+  queuedCoin=null;nextCoin=0;
+  for(let i=bursts.length-1;i>=0;i--)if(!keepKeys||bursts[i].kind!=='demonKeys')bursts.splice(i,1);
+  for(const ticket of tickets)if(!keepKeys||ticket.kind!=='demonKeys')settle(ticket);
+  if(!bursts.length)cleanup();
+ }
  function streamCoins(ticket,origin){
   if(!tickets.has(ticket))return;
   if(!ticket.units||document.hidden||!origin){settle(ticket);return}
@@ -168,6 +192,7 @@ export function createRewardFlight(sound,format){
   const amount=ticket.units/10,count=streamed?1:rewardSpriteCount(ticket.kind,amount);
   if(!count||document.hidden||!origin){settle(ticket);return}
   setup();
+  if(ticket.kind==='demonKeys')topLayer();
   if(!images[ticket.kind]){
    const img=new Image(),currency=currencies[ticket.kind];
    img.src=currency.src||('/assets/packs/'+currency.file+'.png');images[ticket.kind]=img;

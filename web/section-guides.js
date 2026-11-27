@@ -15,7 +15,7 @@ export const sectionGuides={
   ['Narrow it down','Search a level or creator. Use the format and sort controls to find the type of level you want.']
  ]},
  'demon-banners':{title:'Demon Banners',art:'/assets/faces/demon-extreme.webp',steps:[
-  ['Start with 30 Demon Keys','Open the Standard chest with one Demon Key, then flip its five cards. Earn keys from campaign clears and achievements. Claim keys earned during pulls in the Key Shop.'],
+  ['Start with 30 Demon Keys','Open the Standard chest with one Demon Key, then flip its five cards. Earn keys from campaign clears and achievements. Achievement keys from pulls arrive automatically after the opening.'],
   ['Unlock stronger banners','At Level 5, Special lets you browse and feature a level. At Level 20, Pro costs five keys and has twenty times the Legendary-and-higher odds.'],
   ['Check the guarantees','Each banner tracks its own progress toward Legendary or better at 150 draws and Mythic or better at 600.']
  ]},
@@ -56,7 +56,7 @@ export const sectionGuides={
  ]},
  'cube-shop':{title:'Cube shop',art:'/assets/cubes/01.webp',steps:[
   ['Pick a cube','Browse the catalog or filter to Owned. Purchase a cube with coins to unlock it.'],
-  ['Equip it','Your equipped cube explores your Kingdom and appears in supported training drills and meme levels.']
+  ['Equip it','Your equipped cube explores your Kingdom and appears in supported training drills and Mini Games.']
  ]},
  'kingdom':{title:'Your Kingdom',art:'/assets/gd-kingdom-castle-icon.png',steps:[
   ['Look around','Drag to orbit the plot. Use Pan to slide the camera, and zoom with the scroll wheel, pinch, or the on-screen buttons.'],
@@ -81,9 +81,9 @@ export const sectionGuides={
   ['Choose a card and drill','Spike Forge raises attack, Saw Slalom trains saws, and Portal Endurance raises durability.'],
   ['Beat your best','Clear obstacles to earn XP and upgrades. Use How to Play inside a drill for its controls and timing.']
  ]},
- 'meme-levels':{title:'Meme levels',art:'/assets/training/portal-cyan.webp',steps:[
-  ['Choose a mini level','Each level has its own cube, wave, or ship controls. Open How to Play in its corner to review them.'],
-  ['Finish the run','A full clear gives your squad extra starting charge in that level’s arena.']
+ 'meme-levels':{title:'Mini Games',art:'/assets/training/portal-cyan.webp',steps:[
+  ['Choose a course','Each course has its own cube, wave, or ship controls. Open How to Play in the game to review them.'],
+  ['Play Normal or Endless','Clear Normal for the first-clear keys and extra starting charge in its arena. In Endless, stay alive to earn XP and up to 10 Demon Keys per six-hour window.']
  ]},
  'player-ranks':{title:'Player leaderboard',art:'/assets/faces/demon-extreme.webp',steps:[
   ['Build your collection','Each distinct owned card adds its HP and three times its Attack to your Power. Training raises both stats.'],

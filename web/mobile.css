@@ -7,16 +7,14 @@
 .rare-head small{color:#d5c9ec;font-size:clamp(12px,2vw,15px);line-height:1.2}
 .rare-head strong{overflow-wrap:anywhere}
 .arena-mast .army-shortcut svg{flex:none;width:17px;height:17px}
-@media(max-width:1700px){
- .headwrap{height:auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0}
- .headwrap .brand{min-width:0;padding:7px 0;min-height:50px}
- .headwrap .head-tools{grid-column:2;grid-row:1;gap:4px;padding-left:6px}
- .headwrap nav{height:auto;grid-area:2/1/3/-1;display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:3px;overflow:visible;min-width:0}
- .headwrap .tab{justify-content:center;min-height:44px;white-space:nowrap;min-width:0}
- .headwrap .tab i{display:grid;place-items:center}
- .headwrap nav .tab svg{display:block}
-}
-@media(min-width:681px) and (max-width:1700px){
+.headwrap{height:auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0}
+.headwrap .brand{min-width:0;padding:7px 0;min-height:50px}
+.headwrap .head-tools{grid-column:2;grid-row:1;gap:4px;padding-left:6px}
+.headwrap nav{height:auto;grid-area:2/1/3/-1;display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:3px;overflow:visible;min-width:0}
+.headwrap .tab{justify-content:center;min-height:44px;white-space:nowrap;min-width:0}
+.headwrap .tab i{display:grid;place-items:center}
+.headwrap nav .tab svg{display:block}
+@media(min-width:681px){
  .headwrap nav .tab[data-level-locked]{
   display:grid;grid-template-columns:auto auto;justify-content:center;align-content:center;gap:1px 5px;padding:4px 2px;
  }
@@ -134,9 +132,8 @@
 
 }
 @media(max-width:440px){
- .headwrap nav{grid-template-columns:repeat(20,minmax(0,1fr));row-gap:2px}
- .headwrap nav .tab{grid-column:span 4;padding-inline:3px;font-size:11px}
- .headwrap nav .tab:nth-child(n+6){grid-column:span 5}
+ .headwrap nav{grid-template-columns:repeat(5,minmax(0,1fr));row-gap:2px}
+ .headwrap nav .tab{padding-inline:3px;font-size:11px}
 }
 @media(max-width:680px),(pointer:coarse){
  .game-touch:not([hidden]){display:flex;justify-content:center;align-items:stretch;gap:6px;width:100%;margin-top:9px}

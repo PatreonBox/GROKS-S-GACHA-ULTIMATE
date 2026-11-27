@@ -3,7 +3,7 @@ import {stat} from './card-economy.js';
 import {impossibleCategory} from './impossible-cards.js';
 import {bestFinish,finishClass} from './card-finishes.js';
 import {difficulties,cardCategories,readCollection,feedLevelCard} from './pack-engine.js';
-import {arenas,statsFor,saveSquad,enterArena,battleAction,equipTechnique,leaveResults,startRemix,startLimboFinale,recordRemix,enemyIntent,liveOrb,linkOrbs,liveRiposte,tacticDescription,startDrill,checkpointDrill,finishDrill} from './battle-engine.js';
+import {arenas,statsFor,saveSquad,enterArena,battleAction,equipTechnique,leaveResults,startRemix,startLimboFinale,recordRemix,checkpointRemix,enemyIntent,liveOrb,linkOrbs,liveRiposte,tacticDescription,startDrill,checkpointDrill,finishDrill} from './battle-engine.js';
 import {campaignStages,stageFor,stageCleared,stageUnlocked,stageRules} from './campaign.js';
 import {campaignView,campaignOutcome} from './campaign-view.js';
 import {arenaDeck,cardChassis,cameraTools,bindArenaCamera} from './arena-stage.js';
@@ -12,6 +12,7 @@ import {ico,ratingLabel} from './icons.js';
 import {consoleView,intentView,lockCommands,ordersView,techniqueView} from './arena-console.js';
 
 import {remixes,findRemix,keyTarget,remixKeyReward} from './remixes.js';
+import {endlessKeyInterval,endlessKeyStatus,endlessKeyLimit,endlessKeyResetHours} from './remix-endless.js';
 import {openRunner} from './remix-runner.js';
 import {griefPoster,watchGrief} from './remix-media.js';
 import {playCardTurn} from './card-combat.js';
@@ -223,18 +224,30 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const injured=owned.filter(c=>!healthy(c.id));if(!injured.length)return '';
   return '<aside class="medbay"><strong>Recovery bay</strong><span>Cards heal automatically.</span>'+injured.map(c=>'<b>'+enc(c.row[1])+' <time data-until="'+until(c.id)+'">'+clock(until(c.id)-Date.now())+'</time></b>').join('')+'</aside>';
  }
- function remixPicker(r){
+ function remixPicker(r,ready){
   const saved=wallet.remixBest?.[r.id]||0,win=wallet.remixWins?.[r.id]||0;
   const earned=wallet.remixKeyRewards?.[r.id]||0,keys=remixKeyReward(r);
   const clearReward=earned?earned+' Demon '+(earned===1?'Key':'Keys')+' earned':
    saved===100?'Clear again to earn '+keys+' Demon Keys':'+'+keys+' Demon Keys on a first clear';
-  return '<section class="remix-browser" style="--remix:'+r.color+'"><div class="remix-preview"><img src="'+(r.art||'/assets/shots/'+r.id+'.webp')+'" alt=""><div class="remix-poster-copy"><small>MEME ARCADE · '+r.mode.toUpperCase()+'</small><h2>'+r.name+'</h2><p>'+r.hint+'</p><button class="bt-primary remix-play" data-runner>Play mini level'+newBadge(remixGuideId(r))+'</button> <button class="remix-sound" data-preview-cue>Hear card sound</button></div></div><div class="remix-switchboard"><label for="remixLevel">Choose a meme level</label><select id="remixLevel">'+remixes.map(v=>'<option value="'+v.id+'" '+(v.id===r.id?'selected':'')+'>'+v.name+'</option>').join('')+'</select><p>Remix of <b>'+r.level+'</b> by '+r.creator+'</p><div class="remix-record">Arcade best <b>'+saved+'%</b> · Arena wins <b>'+win+'</b></div>'+
-   '<p class="remix-key-reward">'+ico('demonKey')+clearReward+'</p><strong>'+nameplate(r.tier)+' battle rule</strong><p>'+r.rule+'</p><small>'+(saved===100?'Arcade clear · +1 starting charge':'Clear the mini level for +1 starting charge in this arena.')+'</small></div></section>'+
-   (arcadePage?'<button type="button" class="grief-clip" data-watch-grief><img src="'+griefPoster+'" alt="" loading="lazy"><span><strong>Grief</strong><small>Doggie’s verification finish</small></span><b>▶ <span>Watch clip</span></b></button>':'');
+  const bestTime=wallet.remixEndlessBest?.[r.id]||0,interval=endlessKeyInterval(r);
+  const {keysRemaining,resetsAt}=endlessKeyStatus(wallet);
+  const artwork=level=>enc(level.art||coverSource(level.id));
+  const cards=remixes.map(level=>'<button type="button" data-remix-id="'+level.id+'" aria-pressed="'+(level.id===r.id)+'" style="--course-color:'+level.color+'">'+
+   '<img class="scene-shot" data-id="'+level.id+'" src="'+artwork(level)+'" loading="lazy" alt=""><span><small>'+level.mode+'</small><strong>'+enc(level.level)+'</strong></span></button>').join('');
+  return '<section class="remix-browser mini-game-browser" style="--remix:'+r.color+'"><div class="remix-preview"><img class="scene-shot" data-id="'+r.id+'" src="'+artwork(r)+'" alt="">'+
+   '<div class="remix-poster-copy"><small>'+r.mode.toUpperCase()+' · '+difficulties[r.tier]+'</small><h2>'+enc(r.name)+'</h2><p>'+enc(r.hint)+'</p><small>Based on '+enc(r.level)+' by '+enc(r.creator)+'</small></div></div>'+
+   '<div class="mini-mode-grid"><article><h3>Normal</h3><p>'+ico('demonKey')+' '+clearReward+' · Best '+saved+'%</p><button type="button" class="bt-primary remix-play" data-runner="normal">Play Normal'+newBadge(remixGuideId(r))+'</button></article>'+
+   '<article><h3>Endless</h3><p>'+ico('demonKey')+' 1 key every '+interval+'s · Best '+clock(bestTime*1000)+'</p><button type="button" class="outline remix-play" data-runner="endless">Play Endless</button></article></div>'+
+   '<p class="mini-reward-window">'+keysRemaining+' / '+endlessKeyLimit+' Endless keys available · '+(resetsAt?'Resets '+new Date(resetsAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'Resets '+endlessKeyResetHours+' hours after your first key')+'</p>'+
+   '<h3 class="mini-course-label">Choose a course</h3><div class="mini-course-grid" aria-label="Mini Games courses">'+cards+'</div>'+
+   '<details class="mini-remix-arena"><summary>Remix Arena · '+win+' wins</summary><p>'+enc(r.rule)+' '+(saved===100?'Your normal clear gives +1 starting charge.':'Clear Normal for +1 starting charge.')+'</p>'+
+   (ready?'<button type="button" class="outline" data-start>Enter remix arena</button>':'<a class="outline" href="#battle">Set up your squad</a>')+' <button type="button" class="outline" data-preview-cue>Hear card sound</button></details></section>'+
+   '<button type="button" class="grief-clip" data-watch-grief><img src="'+griefPoster+'" alt="" loading="lazy"><span><strong>Grief</strong><small>Doggie’s verification finish</small></span><b>▶ <span>Watch clip</span></b></button>';
  }
  function lobby(){
   if(picker)return equipment()+recovery();
   const team=wallet.squad||[],ready=team.length===4&&team.every(id=>healthy(id)&&byId(id));
+  if(arcadePage)return remixPicker(selection,ready);
   const selector='<label class="arena-label" for="arenaChoice">Arena difficulty</label><select id="arenaChoice" aria-label="Arena difficulty">'+difficulties.slice(1).map((d,i)=>'<option value="'+(i+1)+'" '+(tier===i+1?'selected':'')+'>'+d+'</option>').join('')+'</select>';
   const campaign=battleView==='campaign';
   const poster='<section class="arena-poster'+(tier>=6?' demon-poster':'')+'" style="--arena:'+colors[tier]+'"><div class="arena-copy"><div class="battle-eyebrow">'+ico('battle')+' FOUR VS FOUR</div><h2>'+difficulties[tier]+' arena</h2>'+selector+'<div class="bounty">'+coin+'<b>'+payoutRange(tier)+'</b> coins per enemy</div></div><div class="arena-medal"><img src="'+face(difficulties[tier])+'" alt=""></div><img class="arena-banner-art" src="'+arenaArt[tier-1]+'" alt=""></section>';
@@ -243,7 +256,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
    '<button class="bt-primary" data-edit>Choose squad</button>';
   const activeStage=campaignTier||Math.min(campaignStages.length,1+campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length);
   if(campaign)campaignTier=activeStage;
-  const front=campaign?campaignView(wallet,activeStage,{action,coverSource,face,enc,colors}):arcadePage?remixPicker(selection):poster;
+  const front=campaign?campaignView(wallet,activeStage,{action,coverSource,face,enc,colors}):poster;
   const squadStatus=ready?'4 / 4 ready':owned.length<4?'Collect four different cards to enter.':'Equip four cards that are ready to battle.';
   return front+'<section class="bt-panel"><div class="bt-title"><div><small>LOADOUT</small><h2>Your squad</h2></div>'+
    (owned.length?'<button class="outline" data-edit>Edit squad</button>':'')+'</div><div class="squad-grid">'+
@@ -351,7 +364,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   }
   const screen=live?'arena':picker?'squad':loaded?battleView:'';
   const activeLink=root.contains(document.activeElement)?document.activeElement?.closest('.battle-navigation [data-battle-link]')?.dataset.battleLink:null;
-  const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Meme levels':battleView==='campaign'?'Battle campaign':'Battle mode')+'</h1>'+mutedBtn()+'</div>'+
+  const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Mini Games':battleView==='campaign'?'Battle campaign':'Battle mode')+'</h1>'+mutedBtn()+'</div>'+
    battleNavigation(battleView,playerLevel);
   const content=collectionError&&!loaded?'<p>Your squad could not load. <button class="outline" data-retry-collection>Try again</button></p>':
    !wallet||!loaded?'<p role="status">Loading your squad…</p>':gym?training():match?arena(match):lobby();
@@ -417,7 +430,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&playback)finishPlayback()});
  root.oninput=e=>{if(e.target.matches('[data-trainee-search]')){trainQuery=e.target.value;const box=root.querySelector('#trainee');box.innerHTML=trainingOptions();if(box.value){trainee=Number(box.value);render();const input=root.querySelector('[data-trainee-search]');input.focus();input.setSelectionRange(input.value.length,input.value.length)}else{box.innerHTML='<option disabled>No matches</option>';root.querySelectorAll('[data-drill]').forEach(el=>el.disabled=true)};return}if(e.target.matches('[data-search]')){search=e.target.value;page=0;root.querySelector('#rosterList').innerHTML=rosterList()}};
- root.onchange=e=>{if(e.target.id==='trainee'){trainee=Number(e.target.value);sound.play('select');render();return}if(e.target.id==='remixLevel'){selection=findRemix(Number(e.target.value));sound.play('select');render();root.querySelector('#remixLevel')?.focus({preventScroll:true});return}if(e.target.id==='arenaChoice'){tier=Number(e.target.value);sound.play('select');render();root.querySelector('#arenaChoice')?.focus({preventScroll:true})}};
+ root.onchange=e=>{if(e.target.id==='trainee'){trainee=Number(e.target.value);sound.play('select');render();return}if(e.target.id==='arenaChoice'){tier=Number(e.target.value);sound.play('select');render();root.querySelector('#arenaChoice')?.focus({preventScroll:true})}};
  root.addEventListener('input',e=>{if(e.target.form?.matches('[data-feed]'))feedInput(e.target.form)});
  root.addEventListener('change',e=>{if(e.target.form?.matches('[data-feed]'))feedInput(e.target.form)});
  root.addEventListener('submit',e=>{if(e.target.matches('[data-feed]')){e.preventDefault();feed(e.target)}});
@@ -436,10 +449,20 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   }
   if('previewCue'in d&&selection){sound.stop();sound.play(selection.cue);return}
   if('watchGrief'in d){watchGrief(sound);return}
+  if(d.remixId&&arcadePage){
+   selection=findRemix(Number(d.remixId));sound.play('select');render();
+   root.querySelector('[data-remix-id="'+selection.id+'"]')?.focus({preventScroll:true});
+   if(e.detail)root.querySelector('.remix-preview')?.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+   return;
+  }
   if('runner'in d&&selection){
    if(runner?.open)return;
    const stage=selection;
-   runner=openRunner(stage,{sound,avatar:equippedCube(wallet),onStart:()=>startRemix(stage.id),onFinale:startLimboFinale,onResult:async(token,proof)=>{const {wallet:next,result}=await recordRemix(token,proof);applyWallet(next);if(visible&&!playback)render();return result;}});
+   const settle=command=>async(token,proof)=>{
+    const {wallet:next,result}=await command(token,proof);applyWallet(next);if(visible&&!playback)render();return result;
+   };
+   runner=openRunner(stage,{sound,avatar:equippedCube(wallet),mode:d.runner,onStart:mode=>startRemix(stage.id,mode),onFinale:startLimboFinale,
+    onCheckpoint:settle(checkpointRemix),onResult:settle(recordRemix)});
    runner.addEventListener('close',()=>{runner=null;if(visible&&!playback)render()},{once:true});return;
   }
   if('edit'in d){

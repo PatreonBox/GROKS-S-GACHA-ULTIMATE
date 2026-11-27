@@ -5,6 +5,7 @@ import {stat as cardNum} from './card-economy.js';
 import {ico,ratingLabel,ratingIcon} from './icons.js';
 import {createPackRoom} from './pack-room.js';
 import {createPackSound} from './pack-sound.js';
+import {createRewardFlight} from './reward-flight.js';
 import {tierNames, starTiers, readRoute, loadTier, browseTier} from './demon-tiers.js';
 import {gameSession,gameCommand} from './game-client.js';
 import {createSectionGuides} from './game-introduction.js';
@@ -42,12 +43,13 @@ const archiveRefresh=rankingRefresh(180_000,()=>gameVisible()&&isArchiveBoard(),
 const demonRefresh=rankingRefresh(180_000,()=>gameVisible()&&isExtremeList(),refreshDemons);
 const sound=createPackSound();
 sound.listenForUiTaps();
-let keyBalance=null,keyRevision=-1;
-document.addEventListener('gdlb-key-balance',({detail:{keys,revision}})=>{
- if(keys===null){keyBalance=null;keyRevision=-1;return}
+const rewardFlights=createRewardFlight(sound);
+let keyBalance=null,keyRevision=-1,achievementKeys=0;
+document.addEventListener('gdlb-key-balance',({detail:{keys,paid,revision}})=>{
+ if(keys===null){keyBalance=null;keyRevision=-1;achievementKeys=0;return}
  if(revision<keyRevision)return;
- if(keyBalance!==null&&keys>keyBalance)sound.keyReward();
- keyBalance=keys;keyRevision=revision;
+ if(keyBalance!==null&&keys-keyBalance>Math.max(0,paid-achievementKeys))sound.keyReward();
+ keyBalance=keys;keyRevision=revision;achievementKeys=paid;
 });
 document.addEventListener('gdlb-discord-key-bonus',()=>sound.keyReward());
 function paintSoundControl(){
@@ -63,7 +65,7 @@ document.addEventListener('click',event=>{
 });
 paintSoundControl();
 setupLevelUps($('levelUp'),sound);
-setupAchievementBanners(sound);
+setupAchievementBanners(sound,rewardFlights);
 document.querySelectorAll('[data-icon]').forEach(i=>i.innerHTML=ico(i.dataset.icon));
 function storeRows(rows){for(const r of rows)if(!r[15])rowMap.set(r[0],r)}
 function announce(s){const t=document.querySelector('.toast');t.textContent=s;t.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),1600)}
@@ -121,7 +123,8 @@ function setSection(route){
  if(section!==selected.section||activeTier!==selected.tier)$('results').replaceChildren();
  section=selected.section;activeTier=selected.tier;
  clearTimeout(timer);
- document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===section);if(b.dataset.tab===section)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+ const activeTab=section==='battle'&&activeTier==='arcade'?'battle/arcade':section;
+ document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===activeTab);if(b.dataset.tab===activeTab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
  $('showcase').hidden=section!=='leaderboard'||playerRanks();drawTierNav();
  ranks.show(section==='leaderboard'?(playerRanks()?'full':'spotlight'):null);
  archiveRefresh.schedule();demonRefresh.schedule();
@@ -388,7 +391,7 @@ async function start(){
   setGuideProgress(session.wallet.guideSeen,id=>gameCommand('guide.seen',{id},null).catch(()=>{}));
   guides=createSectionGuides($('gameGuide'));
   arcade=createPackRoom({
-   sound,initialWallet:session.wallet,
+   sound,rewards:rewardFlights,initialWallet:session.wallet,
    localCover:id=>localImages.has(id)?'/assets/shots/'+id+'.webp':'',
    openLevel:row=>{storeRows([row]);showDetails(row[0])},
    announce,onGuide:guides.select,

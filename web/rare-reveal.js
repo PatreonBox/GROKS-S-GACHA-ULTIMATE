@@ -73,9 +73,9 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
   '<div class="rare-environment" aria-hidden="true"></div><canvas aria-hidden="true"></canvas>'+
   '<div class="rare-impact" aria-hidden="true"></div>'+
   '<div class="rare-head" aria-hidden="true"><span>'+tier.name+'</span><strong>'+odds+'</strong><small>'+oddsLabel+' · per card</small></div>'+
-  '<div class="rare-stage" aria-hidden="true" inert><div class="rare-deck"><i class="rare-edge"></i>'+
+  '<div class="rare-stage" aria-hidden="true" inert><div class="rare-float"><div class="rare-deck"><i class="rare-edge"></i>'+
   '<div class="rare-back gd-card-back">'+cardBackMark(difficulty)+'</div>'+
-  '<div class="rare-front">'+cardHTML+'</div></div></div>'+
+  '<div class="rare-front">'+cardHTML+'</div></div></div></div>'+
   '<p class="rare-live" role="status" aria-live="polite"></p><div class="rare-footer">'+
   (track?'<div class="rare-track-credit"><a class="rare-track" target="_blank" rel="noopener noreferrer">'+
    '<span></span>'+ico('external')+'</a><a class="rare-track-license" target="_blank" rel="noopener noreferrer">License</a></div>':'')+
@@ -192,6 +192,7 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
   return {done,close};
  }
  animation=turnCard(deck,tier);
+ animation.finished.then(()=>{if(!closed)dialog.dataset.hover='';},()=>{});
  playBed({fallback:true});
  impact=setTimeout(reveal,tier.hit);
  function draw(now){

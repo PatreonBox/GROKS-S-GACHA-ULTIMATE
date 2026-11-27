@@ -354,7 +354,7 @@ function disposeScene(scene){
  objects.forEach(item=>item.dispose());
 }
 
-export function createChestRevealWorld(canvas,tier,rarity){
+export function createChestRevealWorld(canvas,tier,rarity,chestCount=1){
  const context=canvas.getContext('webgl2',{alpha:true,antialias:true,powerPreference:'low-power'});
  if(!context)return null;
  const renderer=new THREE.WebGLRenderer({canvas,context,alpha:true});
@@ -377,6 +377,14 @@ export function createChestRevealWorld(canvas,tier,rarity){
   body:flatMaterial(color,{roughness:.52}),wood:flatMaterial(colors.grain,{roughness:.67}),lining:flatMaterial(empty,{roughness:.70})
  };
  const chest=chestModel(rig,accents,tier);
+ batchModels(chest.rig);
+ const hingeIndex=chest.rig.children.indexOf(chest.hinge);
+ const three=chestCount>2;
+ const formation=[{...chest,x:chestCount===2?-1.28:0,z:0,size:chestCount>1?.84:1}];
+ for(const x of three?[-2.25,2.25]:chestCount===2?[1.28]:[]){
+  const copy=chest.rig.clone();
+  rig.add(copy);formation.push({rig:copy,hinge:copy.children[hingeIndex],x,z:three?-.75:0,size:three?.72:.84});
+ }
  const keyColor=hint.key?new THREE.Color(hint.key):null;
  const keyParts={
   ...accents,frame:flatMaterial(keyColor||'#edf3fb',{metalness:.40,roughness:.30}),
@@ -384,7 +392,7 @@ export function createChestRevealWorld(canvas,tier,rarity){
   iris:new THREE.MeshBasicMaterial({color:keyColor?hint.color:'#49e8ff',toneMapped:false})
  };
  const key=demonKey(chest.rig,keyParts),flecks=particles(group(rig,0,caveFloor,0),hint);
- batchModels(chest.rig);batchModels(room);if(hall)batchModels(hall);
+ batchModels(key);batchModels(room);if(hall)batchModels(hall);
  const bloom=glowPlane(rig,hint.color,5,.0),keyGlow=glowPlane(rig,hint.color,1.14,0);
  const under=glowPlane(rig,hint.color,7.1,.25);
  under.position.y=-.023;under.rotation.x=-pi/2;
@@ -406,7 +414,7 @@ export function createChestRevealWorld(canvas,tier,rarity){
  const view=new THREE.PerspectiveCamera(39,1,.06,42);
  const focus=v(),bow=v(),spinAxis=v(1,0,0),upAxis=v(0,1,0),aim=new THREE.Quaternion(),spin=new THREE.Quaternion();
  const projectedMouth=v();
- let cardOrigin=null;
+ const cardOrigins=[];
  let width=0,height=0,disposed=false;
  function draw(ms,timePlan,phase){
   if(disposed||context.isContextLost())return false;
@@ -426,10 +434,13 @@ export function createChestRevealWorld(canvas,tier,rarity){
   const bounce=impact<0?(1-fall**2)*(cave?1.45:4):Math.max(0,Math.sin(impact*14.5))*.42*Math.exp(-impact*5.7);
   const shakeStart=fraction(t,landing,settle),shaking=(1-shakeStart)*Math.sin(shakeStart*pi)*hint.power;
   const baseY=cave&&t<descent?(-2.95*smooth(descend)):caveFloor+bounce;
-  chest.rig.position.set(shaking*.165*Math.cos(t*34),baseY,0);
-  chest.rig.rotation.set((1-fall)*.24*Math.sin(base*5),-.32-(1-fall)*.42+shaking*.09*Math.sin(t*31),shaking*.11*Math.cos(t*35));
-  chest.rig.scale.y=1-(impact>=0?.082*Math.exp(-impact*13):0);
-  chest.hinge.rotation.x=-1.95*p-.075*Math.sin(p*pi*2)*(1-p);
+  const spread=Math.max(.61,Math.min(1,view.aspect));
+  for(const {rig:caseRig,hinge,x,z,size} of formation){
+   caseRig.position.set(x*spread+shaking*.165*Math.cos(t*34),baseY,z);
+   caseRig.rotation.set((1-fall)*.24*Math.sin(base*5),-.32+x*.16-(1-fall)*.42+shaking*.09*Math.sin(t*31),shaking*.11*Math.cos(t*35));
+   caseRig.scale.set(size,size*(1-(impact>=0?.082*Math.exp(-impact*13):0)),size);
+   hinge.rotation.x=-1.95*p-.075*Math.sin(p*pi*2)*(1-p);
+  }
   const fly=smooth(fraction(t,settle,turnStart)),twist=fraction(t,turnStart,turnEnd);
   const withdraw=smooth(fraction(t,turnEnd-.035,turnEnd+.39));
   key.visible=t>=settle&&t<turnEnd+.4;
@@ -437,7 +448,8 @@ export function createChestRevealWorld(canvas,tier,rarity){
   aim.setFromAxisAngle(upAxis,-.39+2.04*fly);spin.setFromAxisAngle(spinAxis,(1-fly)*-.5-1.30*smooth(twist)+.47*withdraw);
   key.quaternion.copy(aim).multiply(spin);
   const cameraWide=Math.min(1,view.aspect)/.9;
-  const distance=8.1+Math.max(0,1-cameraWide)*4.35;
+  const minimumDistance=chestCount>1?((three?2.25:1.28)*spread+1.38)/(Math.tan(39*pi/360)*Math.max(.28,view.aspect)):0;
+  const distance=Math.max(8.1+Math.max(0,1-cameraWide)*4.35,minimumDistance);
   const gallery=phase==='cards'?1:phase==='dealing'?smooth(fraction(t,open,open+.65)):0;
   rig.position.y=-caveFloor*smooth(fraction(descend,.09,.93));
   room.visible=!cave||descend>=.45;
@@ -457,20 +469,21 @@ export function createChestRevealWorld(canvas,tier,rarity){
   under.material.uniforms.power.value=.19+shaking*.63+p*.45;
   hemi.intensity=cave?1.29-descend*.28+smooth(descend)*.48:2.17;
   front.intensity=cave?2.03-.96*Math.sin(pi*descend):2.65;
-  sky.near=11-2*gallery;
+  sky.near=11-2*gallery+Math.max(0,distance-9);
+  sky.far=24+Math.max(0,distance-9);
   rim.intensity=cave?13+descend*6:19;
   rays.forEach((beam,i)=>{
    beam.material.uniforms.power.value=(shaking+.36*fly+p*1.12)*(.22+.09*Math.cos(i*1.5+t*2.4));
   });
   flecks.draw(t,landing,turnEnd);
   renderer.render(scene,view);
-  if(p>.8){
-   chest.rig.localToWorld(projectedMouth.set(0,1.13,.36)).project(view);
-   cardOrigin={x:(projectedMouth.x+1)/2,y:(1-projectedMouth.y)/2};
-  }
+  if(p>.8)formation.forEach(({rig:caseRig},i)=>{
+   caseRig.localToWorld(projectedMouth.set(0,1.13,.36)).project(view);
+   cardOrigins[i]={x:(projectedMouth.x+1)/2,y:(1-projectedMouth.y)/2};
+  });
   return true;
  }
- return {draw,getCardOrigin:()=>cardOrigin,dispose(){
+ return {draw,getCardOrigin:(index=0)=>cardOrigins[index%formation.length],dispose(){
   if(disposed)return;
   disposed=true;disposeScene(scene);renderer.dispose();
   if(!context.isContextLost())renderer.forceContextLoss();

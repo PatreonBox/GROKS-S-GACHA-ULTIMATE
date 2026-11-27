@@ -1,2 +1,4 @@
 .reward-layer{position:fixed;inset:0;z-index:130;pointer-events:none;overflow:hidden}.reward-layer canvas{display:block;width:100%;height:100%}
 .reward-meter{position:absolute;top:max(12px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right));display:flex;align-items:center;gap:7px;padding:7px 13px;background:linear-gradient(#2e3447,#161927);border:1px solid #9ccde1;border-radius:9px;color:#ddf6ff;font:750 17px Barlow,sans-serif;box-shadow:0 4px 14px #090a14aa;font-variant-numeric:tabular-nums}.reward-meter img{width:26px;height:26px;object-fit:contain}.reward-meter[data-kind=coins]{border-color:#ddb971;color:#ffe5a2}.reward-meter[hidden]{display:none}
+.reward-layer[popover]{margin:0;width:100vw;height:100dvh;max-width:none;max-height:none;padding:0;border:0;background:transparent;pointer-events:none}
+.reward-meter[data-kind=demonKeys] img{width:36px}

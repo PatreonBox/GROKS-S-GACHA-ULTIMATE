@@ -7,6 +7,7 @@
  overflow:auto;overscroll-behavior:contain;background:#101625;
 }
 .drill-modal[open]{width:min(1330px,calc(100% - 24px));height:min(835px,calc(100dvh - 24px));grid-template-rows:auto minmax(140px,1fr) auto auto}
+.runner-modal[open]{width:min(1660px,calc(100% - 16px));height:min(1020px,calc(100dvh - 12px))}
 :is(.runner-bar,.drill-rail){display:flex;justify-content:space-between;align-items:center;gap:9px;min-width:0}
 :is(.runner-bar,.drill-rail) h2{font-size:clamp(24px,4.1dvh,51px);line-height:1;margin:0;overflow-wrap:anywhere}
 :is(.runner-bar,.drill-rail) button{flex:none;width:44px;height:44px;display:grid;place-items:center}

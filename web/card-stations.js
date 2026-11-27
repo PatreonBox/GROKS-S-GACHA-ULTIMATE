@@ -1,5 +1,5 @@
 import {ratingLabel} from './icons.js';
-import {impossibleCategory,impossibleCount,impossibleTier,impossiblePercent,impossibleGems} from './impossible-cards.js';
+import {impossibleCategory,impossibleCount,impossibleTier,impossiblePercent} from './impossible-cards.js';
 import {finishAt,finishClass,finishLabels,savedFinish} from './card-finishes.js';
 import {difficulties,readIndex,pool,claimIndex,mergeDuplicates,mergeBlocked,strongestMergeFirst} from './pack-engine.js';
 import {levelRewardTenths,extremeTable,mergeRoutes,mergeGems} from './card-economy.js';
@@ -113,7 +113,8 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
  function index(){
   const t=category,d=difficulties[t],ready=pending(t),total=ready.reduce((sum,r)=>sum+valueFor(t,r),0);
   const progress=pools.map(rows=>rows.reduce((acc,r)=>{if(own.has(r[0]))acc++;return acc},0));
-  const perLevel=t===10?'13–30 gems per level by AREDL rank':gems(valueFor(t,pools[t][0]))+' gems per level';
+  const perLevel=t===10?gems(levelRewardTenths(10,0,0))+'–'+gems(levelRewardTenths(10,1,extremeTable(pools[t]).last))+
+   ' gems per level by AREDL rank':gems(valueFor(t,pools[t][0]))+' gems per level';
   return '<section class="station-heading"><div><h2>Card index</h2><p>Each discovered level has its own one-time reward.</p></div><span>'+all.length.toLocaleString()+' discovered</span></section>'+vaultEntry()+'<div class="index-categories">'+difficulties.map((diff,i)=>{
    const available=i>0&&pools[i].some(r=>own.has(r[0])&&own.get(r[0]).indexReward===undefined);
    return '<button data-category="'+i+'" aria-pressed="'+(i===t)+'">'+faceIcon(diff)+'<span>'+diff+'<small>'+progress[i]+' / '+pools[i].length+'</small></span>'+(available?'<i title="Unclaimed gems">◆</i>':'')+'</button>';
@@ -127,16 +128,17 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
  function vault(){
   const discovered=all.filter(c=>c.row[6]===impossibleCategory),slots=new Map(discovered.map(c=>[c.row[10],c]));
   const claimable=pending(impossibleTier);
+  const perCard=levelRewardTenths(impossibleTier,0,0),reward=gems(perCard);
   return '<section class="vault" aria-label="Secret vault">'+
    '<div class="vault-head"><div><a class="outline" href="#gacha/index">Card index</a><h2>???</h2><p>Secret vault</p></div>'+
    '<div class="vault-progress"><b>'+discovered.length+' / '+impossibleCount+' discovered</b><span>Godly packs · '+impossiblePercent+'% per card for a secret</span>'+
-   (claimable.length?'<button class="primary" data-claim="category">'+gem+'Claim '+claimable.length*impossibleGems+'</button>':'')+'</div></div>'+
+   (claimable.length?'<button class="primary" data-claim="category">'+gem+'Claim '+gems(claimable.length*perCard)+'</button>':'')+'</div></div>'+
    '<div class="vault-grid">'+Array.from({length:impossibleCount},(_,i)=>{
     const slot=i+1,c=slots.get(slot);
     if(!c)return '<article class="vault-shell" aria-label="Undiscovered card '+slot+'"><span class="vault-ordinal" aria-hidden="true">'+String(slot).padStart(2,'0')+'</span><span class="vault-mark" aria-hidden="true">?</span>'+
      '<span class="vault-caption" aria-hidden="true">???</span></article>';
     return '<article class="vault-unlocked">'+card(c.row,{copies:c.copies,holoCopies:c.holoCopies,antimatterCopies:c.antimatterCopies,serials:c.serials})+
-     (c.indexReward===undefined?'<button class="level-claim" data-claim="'+c.id+'" aria-label="Claim '+impossibleGems+' gems for '+enc(c.row[1])+'">'+gem+'Claim '+impossibleGems+'</button>':'<div class="vault-paid">'+gem+impossibleGems+' claimed</div>')+'</article>';
+     (c.indexReward===undefined?'<button class="level-claim" data-claim="'+c.id+'" aria-label="Claim '+reward+' gems for '+enc(c.row[1])+'">'+gem+'Claim '+reward+'</button>':'<div class="vault-paid">'+gem+gems(c.indexReward*10)+' claimed</div>')+'</article>';
    }).join('')+'</div></section>';
  }
  function mergeReceipt(previous){

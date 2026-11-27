@@ -1,5 +1,7 @@
 import {makeDrill,stepDrill,drillStep,pressForge,releaseForge,steerDrill,directDrillLane,shiftDrillLane} from './drill-physics.js';
-import {makeCourse,newAttempt,pressRunner,advanceRunner,STEP} from './remix-physics.js';
+import {makeCourse,createEndlessCourse,newAttempt,pressRunner,advanceRunner,STEP} from './remix-physics.js';
+
+const maxUnverifiedEndlessSeconds=300;
 
 export function seededRandom(seed) {
  let state=seed>>>0;
@@ -69,7 +71,7 @@ export function replayDrill(session,proof,now) {
  return {run:state,axis,ticks:proof.ticks,seed:next.state()};
 }
 export function replayRemix(remix,session,proof,now,{finale=false}={}) {
- const course=makeCourse(remix),runner=newAttempt(course);
+ const course=makeCourse(remix,{legacy:session.version!==2}),runner=newAttempt(course);
  const result=replay(proof,{
   duration:now-session.start,step:STEP,maxSeconds:180,
   apply:(kind,value)=>runnerInput(runner,kind,value),
@@ -82,4 +84,25 @@ export function replayRemix(remix,session,proof,now,{finale=false}={}) {
  }
  if (result==='clear'&&(remix.mark!=='KEY'||proof.key===session.key&&session.keyVersion!==2)) return 100;
  return Math.min(remix.finish?remix.finish-1:99,Math.floor((remix.finish||100)*runner.x/course.end));
+}
+
+export function replayEndlessRemix(remix,session,proof,now){
+ const ticks=proof?.ticks,previous=session.checkedTicks||0,from=proof?.from??0;
+ if(!Number.isSafeInteger(ticks)||ticks<previous)throw Error('This attempt has already reached a later checkpoint.');
+ if(!Number.isSafeInteger(from)||from<0||from>previous)throw Error('The last Endless checkpoint has not been verified.');
+ if(ticks===previous)return {ticks,status:session.checkedStatus};
+ if(session.checkedStatus)throw Error('This attempt has already ended.');
+ if(!Array.isArray(proof.trace)||proof.trace.length>18000)throw Error('This run could not be verified.');
+ const course=createEndlessCourse(remix,session.seed),saved=session.checkedState;
+ const runner=saved?{...saved,orbs:new Set(saved.orbs),trace:[]}:newAttempt(course);
+ // Previously verified controls cannot change the server checkpoint on a later request.
+ const trace=previous?proof.trace.filter(event=>!(Array.isArray(event)&&Number.isInteger(event[0])&&event[0]>=0&&event[0]<previous)):proof.trace;
+ const status=replay({ticks,trace},{
+  duration:now-session.start,step:STEP,maxSeconds:maxUnverifiedEndlessSeconds,offset:previous,
+  apply:(kind,value)=>runnerInput(runner,kind,value),
+  advance(){const outcome=advanceRunner(runner,course,remix,STEP);return outcome==='running'?null:outcome;}
+ });
+ session.checkedStatus=status??null;
+ session.checkedState={...runner,trace:undefined,orbs:[...runner.orbs]};
+ return {ticks,status};
 }

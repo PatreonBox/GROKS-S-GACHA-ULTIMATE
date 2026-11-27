@@ -5,6 +5,7 @@ import {rankOddsVersion} from './card-economy.js';
 import {playerProgress} from './player-progression.js';
 import {featureLevel} from './level-access.js';
 import {impossibleCategory} from './impossible-cards.js';
+import {dropAccess,dropAccessSummary,dropEligible,dropUnlocks} from './drop-access.js';
 
 export {bannerUnlockDelay,demonKeyOffer,demonKeyPrice,keyLimit} from './demon-keys.js';
 
@@ -24,14 +25,16 @@ export const keyBannerLevelCap=100;
 export const proOddsMultiplier=20;
 export const bannerLuckCap=500;
 export const bannerLuckBonus=luck=>Math.max(0,Math.min(bannerLuckCap,luck))*.001;
+export const demonPityUnlock={legendary:dropUnlocks.find(step=>step.rarity>=legendaryIndex).level,mythic:dropUnlocks.find(step=>step.rarity>=mythicIndex).level};
 
-export function bannerOdds(id,level=0,{target=false,luck=0}={}){
+export function bannerOdds(id,level=0,{target=false,luck=0,preview=false,groups}={}){
  if(!Object.hasOwn(demonBanners,id))throw Error('Choose a Demon banner.');
  const levelBonus=Math.max(0,Math.min(keyBannerLevelCap,level))*.006;
  const luckBonus=bannerLuckBonus(luck);
  const multiplier=(1+levelBonus)*(1+luckBonus);
- const weights=baseWeights.map((weight,i)=>i<legendaryIndex?weight:Math.round(weight*multiplier)*(id==='pro'?proOddsMultiplier:1));
- if(id==='pro'){
+ const maximum=preview?impossibleIndex:dropAccess(level).rarity;
+ const weights=baseWeights.map((weight,i)=>i>maximum||groups&&!groups[i].length?0:i<legendaryIndex?weight:Math.round(weight*multiplier)*(id==='pro'?proOddsMultiplier:1));
+ if(id==='pro'||maximum<impossibleIndex||groups?.some(group=>!group.length)){
   const regular=weights.slice(0,legendaryIndex).reduce((sum,weight)=>sum+weight,0);
   const premium=weights.slice(legendaryIndex).reduce((sum,weight)=>sum+weight,0);
   for(let i=1;i<legendaryIndex;i++)weights[i]=Math.floor(weights[i]*(tickets-premium)/regular);
@@ -70,17 +73,18 @@ export function demonCatalogue(getPool){
    if(groups.some(group=>!group.length))throw Error('The Demon banner catalog is incomplete.');
    const featured=names.filter(({row})=>row[6]!==impossibleCategory)
     .sort((a,b)=>levelNameOrder.compare(a.name,b.name)||a.row[0]-b.row[0]);
-   return {groups,groupCounts,levels,names,featured};
+   return {groups,groupCounts,levels,names,featured,filtered:new Map()};
   }).catch(error=>{catalogueCache.delete(getPool);throw error;});
   catalogueCache.set(getPool,load);
  }
  return load;
 }
 
-export async function demonTargetSearch(getPool,query,{category,impossible=false}={}){
+export async function demonTargetSearch(getPool,query,{category,impossible=false,playerLevel}={}){
  const {levels,names,groups}=await demonCatalogue(getPool);
  const term=query.trim().toLowerCase().slice(0,80),exact=/^\d+$/.test(term);
- const qualifies=row=>row&&(impossible?row[6]==='Impossible':row[6]!=='Impossible')&&(!category||row[6]===category);
+ const access=playerLevel===undefined?null:dropAccess(playerLevel);
+ const qualifies=row=>row&&(impossible?row[6]==='Impossible':row[6]!=='Impossible')&&(!category||row[6]===category)&&(!access||dropEligible(row,access));
  if(exact){
   const row=levels.get(Number(term));
   return qualifies(row)?[row]:[];
@@ -98,10 +102,11 @@ export async function demonTargetSearch(getPool,query,{category,impossible=false
  return starts.concat(other).slice(0,18);
 }
 
-export async function browseDemonTargets(getPool,{query='',category,page=1}={}){
+export async function browseDemonTargets(getPool,{query='',category,page=1,playerLevel}={}){
  const {featured}=await demonCatalogue(getPool);
  const term=query.trim().slice(0,80).toLowerCase();
- const matches=featured.filter(({name,row})=>(!category||row[6]===category)&&name.includes(term));
+ const access=playerLevel===undefined?null:dropAccess(playerLevel);
+ const matches=featured.filter(({name,row})=>(!category||row[6]===category)&&name.includes(term)&&(!access||dropEligible(row,access)));
  const total=matches.length,pages=Math.max(1,Math.ceil(total/featuredPageSize));
  const current=Math.min(pages,Number.isSafeInteger(page)?Math.max(1,page):1);
  const start=(current-1)*featuredPageSize;
@@ -125,14 +130,32 @@ export async function prepareDemonPull({banner,targetId,category,levelId},getPoo
   force=[...levels.values()].filter(row=>row[6]===category);
   if(!force.length)throw Error('No cards in that category.');
  }
- return {catalogue,target,force};
+ return {catalogue,target,force,preview};
 }
 
-export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force},random=randomBelow){
- const {groups,groupCounts}=catalogue,banner=demonBanners[id],level=playerProgress(wallet.playerXp).level;
- const odds=bannerOdds(id,level,{luck:wallet.luck||0}),pity=bannerPity(wallet,id),focus=target&&cardRarity(target).index;
+function availableBannerGroups(catalogue,access){
+ if(access.fullList)return catalogue;
+ const cache=catalogue.filtered??=new Map();
+ if(!cache.has(access.level)){
+  const groups=catalogue.groups.map(group=>group.filter(row=>dropEligible(row,access)));
+  const groupCounts=groups.map(group=>{
+   const counts={};
+   for(const row of group)counts[row[6]]=(counts[row[6]]||0)+1;
+   return counts;
+  });
+  cache.set(access.level,{groups,groupCounts});
+ }
+ return cache.get(access.level);
+}
+
+export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force,preview=false},random=randomBelow){
+ const banner=demonBanners[id],level=playerProgress(wallet.playerXp).level,access=dropAccess(level);
+ if(!preview&&target&&!dropEligible(target,access))throw Error('That featured level is locked. '+dropAccessSummary(level));
+ const {groups,groupCounts}=preview?catalogue:availableBannerGroups(catalogue,access);
+ const odds=bannerOdds(id,level,{luck:wallet.luck||0,preview,groups}),pity=bannerPity(wallet,id),focus=target&&cardRarity(target).index;
  const declaredWeights=Object.fromEntries(cardCategories.map(category=>[category,0]));
  for(const tier of odds){
+  if(!tier.weight)continue;
   const group=groups[tier.index],fraction=tier.percent/group.length;
   for(const [category,count] of Object.entries(groupCounts[tier.index]))
    declaredWeights[category]+=count*fraction*(tier.index===focus?1-focusChance:1);
@@ -141,11 +164,12 @@ export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force},rand
 
  const rows=[],sizes=[],holos=[],antimatters=[],drawPercents=[],drawDifficultyPercents=[],drawRarityPercents=[],guarantees=[];
  const cumulative=odds.map((_,i)=>odds.slice(i).reduce((sum,tier)=>sum+tier.weight,0));
+ const canLegendary=cumulative[legendaryIndex]>0,canMythic=cumulative[mythicIndex]>0;
  const bonus=Math.round(bonusChance(wallet.bonus)*100),focusSlots=Math.round(focusChance*tickets);
  for(let draw=0;draw<quantity;draw++){
   const size=bonus>0&&random(10000)<bonus?6:5;
   let topIndex=0;
-  const floor=pity.mythic+1>=demonPity.mythic?mythicIndex:pity.legendary+1>=demonPity.legendary?legendaryIndex:0;
+  const floor=canMythic&&pity.mythic+1>=demonPity.mythic?mythicIndex:canLegendary&&pity.legendary+1>=demonPity.legendary?legendaryIndex:0;
   if(floor)guarantees.push({draw,tier:cardRarities[floor].id});
   sizes.push(size);
   for(let slot=0;slot<size;slot++){
@@ -176,8 +200,8 @@ export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force},rand
    drawDifficultyPercents.push(declaredWeights[row[6]]);
    drawRarityPercents.push(rarityPercent);
   }
-  pity.legendary=topIndex>=legendaryIndex?0:pity.legendary+1;
-  pity.mythic=topIndex>=mythicIndex?0:pity.mythic+1;
+  if(canLegendary)pity.legendary=topIndex>=legendaryIndex?0:pity.legendary+1;
+  if(canMythic)pity.mythic=topIndex>=mythicIndex?0:pity.mythic+1;
  }
  return {packId:banner.packId,banner:id,quantity,rows,sizes,holos,antimatters,drawPercents,drawDifficultyPercents,drawRarityPercents,
   finishVersion,packOddsVersion,oddsVersion:rankOddsVersion,luckAtPurchase:wallet.luck,

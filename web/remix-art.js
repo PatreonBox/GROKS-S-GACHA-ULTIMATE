@@ -1,4 +1,4 @@
-import {VIEW_HEIGHT as H,CEILING,FLOOR,tunnelAt} from './remix-physics.js';
+import {VIEW_HEIGHT as H,CEILING,FLOOR,tunnelAt,hazardsBetween} from './remix-physics.js';
 import {orbSprites} from './combat-arts.js';
 import {drillSprites} from './drill-sprites.js';
 import {arcadeSprites} from './minigame-guide.js';
@@ -87,8 +87,8 @@ function tilePattern(ctx,theme,tint){
 
 export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
  const theme=styles[remix.mark],tint=remix.color;
- const scene=image(remix.art||'/assets/remix/'+theme.image+'.webp',onReady);
- const icon=image(skin.icon,onReady),vehicle=arcadeSprites[course.mode]?image(arcadeSprites[course.mode],onReady):null;
+ const scene=image(remix.art||(theme.image?'/assets/remix/'+theme.image+'.webp':'/assets/shots/'+remix.id+'.webp'),onReady);
+ const icon=image(skin.icon,onReady),vehicle=course.mode==='ship'?image(arcadeSprites.ship,onReady):null;
  const pinkOrb=image(orbSprites[0],onReady),spikeSprite=image(drillSprites.spike,onReady);
  const exitPortal=image(drillSprites.exit,onReady),miniPortal=course.miniAt?image(drillSprites.mini,onReady):null;
  const tiles=tilePattern(ctx,theme,tint),wall=ctx.createLinearGradient(0,0,0,H);
@@ -112,7 +112,7 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
   if(scene.complete&&scene.naturalWidth){
    const cover=Math.max((W+50)/scene.naturalWidth,viewHeight/scene.naturalHeight);
    const w=scene.naturalWidth*cover,h=scene.naturalHeight*cover;
-   const slide=reduced?0:(1-2*s.x/course.end)*Math.min(72,(w-W)/2);
+   const slide=reduced?0:(course.endless?Math.cos(s.x/840):1-2*s.x/course.end)*Math.min(72,(w-W)/2);
    ctx.drawImage(scene,(W-w)/2+slide,(viewHeight-h)*.49,w,h);
   }
   ctx.fillStyle=shade;ctx.fillRect(0,0,W,viewHeight);
@@ -131,7 +131,7 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
    }
   }
   if(remix.mark==='DRAIN'){
-   const level=FLOOR-54*(1-s.x/course.end);
+   const level=FLOOR-54*(course.endless?.5+.45*Math.cos(s.time*.30):1-s.x/course.end);
    ctx.fillStyle='#ec262437';ctx.fillRect(0,level,W,H-level);
    for(let i=0;i<3;i++){
     const line=[];for(let x=0;x<=W+18;x+=18)line.push([x,level+i*12+Math.sin(x*.04+s.time*5+i)*4]);
@@ -243,17 +243,20 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
    }
    return;
   }
-  for(const [i,g] of course.gates.entries()){
+  for(let i=Math.max(0,s.passed-(course.firstGate||0)-3);i<course.gates.length;i++){
+   const g=course.gates[i];
+   const number=g.index??i;
+   if(drawX(g.x)>W+50)break;
    const x=drawX(g.x);if(x<-50||x>W+50)continue;
    const {top,bottom}=tunnelAt(course,g.x),mid=(top+bottom)/2;
-   const color=s.passed>i?tint+'45':tint+'a9';
+   const color=s.passed>number?tint+'45':tint+'a9';
    path(ctx,[[x-10,top+7],[x+5,top+7],[x+11,top+13]],null,color,2);
    path(ctx,[[x-10,bottom-7],[x+5,bottom-7],[x+11,bottom-13]],null,color,2);
-   if(remix.mark==='RINGS'){
+   if(remix.mark==='RINGS'||course.endless&&number%5===4){
     const height=(bottom-top)*.38;
     ctx.beginPath();ctx.ellipse(x,mid,13,height,0,0,Math.PI*2);ctx.strokeStyle=color;ctx.lineWidth=4;ctx.stroke();
     ctx.beginPath();ctx.ellipse(x,mid,13,height,0,0,Math.PI*2);ctx.strokeStyle=theme.light;ctx.lineWidth=1;ctx.stroke();
-    label(ctx,String(i+1),x+19,mid+4,13,theme.light);
+    label(ctx,String(number+1),x+19,mid+4,13,theme.light);
    }
    if(remix.mark==='HIVE')path(ctx,[[x-10,mid],[x-5,mid-9],[x+5,mid-9],[x+10,mid],[x+5,mid+9],[x-5,mid+9]],tint+'22',color,1.4);
   }
@@ -309,7 +312,9 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
    ctx.fillStyle=skin.color;ctx.fillRect(-10,-10,20,20);
    ctx.strokeStyle='#eff5ff';ctx.lineWidth=1.5;ctx.strokeRect(-10,-10,20,20);
   }else if(course.mode==='wave'){
-   path(ctx,[[-10,-6],[14,0],[-10,6],[-4,0]],skin.color,'#fff',1.45);
+   path(ctx,[[-14,-9],[16,0],[-14,9],[-7,0]],'#0b142e','#f5f9ff',1.55);
+   path(ctx,[[-9,-5],[9,0],[-9,5],[-3,0]],skin.color);
+   path(ctx,[[-1,-2],[7,0],[-1,2],[1,0]],'#fff');
   }else{
    path(ctx,[[-16,-4],[-3,-7],[16,0],[-3,8],[-15,3]],skin.color,'#fff',1.45);
    path(ctx,[[-8,-3],[4,-3],[9,0],[2,3],[-8,2]],'#f0f7ff');
@@ -327,14 +332,13 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
   backdrop(s,reduced);
   ctx.save();ctx.translate(0,top);atmosphere(s,reduced);
   if(course.mode==='cube')floor();else tunnelStart();
-  for(const obstacle of course.hazards){
-   if(drawX(obstacle.minX)>W+30||drawX(obstacle.maxX)<-30)continue;
+  for(const obstacle of hazardsBetween(course,s.x-player-30,s.x-player+W+30)){
    if(obstacle.kind==='bank'||obstacle.kind==='roof')ledge(obstacle);
    else shard(obstacle);
   }
   const clock=reduced?0:s.time;
   if(course.miniAt)portal(drawX(course.miniAt),126,'#ffa0fc',clock,miniPortal,16);
-  portal(drawX(course.end),course.mode==='cube'?FLOOR-46:127,'#ffd58c',clock,exitPortal,19);
+  if(!course.endless)portal(drawX(course.end),course.mode==='cube'?FLOOR-46:127,'#ffd58c',clock,exitPortal,19);
   actor(s,phase==='lost');
   for(const p of particles){
    const a=clamp(p.life/p.max,0,1),x=drawX(p.x);ctx.globalAlpha=a;

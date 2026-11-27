@@ -20,7 +20,7 @@ import {playerModeration} from './player-moderation.mjs';
 import {grantDiscordKeyBonus,playerNotifications} from './game-notifications.mjs';
 import {browseDemonTargets,demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
 import {draftCardEditions} from './card-editions.mjs';
-import {initDemonKeys,keyLimit,rewardDemonKeys} from '../web/demon-keys.js';
+import {initDemonKeys,keyLimit,releaseAchievementKeys,rewardDemonKeys} from '../web/demon-keys.js';
 
 const guestCookie='__Host-gdlb-save';
 const cookieLifetime=60*60*24*365;
@@ -298,6 +298,7 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
     events:achievementActionEvents(wallet,action,result,before),
     visitors:wallet.kingdom?discoveredVisitors(wallet,now).length:0},now);
   }
+  releaseAchievementKeys(wallet,now);
   let power=record.collection_power;
   if(reset)power=0;
   else if(!powerIsCurrent(record)||changes.size||wallet.trainingRevision!==trainingVersion){
@@ -469,13 +470,16 @@ export function gameRoutes(readJson,hasArt){
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
    if(view==='demon-featured-levels')return json(await browseDemonTargets(getPool,{
-    query:url.searchParams.get('q')||'',category:url.searchParams.get('category'),page:Number(url.searchParams.get('page'))
+    query:url.searchParams.get('q')||'',category:url.searchParams.get('category'),page:Number(url.searchParams.get('page')),
+    playerLevel:playerProgress(JSON.parse(record.wallet).playerXp).level
    }));
    if(view==='demon-targets'){
     const category=url.searchParams.get('category');
     const impossible=url.searchParams.get('impossible')==='1'||category==='Impossible';
     if(impossible&&!admin)reject('Admin tools are unavailable for this account.',403);
-    return json({rows:await demonTargetSearch(getPool,url.searchParams.get('q')||'',{category,impossible})});
+    return json({rows:await demonTargetSearch(getPool,url.searchParams.get('q')||'',{
+     category,impossible,playerLevel:admin?undefined:playerProgress(JSON.parse(record.wallet).playerXp).level
+    })});
    }
    if(view==='gacha-activity')return json({activity:await gachaActivity(db,record)});
    if(view==='profile')return json({profile:await profileStats(db,record,await getCollectibleIds(),{adminOwner,discordOnly:requiresSignIn,admin})});

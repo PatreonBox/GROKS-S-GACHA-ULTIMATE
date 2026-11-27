@@ -23,7 +23,8 @@ export function awardPackXp(wallet,packId,count,now,perDraw=packPlayerXp(packId)
  return {xp,capped:count-packs};
 }
 
-export const playerXpAtLevel=level=>120*level+17*level*(level-1)+level*(level-1)*(2*level-1)/3;
+// Thresholds cost five sixths of the previous curve. Stored lifetime XP keeps its original value.
+export const playerXpAtLevel=level=>Math.ceil((120*level+17*level*(level-1)+level*(level-1)*(2*level-1)/3)*5/6);
 export function playerProgress(totalXp){
  const total=Number.isSafeInteger(totalXp)&&totalXp>0?totalXp:0;
  let low=0,high=1;

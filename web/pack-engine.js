@@ -6,9 +6,12 @@ import {spendCardSerials} from './card-serials.js';
 import {gameRead,gameCommand} from './game-client.js';
 import {changeCoins,coinLimit,coinPrice,normalizeCoinWallet} from './coin-economy.js';
 import {packStockLimit} from './pack-stock.js';
+import {dropAccess,dropEligible,difficulties,proportionalWeights} from './drop-access.js';
+import {playerProgress} from './player-progression.js';
+import {packLevels} from './level-access.js';
 export {onOtherTab} from './game-client.js';
+export {difficulties} from './drop-access.js';
 
-export const difficulties=['Auto','Easy','Normal','Hard','Harder','Insane','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'];
 export const cardCategories=[...difficulties,impossibleCategory];
 // Percentages follow the same Auto-to-Extreme order as difficulties.
 export const packs=[
@@ -81,7 +84,7 @@ export function bonusChance(level){
 // The highest result wins. The 0–100% curve matches existing saved pack odds.
 // Quantize the cumulative probabilities, keeping a ticket for each eligible difficulty.
 // The UI and sampler use the same integer table, including at maximum luck.
-export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion}={}){
+export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion,playerLevel}={}){
  const base=version===1?legacyPackBases[pack.id]:version===2&&pack.id==='mythic'?priorMythicBase:pack.base;
  const extra=Math.max(0,Math.min(Number.MAX_SAFE_INTEGER,Number(luckLevel)||0))/100;
  const whole=Math.floor(extra),fraction=extra-whole;
@@ -107,6 +110,15 @@ export function oddsFor(pack,luckLevel=0,{secrets=true,version=packOddsVersion}=
   const tickets=Math.round(impossiblePercent*TICKETS/100),extreme=odds[10];
   extreme.weight-=tickets;extreme.percent=extreme.weight/10000;
   odds.push({category:impossibleCategory,weight:tickets,percent:impossiblePercent});
+ }
+ if(playerLevel!==undefined){
+  const {tier}=dropAccess(playerLevel);
+  if(tier<odds.length-1){
+   const allowed=odds.map(({weight},i)=>i<=tier?weight:0);
+   if(!allowed.some(Boolean))allowed[tier]=TICKETS;
+   const weights=proportionalWeights(allowed,TICKETS);
+   return odds.map(({category},i)=>({category,weight:weights[i],percent:weights[i]/10000}));
+  }
  }
  return odds;
 }
@@ -134,16 +146,18 @@ function rarityOdds(row,difficultyPercent,finish,exactPercent,finishOddsVersion)
  return {category,rank,finish,difficultyPercent,percent};
 }
 
-export function inventoryOdds(extremes,packId,luck=0){
+export function inventoryOdds(extremes,packId,luck=0,playerLevel){
  const reference=godlyExtremeTickets(luck),ranks=new Map(extremes.map(row=>[row[0],row]));
- const packSet=packId==='all'?packs:packs.filter(pack=>pack.id===packId);
+ const packSet=packs.filter(pack=>(packId==='all'||pack.id===packId)&&(playerLevel===undefined||playerLevel>=packLevels[pack.id]));
+ const access=playerLevel===undefined?null:dropAccess(playerLevel);
+ const levels=access?.rankFloor?extremes.filter(row=>dropEligible(row,access)):extremes;
  const rates=cardCategories.map(()=>0);
- for(const pack of packSet)oddsFor(pack,luck).forEach((tier,i)=>{rates[i]+=tier.percent/packSet.length});
+ for(const pack of packSet)oddsFor(pack,luck,{playerLevel}).forEach((tier,i)=>{rates[i]+=tier.percent/packSet.length});
  return card=>{
   const tier=cardCategories.indexOf(card.row[6]),finish=bestFinish(card);
   const row=tier===10?ranks.get(card.id):card.row;
-  if(!row||!rates[tier])return rarityOdds(card.row,0,finish,null,finishVersion);
-  const exact=tier>=10?cardDrawPercent(row,extremes,rates[tier],{finish,reference}):null;
+  if(!row||!rates[tier]||access&&!dropEligible(row,access))return rarityOdds(card.row,0,finish,null,finishVersion);
+  const exact=tier>=10?cardDrawPercent(row,levels,rates[tier],{finish,reference}):null;
   return rarityOdds(row,rates[tier],finish,exact,finishVersion);
  };
 }
@@ -199,25 +213,29 @@ export function randomBelow(limit){
 }
 export function rollPacks(pack,quantity,wallet,pools,random=randomBelow){
  if(!packs.includes(pack)||!Number.isSafeInteger(quantity)||quantity<1||quantity>50)throw Error('Choose a valid pack quantity.');
- const odds=oddsFor(pack,wallet.luck),bonus=Math.round(bonusChance(wallet.bonus)*100);
+ const playerLevel=playerProgress(wallet.playerXp).level,access=dropAccess(playerLevel);
+ const odds=oddsFor(pack,wallet.luck,{playerLevel}),bonus=Math.round(bonusChance(wallet.bonus)*100);
+ const extremes=access.rankFloor&&pools[10]?pools[10].filter(row=>dropEligible(row,access)):pools[10];
  const referenceTickets=godlyExtremeTickets(wallet.luck);
- const rows=[],sizes=[],holos=[],antimatters=[],drawPercents=[];
+ const rows=[],sizes=[],holos=[],antimatters=[],drawPercents=[],drawDifficultyPercents=[];
  for(let i=0;i<quantity;i++){
   const size=bonus>0&&random(10000)<bonus?6:5;
   sizes.push(size);
   for(let j=0;j<size;j++){
    let ticket=random(TICKETS),index=0;
    while(ticket>=odds[index].weight){ticket-=odds[index].weight;index++}
-   const levels=pools[index];
+   const levels=index===10?extremes:pools[index];
+   if(!levels?.length)throw Error('This card pack has no unlocked levels for that difficulty.');
    const row=index===10?pickExtreme(levels,random,referenceTickets):levels[random(levels.length)];
    const finish=rollFinish(random(10000));
    rows.push(row);
    if(finish==='holo')holos.push(rows.length-1);
    if(finish==='antimatter')antimatters.push(rows.length-1);
    drawPercents.push(cardDrawPercent(row,levels,odds[index].percent,{finish,reference:referenceTickets}));
+   drawDifficultyPercents.push(odds[index].percent);
   }
  }
- return {packId:pack.id,quantity,rows,sizes,holos,antimatters,drawPercents,luckAtPurchase:wallet.luck,
+ return {packId:pack.id,quantity,rows,sizes,holos,antimatters,drawPercents,drawDifficultyPercents,luckAtPurchase:wallet.luck,playerLevelAtPurchase:playerLevel,
   finishVersion,packOddsVersion,oddsVersion:rankOddsVersion};
 }
 

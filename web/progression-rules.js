@@ -5,7 +5,7 @@ import {spikeKind,spikePlan} from './kingdom-defences.js';
 import {campaignStages,medalCount,stageCleared} from './campaign.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {awardPlayerXp} from './player-progression.js';
-import {keyLimit,rewardDemonKeys} from './demon-keys.js';
+import {keyLimit,releaseAchievementKeys} from './demon-keys.js';
 import {remixes} from './remixes.js';
 
 export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js';
@@ -164,7 +164,7 @@ export const achievements=[
  track('Battle','full-squad-wins','Everyone Comes Home','fullSquadWins',[[3,'Normal'],[12,'Harder'],[35,'Demon']],
   goal=>'Win '+n(goal)+' Arena battles with all four squad members still standing.',{symbol:'badgePartyShield',color:'#ffc283'}),
  track('Battle','arcade-modes','Portal Hopper','arcadeModes',[[2,'Hard'],[3,'Demon']],
-  goal=>goal===3?'Clear a Meme level in each mode: Cube, Ship and Wave.':'Clear Meme levels in '+n(goal)+' different movement modes.',{href:'#battle/arcade',symbol:'badgePortals',color:'#aff1c9'}),
+  goal=>goal===3?'Clear a Mini Game in each mode: Cube, Ship and Wave.':'Clear Mini Games in '+n(goal)+' different movement modes.',{href:'#battle/arcade',symbol:'badgePortals',color:'#aff1c9'}),
  track('Training','three-drill-levels','Triple Threat','tripleDrill',[[3,'Hard'],[12,'Insane'],[24,'Demon']],
   goal=>'Reach Level '+n(goal)+' in Spike, Saw and Endurance training on the same card.',{symbol:'badgeThreeDrills',color:'#f1affa'}),
  track('Coin mine','machine-variety','Clockwork Orchestra','machineVariety',[[2,'Normal'],[4,'Harder'],[5,'Insane']],
@@ -286,9 +286,8 @@ export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train
  }
  wallet.achievementRewardXp=(wallet.achievementRewardXp||0)+xp;
  awardPlayerXp(wallet,xp);
- if(deferDemonKeys){
-  const balance=wallet.demonKeysToClaim||0;
-  wallet.demonKeysToClaim=balance+Math.min(keyLimit-balance,keys);
- }else rewardDemonKeys(wallet,keys,now);
+ const balance=wallet.demonKeysToClaim||0;
+ wallet.demonKeysToClaim=balance+Math.min(keyLimit-balance,keys);
+ if(!deferDemonKeys)releaseAchievementKeys(wallet,now);
  return awarded;
 }

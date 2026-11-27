@@ -59,6 +59,14 @@ dialog.rare-reveal[open]{
 .rare-head strong,.rare-head small{opacity:0;transform:translateY(7px);transition:opacity .32s ease,transform .45s cubic-bezier(.16,1,.3,1)}
 .rare-reveal[data-revealed] .rare-head :is(strong,small){opacity:1;transform:none}
 .rare-stage{position:relative;width:100%;min-height:0;min-width:0;display:grid;place-items:center;perspective:1000px;pointer-events:none}
+.rare-float{transform-style:preserve-3d}
+.rare-reveal[data-hover] .rare-float{animation:rare-card-hover 5.8s ease-in-out infinite}
+@keyframes rare-card-hover{
+ 0%,100%{transform:translateY(0) rotateY(0) rotateZ(0)}
+ 25%{transform:translateY(-6px) rotateY(2.5deg) rotateZ(.5deg)}
+ 50%{transform:translateY(-9px) rotateY(0) rotateZ(0)}
+ 75%{transform:translateY(-5px) rotateY(-2.5deg) rotateZ(-.5deg)}
+}
 .rare-deck{display:grid;position:relative;width:clamp(118px,min(75vw,46dvh),325px);transform-style:preserve-3d;transform:rotateY(180deg)}
 .rare-back,.rare-front{grid-area:1/1;display:grid;place-items:stretch;-webkit-backface-visibility:hidden;backface-visibility:hidden;border-radius:13px}
 .rare-edge{position:absolute;inset:1px;border-radius:12px;transform-style:preserve-3d;background:var(--rarity)}
@@ -161,6 +169,6 @@ dialog.rare-reveal[open]{
  .rare-footer{min-width:0}
 }
 @media(prefers-reduced-motion:reduce){
- .vault-shell,.rare-back .gd-card-back-mark,.rare-impact,.rare-reveal[data-revealed] .rare-front::after{animation:none}
+ .vault-shell,.rare-back .gd-card-back-mark,.rare-impact,.rare-reveal[data-hover] .rare-float,.rare-reveal[data-revealed] .rare-front::after{animation:none}
  .rare-hero,.rare-head strong,.rare-head small,.rare-environment,.rare-reveal>canvas{transition:none}
 }

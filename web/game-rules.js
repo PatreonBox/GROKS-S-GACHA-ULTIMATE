@@ -9,9 +9,10 @@ import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
 import {limboChoiceAt,limboPattern} from './limbo-keys.js';
 import {findRemix,remixKeyReward} from './remixes.js';
-import {armyMaps,armyLimit} from './army-battle.js';
+import {armyMaps,armyLimit,armyTacticsVersion} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
-import {replayDrill,replayRemix} from './game-replay.js';
+import {replayDrill,replayRemix,replayEndlessRemix} from './game-replay.js';
+import {endlessKeyInterval,endlessKeyStatus,endlessMilestones,rewardEndlessRemix} from './remix-endless.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
 import {buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
@@ -41,7 +42,7 @@ const gatedActions={
  'kingdom.tower.skip':'kingdom','kingdom.building.store':'kingdom','kingdom.building.place':'kingdom','kingdom.tree.clear':'kingdom',
  'trade.settings':'trading',
  'upgrade.buy':'upgrades','card.feed':'training','drill.begin':'training',
- 'card.merge':'merge','remix.begin':'arcade','remix.finale':'arcade','army.begin':'army'
+ 'card.merge':'merge','remix.begin':'arcade','remix.finale':'arcade','remix.checkpoint':'arcade','army.begin':'army'
 };
 const randomUnit = () => randomBelow(0x100000000)/0x100000000;
 async function allPools(getPool,categories) {
@@ -368,15 +369,32 @@ const rules={
   awardPlayerXp(w,playerXpEarned);
   return {...result,playerXpEarned};
  }},
- 'remix.begin':{run:({w,args:{id},now})=>{
-  requireRule(levelId(id)&&findRemix(id),'Choose a featured level.');
+ 'remix.begin':{run:({w,args:{id,mode:requestedMode},now})=>{
+  const remix=levelId(id)&&findRemix(id);
+  const mode=requestedMode??'normal';
+  requireRule(remix,'Choose a featured level.');
+  requireRule(requestedMode===undefined||requestedMode==='normal'||requestedMode==='endless','Choose Normal or Endless mode.');
   const token=crypto.randomUUID();
-  w.remixRun={id,token,start:now,keyVersion:id===86084399?2:0};
-  return {token};
+  w.remixRun={id,token,start:now,mode,version:requestedMode===undefined?1:2,keyVersion:id===86084399?2:0};
+  if(mode==='endless'){
+   const seed=randomBelow(0x100000000);
+   w.remixRun.seed=seed;
+   return {token,mode,seed,interval:endlessKeyInterval(remix),...endlessKeyStatus(w,now)};
+  }
+  return {token,mode};
+ }},
+ 'remix.checkpoint':{run:({w,args:{token,proof},now})=>{
+  const run=w.remixRun;
+  requireRule(key(token)&&run?.token===token&&run.mode==='endless','Start a new Endless attempt.');
+  const remix=findRemix(run.id);
+  const previous=run.checkedTicks||0,ticks=proof?.ticks;
+  requireRule(Number.isSafeInteger(ticks)&&(ticks===previous||endlessMilestones(ticks,remix)>endlessMilestones(previous,remix)),
+   'Keep playing to reach the next Endless checkpoint.');
+  return rewardEndlessRemix(w,run,remix,replayEndlessRemix(remix,run,proof,now),now);
  }},
  'remix.finale':{run:({w,args:{token,proof},now})=>{
   const run=w.remixRun;
-  requireRule(run?.id===86084399&&run.token===token,'Start a new LIMBO attempt.');
+  requireRule(run?.id===86084399&&run.token===token&&run.mode!=='endless','Start a new LIMBO attempt.');
   if(!run.finale){
    replayRemix(findRemix(run.id),run,proof,now,{finale:true});
    run.keyVersion=2;
@@ -386,8 +404,14 @@ const rules={
  }},
  'remix.finish':{run:({w,args:{token,proof},now})=>{
   const run=w.remixRun;
-  requireRule(key(token)&&run?.token===token,'Start a new arcade attempt.');
-  const remix=findRemix(run.id),limbo=remix.mark==='KEY',finale=limbo&&run.finale;
+  requireRule(key(token)&&run?.token===token,'Start a new Mini Games attempt.');
+  const remix=findRemix(run.id);
+  if(run.mode==='endless'){
+   const receipt=rewardEndlessRemix(w,run,remix,replayEndlessRemix(remix,run,proof,now),now);
+   delete w.remixRun;
+   return {...receipt,terminal:true};
+  }
+  const limbo=remix.mark==='KEY',finale=limbo&&run.finale;
   let percent;
   if(finale){
    requireRule(within(proof?.key,0,7)&&now-finale.start>=limboChoiceAt-250,'Wait for the keys to finish shuffling.');
@@ -411,7 +435,7 @@ const rules={
   const {series,rivals,starterRows}=prepared;
   requireRule(series?seriesUnlocked(w,series.key,chapter):chapterUnlocked(w,tier,chapter),'Clear the previous Army stage first.');
   const run={id:crypto.randomUUID(),map,chapter,tier,seriesKey:series?.key,started:now,seed:randomBelow(0x100000000),
-   signatureVersion:armySignatureVersion,statsVersion:combatStatsVersion,rivals,players:armyPlayers(w,records,ids,starterRows,now)};
+   signatureVersion:armySignatureVersion,statsVersion:combatStatsVersion,tacticsVersion:armyTacticsVersion,rivals,players:armyPlayers(w,records,ids,starterRows,now)};
   w.armyRun=run;
   return run;
  }},

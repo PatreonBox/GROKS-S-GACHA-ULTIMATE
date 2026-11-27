@@ -7,7 +7,7 @@
 .discord-invite b{font-size:.78rem}
 .discord-invite small{margin-top:2px;font-size:.73rem;font-weight:750;color:#ffd597}
 .discord-invite [data-discord-mark]{display:grid;place-items:center}
-.discord-invite .discord-symbol{width:20px;height:20px;color:#a5afff}
+.discord-invite .discord-kingdom-logo{width:25px;height:25px;object-fit:contain;flex:none}
 .game-quick-tools{margin-inline-start:auto;display:grid;justify-items:end;gap:5px;flex:none}
 .game-quick-tools>.iconbtn{position:relative;width:39px;height:39px;min-height:39px;display:grid;place-items:center}
 .game-quick-tools>.iconbtn[hidden]{display:none}

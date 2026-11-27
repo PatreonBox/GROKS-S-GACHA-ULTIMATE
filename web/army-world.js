@@ -1,4 +1,4 @@
-import {createGeometry,orientation,rendererFor,viewMatrix,rgba} from './scene-gl.js';
+import {createGeometry,rendererFor,viewMatrix,rgba} from './scene-gl.js';
 import {moveArts} from './combat-arts.js';
 import {paintArmyCast} from './combat-scene.js';
 
@@ -10,11 +10,32 @@ const limit=(n,a=0,b=1)=>Math.max(a,Math.min(n,b));
 const mix=(a,b,q)=>a+(b-a)*q;
 const bright={light:1};
 
-function arenaGeometry(g,key,map){
+const themes={
+ 'ultraviolet-shoals':['#101d46','#263657','#465d9e','#226e97','#59d7ed','#6f76f5','crystal'],
+ 'prism-harbor':['#121d38','#293850','#455e86','#256381','#79e8ee','#89a5ff','crystal'],
+ 'molten-circuit':['#291927','#3d2930','#8a4844','#9a452e','#ff9f61','#f36649','forge'],
+ 'ember-foundry':['#321518','#3f292e','#98514d','#9c492f','#ffc46d','#f86c43','forge'],
+ 'blue-grid':['#122743','#284769','#4377a5','#3284c2','#7df0ff','#579cff','circuit'],
+ 'amethyst-cave':['#241934','#3b294d','#6a4c89','#704f9b','#e9aaff','#aa7af4','crystal'],
+ stormfall:['#172439','#313c52','#4d5f7a','#35698a','#9dd9ff','#73abf5','circuit'],
+ 'sunlit-surf':['#153640','#2a4f54','#548987','#387c7c','#8df3e3','#fbc17d','coast'],
+ 'orbital-void':['#171a32','#272c48','#534a82','#4e4292','#b7b1ff','#7c8cf1','orbital'],
+ 'golden-temple':['#38291b','#574733','#82613a','#946734','#ffcf77','#f0a74b','coast'],
+ 'purple-factory':['#23182c','#3d294b','#684058','#8a407d','#f5aadc','#bd65e2','forge']
+};
+const paint=(a,b,amount)=>rgba(a).slice(0,3).map((value,i)=>mix(value,rgba(b)[i],amount));
+
+export function armyOrbit(pitch,yaw,zoom=1){
+ const c=Math.cos(yaw),s=Math.sin(yaw),p=Math.cos(pitch),q=Math.sin(pitch);
+ return {right:[c*zoom,-s*zoom,0],down:[s*p*zoom,c*p*zoom,-q*zoom],depth:[s*q*zoom,c*q*zoom,p*zoom]};
+}
+
+function arenaGeometry(g,map,backdrop){
  g.reset();
- const harbor=key==='harbor',d=map.depth+43;
- const hull=harbor?'#101d46':'#291927',floor=harbor?'#263657':'#3d2930';
- const edging=harbor?'#465d9e':'#8a4844',trace=harbor?'#226e97':'#9a452e',accent=harbor?'#59d7ed':'#ff9f61';
+ const d=map.depth+43;
+ const [hull,floor,edging,trace,accent,feature,type]=themes[backdrop]||themes[map.backdrop];
+ const tiles=[paint(floor,edging,.19),paint(floor,hull,.19)];
+ g.box(0,0,-75,1265,2*d+116,18,hull);
  g.box(0,0,-46,1152,2*d+22,44,hull);
  g.box(0,0,-22,1170,2*d+25,8,edging);
  g.box(0,0,-11,1176,2*d+28,13,hull);
@@ -24,7 +45,7 @@ function arenaGeometry(g,key,map){
   for(let row=-2;row<=2;row++){
    const y=row*d*.38;
    if(!col&&row===0)continue;
-   const tile=harbor?(row+col)%3?'#242f4e':'#2f4161':(row+col)%3?'#322832':'#48404c';
+   const tile=tiles[Number((row+col)%3!==0)];
    g.box(x,y,-.84,100,d*.38-2,1.1,tile);
   }
   for(const sign of [-1,1]){
@@ -48,23 +69,27 @@ function arenaGeometry(g,key,map){
  g.ring(0,0,.1,66,63,.6,edging,{segments:12,yaw:Math.PI/12});
  g.ring(0,0,.38,45,43,.6,accent,{segments:8,yaw:Math.PI/8,light:.9});
  g.box(0,0,1,21,21,1,accent,{yaw:Math.PI/4,light:.8});
- if(harbor){
-  for(const [x,y,h,angle] of [[-507,-d+11,83,.5],[-466,-d+9,48,.1],[505,-d+13,110,-.55],[465,-d+9,55,.6],[-557,d-5,42,.7],[553,d-7,38,-.5]]){
-   g.box(x,y,5,38,29,11,'#222a57',{yaw:angle});
-   g.pyramid(x,y,h/2+8,35,31,h,'#687cf5',{yaw:angle,pitch:.12});
-   g.pyramid(x-3,y-3,h*.56+8,17,24,h*.91,'#58e7f2',{yaw:angle+.13,light:.81});
-  }
- }else{
-  for(const x of [-538,-386,370,528]){
-   const y=-d+2,h=66+(x>-500&&x<500?26:0);
-   g.box(x,y,13,49,44,24,'#3d2e36');
-   g.box(x,y,h/2,27,26,h,'#403145');
-   g.box(x,y+14,h/2,3.6,2,h*.69,'#fb7044',bright);
-   g.pyramid(x,y,h+10,37,35,20,'#9c4745',{yaw:.4});
-  }
-  for(const y of [-d-12,d+12]){
-   g.beam([-565,y,-30],[565,y,-30],8,'#d05a39',{light:.87});
-   g.beam([-565,y+1,-32],[565,y+1,-32],2.3,'#ffba67',bright);
+ for(const sign of [-1,1]){
+  const y=sign*(d+22);
+  g.beam([-589,y,-17],[589,y,-17],6,trace,{light:.87});
+  g.beam([-591,y+sign*3,-14],[591,y+sign*3,-14],1.8,accent,bright);
+  for(const [index,x] of [-550,-385,402,557].entries()){
+   const h=41+(index*17+sign*9+28)%51,rotation=(index-2)*.4;
+   g.box(x,y,-10,39,30,15,edging,{yaw:rotation});
+   if(type==='crystal'){
+    g.pyramid(x,y,h*.41,34,27,h,feature,{yaw:rotation,pitch:.12});
+    g.pyramid(x+4,y-8,h*.27,16,24,h*.74,accent,{yaw:rotation-.15,light:.82});
+   }else if(type==='orbital'){
+    g.box(x,y,15,13,13,36,edging);
+    g.ring(x,y,h*.72,27,23,4,feature,{segments:10,yaw:rotation,pitch:.86,light:.9});
+    g.pyramid(x,y,h*.65,17,17,21,accent,{yaw:rotation});
+   }else{
+    const width=type==='coast'?23:29;
+    g.box(x,y,h*.32,width,26,h*.83,hull,{yaw:rotation});
+    g.box(x,y+sign*14,h*.32,3,3,h*.63,feature,bright);
+    g.box(x,y,h*.81,width+8,33,9,edging,{yaw:rotation});
+    g.pyramid(x,y,h*.92,width+8,30,14,accent,{yaw:rotation});
+   }
   }
  }
 }
@@ -123,12 +148,14 @@ function cardPose(u,time){
   pitch:down?-q*1.5:recoil*.18,charge,recoil,close};
 }
 
-function standingCard(g,u,time,texture,labelTexture,scale,selected){
- const {x,y,z,q,yaw,pitch,charge,recoil,close}=cardPose(u,time);
+function standingCard(g,u,time,texture,labelTexture,scale,selected,cameraYaw){
+ const {x,y,z,q,yaw:poseYaw,pitch,charge,recoil,close}=cardPose(u,time);
+ const yaw=poseYaw-cameraYaw;
  if(q>=1)return;
  const tint=team[u.side],frame=selected?'#f3fff8':u.captain?'#ffcc6d':levels[u.tier]||levels[10];
  const body=[...rgba(frame).slice(0,3),1-q],sideLight=[...rgba(tint).slice(0,3),1-q];
- const alpha=Math.min(1,1-q*.93),roll=-Math.sin(charge*Math.PI)*(u.side===0?1:-1)*(close?.24:.12)+u.lean*recoil*.22;
+ const fear=u.scaredUntil>time?Math.sin(time*29)*.17:0;
+ const alpha=Math.min(1,1-q*.93),roll=-Math.sin(charge*Math.PI)*(u.side===0?1:-1)*(close?.24:.12)+u.lean*recoil*.22+fear;
  const opts={yaw,pitch,roll,alpha};
  const w=68,h=100,c=Math.cos(yaw),s=Math.sin(yaw),p=Math.cos(pitch),t=Math.sin(pitch),r=Math.cos(roll),v=Math.sin(roll);
  const face=(a,b,d=6)=>{
@@ -258,24 +285,27 @@ export function createArmyWorld(container,coverSource){
   }
   return closest;
  }
- function render({key,map,teams,time,casts=[],bursts=[],angle=0,view,selected,reduced=false}){
-  if(mapKey!==key){arenaGeometry(floor,key,map);mapKey=key}
+ function render({key,map,backdrop,teams,time,casts=[],bursts=[],view,selected,reduced=false}){
+  const terrain=key+':'+backdrop;
+  if(mapKey!==terrain){arenaGeometry(floor,map,backdrop);mapKey=terrain}
   const width=container.clientWidth,height=container.clientHeight;
   if(!width||!height)return;
-  const stamp=[width,height,angle,view.zoom,view.x,view.y].join('|');
+  const {yaw,pitch,zoom}=view,stamp=[width,height,yaw,pitch,zoom,view.x,view.y].join('|');
   if(cameraStamp!==stamp){
    viewWidth=width;viewHeight=height;cameraStamp=stamp;
    const dpr=software?Math.min(.94,680/width):Math.min(1.75,window.devicePixelRatio||1);
    const w=width<525?1160:1240,h=w*height/width;
    const pixelsX=Math.round(width*dpr),pixelsY=Math.round(height*dpr);
    if(draw.canvas.width!==pixelsX||draw.canvas.height!==pixelsY){draw.canvas.width=pixelsX;draw.canvas.height=pixelsY}
-   rotation=orientation(.94,angle,view.zoom);
+   const widthAlongView=Math.abs(Math.sin(yaw))*1160+Math.abs(Math.cos(yaw))*(map.depth+68)*2;
+   const framing=Math.min(1,h*.81/(widthAlongView*Math.cos(pitch)+92));
+   rotation=armyOrbit(pitch,yaw,zoom*framing);
    projection=viewMatrix({width:w,height:h,origin:[view.x,view.y,18],center:[w*.5,h*.57],vanish:[w*.5,h*.42],lens:1760,rot:rotation});
   }
   cards.reset();effects.reset();targets.clear();
   const scale=width<525?1.25:1.08;
   for(const unit of teams.flat().sort((a,b)=>a.y-b.y)){
-   const quad=standingCard(cards,unit,reduced?Math.max(unit.downAt+.72,time):time,texture,labelTexture,scale,unit===selected);
+   const quad=standingCard(cards,unit,reduced?Math.max(unit.downAt+.72,time):time,texture,labelTexture,scale,unit===selected,yaw);
    if(!quad)continue;
    const projected=quad.map(project);
    if(projected.every(Boolean))targets.set(unit,{quad:projected,depth:projected[0].depth,

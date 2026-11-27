@@ -1,11 +1,12 @@
 import {gameCommand} from './game-client.js';
-import {armyFrame,armySpeed,draftRivals,makeArmyBattle,stepArmy} from './army-battle.js';
+import {armyFrame,armySpeed,armyTacticsVersion,draftRivals,makeArmyBattle,stepArmy} from './army-battle.js';
 import {seededRandom} from './game-replay.js';
 import {payout} from './battle-engine.js';
 import {difficulties} from './pack-engine.js';
 import {gemTenths} from './card-economy.js';
 import {seriesData} from './army-series-data.js';
 import {changeCoins} from './coin-economy.js';
+import {rewardDemonKeys} from './demon-keys.js';
 
 export const armySignatureVersion=2;
 export const armyChapters=[
@@ -21,6 +22,7 @@ export function chapterUnlocked(wallet,tier,chapter){
  return Boolean(armyChapters[chapter])&&(chapter===0||chapterCleared(wallet,tier,chapter-1));
 }
 export const chapterGems=(tier,chapter)=>armyChapters[chapter].gems*(1+Math.floor((tier-1)/2));
+export const trilogyStageKeys=(tier,chapter)=>1+Math.floor(tier/3)+chapter;
 
 const tactics={
  rush:{name:'Rush line',description:'Rivals close the gap faster.',apply:u=>{u.speed*=1.24}},
@@ -48,9 +50,10 @@ export const findArmySeries=key=>seriesByKey.get(key);
 export const seriesCleared=(wallet,key,chapter)=>Boolean((wallet?.armySeries?.[key]||0)&(1<<chapter));
 export const seriesUnlocked=(wallet,key,chapter)=>Boolean(findArmySeries(key)?.stages[chapter])&&
  (chapter===0||seriesCleared(wallet,key,chapter-1));
-export function seriesFinaleReward(series){
+export function seriesFinaleReward(series,tacticsVersion=armyTacticsVersion){
  const tier=series.tier,foe=series.stages[2].row;
- return {coins:Math.round(payout(tier,{rank:foe[10],rewardGrade:.70},()=>.5)*3),gems:2+Math.floor(tier*1.4)};
+ const factor=tacticsVersion>=armyTacticsVersion?2.1:3;
+ return {coins:Math.round(payout(tier,{rank:foe[10],rewardGrade:.70},()=>.5)*factor),gems:2+Math.floor(tier*1.4),demonKeys:2+Math.floor(tier/3)};
 }
 
 export function configureTrilogy(battle,chapter,seriesKey){
@@ -66,7 +69,8 @@ export function configureTrilogy(battle,chapter,seriesKey){
   unit.attack=Math.round(unit.attack*stage.power*(captain?1.10:1));
   feature?.tactic.apply(unit);
   unit.hp=unit.maxHp;
-  unit.bounty=Math.max(1,Math.round(payout(battle.tier,unit,()=>.5)*stage.coins));
+  const factor=feature&&battle.tacticsVersion>=armyTacticsVersion?.64+chapter*.04:1;
+  unit.bounty=Math.max(1,Math.round(payout(battle.tier,unit,()=>.5)*stage.coins*factor));
  }
  return battle;
 }
@@ -90,8 +94,9 @@ export function grantArmyLoot(wallet,battle){
  const {earned,defeated}=armyLoot(battle);
  const first=status==='won'&&!(seriesKey?seriesCleared(wallet,seriesKey,chapter):chapterCleared(wallet,tier,chapter));
  const seriesComplete=Boolean(first&&series&&chapter===2);
- const prize=seriesComplete?seriesFinaleReward(series):{coins:0,gems:0};
+ const prize=seriesComplete?seriesFinaleReward(series,battle.tacticsVersion):{coins:0,gems:0,demonKeys:0};
  const coins=changeCoins(wallet,earned+prize.coins),gems=first?chapterGems(tier,chapter)+prize.gems:0;
+ const demonKeys=first&&series?rewardDemonKeys(wallet,trilogyStageKeys(tier,chapter)+prize.demonKeys):0;
  wallet.gems=(gemTenths(wallet.gems)+gemTenths(gems))/10;
  if(first&&series){
   wallet.armySeries??={};
@@ -100,7 +105,7 @@ export function grantArmyLoot(wallet,battle){
   wallet.armyTrilogy??={};
   wallet.armyTrilogy[tier]=(wallet.armyTrilogy[tier]||0)|(1<<chapter);
  }
- return {coins,gems,defeated,first,seriesComplete};
+ return {coins,gems,demonKeys,defeated,first,seriesComplete};
 }
 
 
@@ -129,7 +134,8 @@ export function armyRivals(rows,tier,chapter,series,illustrated) {
 export function beginArmyRun(run) {
  const previousMoves=(run.signatureVersion??1)<armySignatureVersion;
  const statsVersion=run.statsVersion??1;
- const battle=configureTrilogy(makeArmyBattle(run.players,run.rivals,run.map,run.tier,seededRandom(run.seed),{previousMoves,statsVersion}),run.chapter,run.seriesKey);
+ const tacticsVersion=run.tacticsVersion??1;
+ const battle=configureTrilogy(makeArmyBattle(run.players,run.rivals,run.map,run.tier,seededRandom(run.seed),{previousMoves,statsVersion,tacticsVersion}),run.chapter,run.seriesKey);
  battle.id=run.id;
  battle.frames=0;
  return battle;

@@ -3,7 +3,7 @@ import {normalizeWallet} from '../web/pack-engine.js';
 import {needsCoinNormalization} from '../web/coin-economy.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {one,reject} from './game-http.mjs';
-import {initDemonKeys} from '../web/demon-keys.js';
+import {initDemonKeys,releaseAchievementKeys} from '../web/demon-keys.js';
 
 export const needsAchievementSeed=wallet=>wallet.achievementProgress?.version!==achievementVersion;
 const olderBattleWins=wallet=>Object.keys(wallet.campaign||{}).length+Object.values(wallet.remixWins||{}).reduce((sum,wins)=>sum+wins,0);
@@ -53,19 +53,22 @@ export async function refreshAchievementWallet(db,record,now=Date.now()){
   const wallet=normalizeWallet(prior),seed=needsAchievementSeed(wallet);
   const keyMigration=initDemonKeys(wallet,now);
   const originalXp=wallet.achievementRewardXp||0;
+  const priorKeys=wallet.achievementKeysPaid||0;
   let visitors=0;
   if(seed)await seedAchievements(db,record.player_id,wallet,now);
   else if(wallet.kingdom){
    visitors=discoveredVisitors(wallet,now).length;
    updateAchievements(wallet,{visitors},now);
   }
-  const changed=(wallet.achievementRewardXp||0)!==originalXp;
+  releaseAchievementKeys(wallet,now);
+  const achievementKeysReleased=(wallet.achievementKeysPaid||0)-priorKeys;
+  const changed=(wallet.achievementRewardXp||0)!==originalXp||achievementKeysReleased>0;
   // Untouched brand-new profiles only need the migration the first time they play.
   if(!coinMigration&&!keyMigration&&!changed&&(!seed||record.revision===0))return {wallet,saveRevision:record.revision};
   const {meta}=await db.prepare(`UPDATE game_profiles SET wallet=?,revision=revision+1,updated_at=?,ranking_xp=?
    WHERE player_id=? AND owner=? AND revision=? AND banned_at IS NULL`)
    .bind(JSON.stringify(wallet),now,wallet.playerXp||0,record.player_id,record.owner,record.revision).run();
-  if(meta.changes)return {wallet,saveRevision:record.revision+1};
+  if(meta.changes)return {wallet,saveRevision:record.revision+1,achievementKeysReleased};
   record=await one(db,'SELECT player_id,owner,revision,wallet,banned_at FROM game_profiles WHERE player_id=? AND owner=?',record.player_id,record.owner);
  }
  reject('Your save changed in another tab. Please try again.',409);

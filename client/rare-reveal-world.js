@@ -147,7 +147,10 @@ function firstLight({world,geometry,ink,accent,metal,glow}){
  return ({time,charge,pulse,impact})=>{
   corridor.position.z=-9+charge*4.3;
   corridor.rotation.z=(1-charge)*-.17+Math.sin(time*.42)*.038;
-  gates.forEach((gate,i)=>{gate.rotation.y=(1-charge)*(.26-i*.06);gate.position.z=-i*3.3+Math.max(0,impact)*.35});
+  gates.forEach((gate,i)=>{
+   gate.rotation.y=(1-charge)*(.26-i*.06)+Math.sin(time*.68+i*.38)*.025*charge;
+   gate.position.z=-i*3.3+charge*.54*Math.sin(time*.58+i*.22);
+  });
   beam.scale.set(1.5+charge*15+pulse*3,.026+pulse*.055,1);lens.material.opacity=.21+.41*charge+.24*pulse;
  };
 }
@@ -170,7 +173,7 @@ function prismBreak({world,geometry,ink,accent,metal,glow,rng}){
    frame.scale.setScalar(.74+charge*.29+pulse*.075);
   });
   for(const {object,angle,radius,depth,size,slope} of crystals){
-   const arc=angle+time*(.12+slope*.17),r=radius*(1.24-.32*charge)+Math.max(0,impact)*.83;
+   const arc=angle+time*(.12+slope*.17),r=radius*(1.24-.32*charge)+pulse*1.16+.21*Math.sin(time*.88+slope);
    object.position.set(Math.cos(arc)*r,Math.sin(arc)*r*.77,depth);
    object.rotation.set(angle+time,.64*time+slope,arc-.75);
    object.scale.set(size*.76,size*(1.9+slope*.42),size);
@@ -201,10 +204,11 @@ function starfall({world,geometry,ink,accent,metal,glow,rng}){
    meteor.position.set(x-8.1*fall,8.1-16*fall,depth);
    meteor.rotation.z=-.48;
    stone.rotation.set(.55+time*1.25,phase*7,time*.83);
-   stone.scale.setScalar(size*(.56+charge*.28));
+   const envelope=Math.sin(Math.PI*fall);
+   stone.scale.setScalar(size*(.56+charge*.28)*Math.min(1,envelope*4));
    trail.material.rotation=-.48;
    trail.scale.set(.37+size,1.8+size*2.6+charge*.65,1);
-   trail.material.opacity=(.38+.42*charge+.35*pulse)*Math.sin(Math.PI*fall);
+   trail.material.opacity=(.38+.42*charge+.35*pulse)*envelope;
   }
  };
 }
@@ -336,7 +340,8 @@ export function createRareRevealWorld(canvas,tier){
   const span=clamp(camera.aspect,.40,1);
   nebula.time.value=time;nebula.light.value=charge*.61+pulse*.39;
   dust.rotation.z=.08*(1-charge)+time*.014;dust.position.z=charge*2.4;
-  camera.position.set((1-charge)*-.92,.34+(1-charge)*.48,19.4+(1-charge)*2.3+pulse*.24);
+  camera.position.set((1-charge)*-.92+charge*Math.sin(time*.35)*.25,
+   .34+(1-charge)*.48+charge*Math.sin(time*.48)*.12,19.4+(1-charge)*2.3+pulse*.24);
   camera.lookAt(0,0,0);
   const frame={time,charge,impact,pulse,span};
   animate(frame);burst(frame);

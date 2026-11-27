@@ -24,13 +24,19 @@ export function rewardDemonKeys(wallet,count,now=Date.now()){
  return wallet.demonKeys-prior;
 }
 
-export function claimDemonKeys(wallet,now=Date.now()){
- if(wallet.pending)throw Error('Finish your current opening before claiming keys.');
- if(!wallet.demonKeysToClaim)throw Error('You have no Demon Keys to claim.');
+export function releaseAchievementKeys(wallet,now=Date.now()){
+ if(wallet.pending||!wallet.demonKeysToClaim)return 0;
  const keys=rewardDemonKeys(wallet,wallet.demonKeysToClaim,now);
- if(!keys)throw Error('Your Demon Key balance is full.');
  wallet.demonKeysToClaim-=keys;
  if(!wallet.demonKeysToClaim)delete wallet.demonKeysToClaim;
+ wallet.achievementKeysPaid=(wallet.achievementKeysPaid||0)+keys;
+ return keys;
+}
+
+export function claimDemonKeys(wallet,now=Date.now()){
+ if(wallet.pending)throw Error('Finish your current opening to receive your achievement keys.');
+ const keys=releaseAchievementKeys(wallet,now);
+ if(!keys)throw Error('There are no achievement keys ready to add.');
  return {keys};
 }
 

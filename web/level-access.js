@@ -1,8 +1,10 @@
+import {dropAccessName,dropUnlocks} from './drop-access.js';
+
 export const features={
  progression:{level:1,name:'Progression',href:'#progression',icon:'crown',detail:'Track your player milestones and badges.'},
  mine:{level:3,name:'Coin mine',href:'#gacha/mine',icon:'mine',detail:'Tap for coins and build machines for steady income.'},
  training:{level:3,name:'Training zone',href:'#battle/training',icon:'spark',detail:'Run drills and strengthen your cards.'},
- arcade:{level:4,name:'Meme levels',href:'#battle/arcade',icon:'flame',detail:'Play short Geometry Dash challenges.'},
+ arcade:{level:4,name:'Mini Games',href:'#battle/arcade',icon:'flame',detail:'Play Normal challenges and earn keys by surviving Endless runs.'},
  merge:{level:5,name:'Merge station',href:'#gacha/merge',icon:'grid',detail:'Fuse duplicate cards and claim gems.'},
  demonSpecial:{level:5,name:'Special Demon banner',href:'#gacha/demon',icon:'spark',detail:'Choose a level to focus with Demon Keys.'},
  bulk:{level:7,name:'50-draw pulls',href:'#gacha/demon',icon:'pack',detail:'Open 50 Demon Key draws in one purchase.'},
@@ -17,6 +19,9 @@ export const features={
 export const packLevels={common:0,uncommon:0,rare:2,'super-rare':5,epic:8,legendary:14,mythic:20,godly:30};
 const packTitles={rare:'Rare','super-rare':'Super Rare',epic:'Epic',legendary:'Legendary',mythic:'Mythic',godly:'Godly'};
 const milestones=[
+ ...dropUnlocks.map(access=>({
+  level:access.level,name:dropAccessName(access),href:'#gacha',icon:'spark',detail:'Available in pack and banner draws.'
+ })),
  ...Object.values(features),
  ...Object.entries(packTitles).map(([id,name])=>({
   level:packLevels[id],name:name+' pack',href:'#gacha/'+id,art:'/assets/packs/'+id+'.png',detail:'Available in the Pack shop.'

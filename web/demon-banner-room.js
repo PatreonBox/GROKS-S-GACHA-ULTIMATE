@@ -1,4 +1,4 @@
-import {demonBanners,bannerOdds,bannerPity,demonPity,demonKeyPrice,demonKeyOffer} from './demon-banner.js';
+import {demonBanners,bannerOdds,bannerPity,demonPity,demonPityUnlock,demonKeyPrice,demonKeyOffer} from './demon-banner.js';
 import {gameCommand} from './game-client.js';
 import {cardCategories,difficulties} from './pack-engine.js';
 import {cardFace} from './pack-model.js';
@@ -7,6 +7,7 @@ import {featureLevel} from './level-access.js';
 import {lockBadge} from './level-lock.js';
 import {playerProgress} from './player-progression.js';
 import {cardRarity,rarityBadge} from './card-rarity.js';
+import {dropAccess,dropAccessSummary,dropEligible} from './drop-access.js';
 
 export const demonKeyIcon=ico('demonKey');
 const gem='<img class="gd-gem" src="/assets/packs/gem.png" alt="">';
@@ -59,7 +60,8 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   const pending=Boolean(wallet?.pending);
   controls.querySelector('.banner-pity').innerHTML=[['legendary','Legendary+'],['mythic','Mythic+']].map(([key,label])=>{
    const used=Math.max(0,Number(pity[key])||0),limit=demonPity[key],next=Math.min(used,limit);
-   return '<div><b>'+label+'</b><span>'+format(next)+' / '+format(limit)+' draws</span><progress max="'+limit+'" value="'+next+'" aria-label="'+label+' guarantee"></progress></div>';
+   const unlock=demonPityUnlock[key],available=level>=unlock;
+   return '<div><b>'+label+'</b><span>'+(available?format(next)+' / '+format(limit)+' draws':'Starts at Level '+unlock)+'</span><progress max="'+limit+'" value="'+next+'" aria-label="'+label+' guarantee"></progress></div>';
   }).join('');
   const purchases=controls.querySelector('.banner-draw-actions'),buttons=pending?
    '<button type="button" class="primary banner-draw" data-banner-action="resume">Resume opening</button>':
@@ -97,14 +99,12 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
    '<section class="banner-pull-controls" aria-label="Opening controls"><div class="banner-pull-heading"><h3>Guaranteed pulls</h3>'+
    '<button type="button" class="outline" data-banner-action="odds">'+ico('info')+' Odds &amp; pity</button>'+
     (admin?'<button type="button" class="outline" data-banner-action="admin">'+ico('spark')+' Test opening</button>':'')+'</div>'+
-   '<div class="banner-pity"></div><div class="banner-draw-actions"></div><p class="banner-note" role="status"></p></section></div>';
+   '<p class="drop-access-note">'+dropAccessSummary(playerLevel())+'</p><div class="banner-pity"></div><div class="banner-draw-actions"></div><p class="banner-note" role="status"></p></section></div>';
  }
  function shopMarkup(){
   return '<section class="demon-key-shop"><div class="demon-key-header"><div><h2>Key Shop</h2><p>Demon Keys open all three banners.</p></div>'+
    '<a class="outline" href="#gacha/banners">'+ico('left')+' Demon Banners</a></div>'+
-   '<div data-key-shop-claim hidden><article class="key-shop-offer"><div class="big-key">'+demonKeyIcon+'</div>'+
-   '<div><h3>Achievement Keys</h3><p>Keys earned while opening packs and banners.</p></div>'+
-   '<button type="button" class="primary" data-banner-action="claim"></button></article></div>'+
+   '<p class="banner-note" data-key-shop-achievements hidden></p>'+
    '<div data-key-shop-offer></div><article class="key-shop-regular"><div class="big-key">'+demonKeyIcon+'</div>'+
    '<div><h3>Demon Keys</h3><p>'+format(demonKeyPrice)+' gems per key</p></div>'+
    '<form data-key-purchase><label>Quantity<input name="quantity" type="number" min="1" step="1" inputmode="numeric" value="1" required></label>'+
@@ -113,12 +113,10 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
  }
  function renderShop(){
   const slot=body?.querySelector('[data-key-shop-offer]');if(!slot)return;
-  const claim=body.querySelector('[data-key-shop-claim]'),claimable=wallet?.demonKeysToClaim||0;
-  const claimButton=claim.querySelector('button');
-  claim.hidden=!claimable;
-  claimButton.textContent='Claim '+format(claimable)+(claimable===1?' key':' keys');
-  claimButton.disabled=operation||Boolean(wallet?.pending);
-  claim.querySelector('p').textContent=wallet?.pending?'Finish your current opening to claim these keys.':'Keys earned while opening packs and banners.';
+  const achievementNote=body.querySelector('[data-key-shop-achievements]'),queued=wallet?.demonKeysToClaim||0;
+  achievementNote.hidden=!queued;
+  if(queued)achievementNote.textContent=format(queued)+(queued===1?' achievement key':' achievement keys')+
+   (wallet?.pending?' will be added automatically after this opening.':' will be added when there is room in your wallet.');
   const offer=wallet?.demonBanner||{},left=Number(offer.offerEndsAt)-now();
   const ends=slot.querySelector('[data-key-offer-countdown]');
   const active=Number.isFinite(left)&&left>0&&!offer.starterOfferBought;
@@ -159,11 +157,11 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   return el;
  }
  function showOdds(){
-  const rows=bannerOdds(banner,playerLevel(),{target:banner==='special'&&Boolean(target),luck:wallet?.luck||0}).filter(row=>row.id!=='impossible');
+  const rows=bannerOdds(banner,playerLevel(),{target:banner==='special'&&Boolean(target),luck:wallet?.luck||0}).filter(row=>row.id!=='impossible'&&row.weight);
   const html=rows.map(({id,label,color,percent})=>'<tr><th scope="row"><span style="--odds-color:'+color+'">'+esc(label)+'</span></th><td>'+percentage(percent)+(percent>0&&percent<.001?' · 1 in '+format(Math.round(100/percent)):'')+'</td></tr>').join('');
-  modal(displayName(banner)+' banner odds','<p>Each draw starts with five cards. Listed odds are per card before guarantees.'+(banner==='special'&&target?' Your chosen card gets a 6% chance within its rarity group, plus its usual chance.':'')+'</p>'+
+  modal(displayName(banner)+' banner odds','<p>'+dropAccessSummary(playerLevel())+' Listed odds are per card before guarantees.'+(banner==='special'&&target?' Your chosen card gets a 6% chance within its rarity group, plus its usual chance.':'')+'</p>'+
    '<table class="banner-odds"><thead><tr><th>Rarity</th><th>Per card</th></tr></thead><tbody>'+html+'</tbody></table>'+
-   '<p>Each banner tracks its own guarantees. Legendary or better comes within '+format(demonPity.legendary)+' draws and Mythic or better within '+format(demonPity.mythic)+' draws.</p>');
+   '<p>Legendary or better comes within '+format(demonPity.legendary)+' eligible draws from Level '+demonPityUnlock.legendary+'. Mythic or better comes within '+format(demonPity.mythic)+' eligible draws from Level '+demonPityUnlock.mythic+'.</p>');
  }
  function bindSearch({el,input,category,render}){
   let timer,request=0,controller;
@@ -195,8 +193,9 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   lookup();
  }
  function chooseFeatured(){
+  const access=dropAccess(playerLevel());
   const el=modal('Choose a featured level','<div class="featured-filters"><label>Level name<input type="search" maxlength="80" placeholder="Search levels" data-featured-search autofocus></label>'+
-   '<label>Difficulty<select data-featured-difficulty><option value="">All difficulties</option>'+difficulties.map(d=>'<option>'+esc(d)+'</option>').join('')+
+   '<label>Difficulty<select data-featured-difficulty><option value="">All unlocked difficulties</option>'+difficulties.slice(0,access.tier+1).map(d=>'<option>'+esc(d)+'</option>').join('')+
    '</select></label></div><p class="featured-status" role="status"></p><div class="featured-results"></div>'+
    '<div class="featured-pagination" hidden><button class="outline" type="button" data-featured-previous>Previous</button>'+
    '<span data-featured-page></span><button class="outline" type="button" data-featured-next>Next</button></div>'+
@@ -288,12 +287,11 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   const requestHost=body;
   operation=true;status='';if(page==='keys')renderShop();else renderControls();
   try{
-   const {wallet:next,result}=await gameCommand(action,args,action);
+   const {wallet:next}=await gameCommand(action,args,action);
    applyWallet(next);
    if(action==='demon.keys.buy'||action==='demon.pull')sound.play('buy',{level:.70});
    if(requestHost===body){
     if(action==='demon.pull')begin(next.pending);
-    else if(action==='demon.keys.claim')status=format(result.keys)+(result.keys===1?' key claimed.':' keys claimed.');
     else status='Keys added to your wallet.';
    }
   }catch(error){status=error.message;onError(error)}
@@ -315,7 +313,6 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   else if(action==='featured')chooseFeatured();
   else if(action==='admin'&&admin)testDialog();
   else if(action==='offer')transact('demon.keys.buy',{offer:true});
-  else if(action==='claim')transact('demon.keys.claim');
   else if(action==='resume')begin(wallet.pending);
  }
  function submit(e){
@@ -334,6 +331,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   setWallet(next){
    if(!next)return;
    const before=playerLevel();wallet=next;
+   if(target&&!dropEligible(target,dropAccess(playerLevel())))target=null;
    if(Number.isFinite(next.kingdomClock))clockOffset=next.kingdomClock-Date.now();
    if(!body)return;
    if(page==='keys')renderShop();

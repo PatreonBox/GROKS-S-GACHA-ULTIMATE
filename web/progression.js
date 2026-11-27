@@ -3,6 +3,7 @@ import {
 } from './progression-rules.js';
 import {playerProgress} from './player-progression.js';
 import {nextUnlocks} from './level-access.js';
+import {dropAccessSummary} from './drop-access.js';
 import {ico} from './icons.js';
 
 const number=new Intl.NumberFormat('en-US');
@@ -153,6 +154,7 @@ export function createProgression(root){
   const boosts=achievementBoosts(wallet),boostIcons={mine:'mine',battle:'battle',mana:'spark'};
   fill(rootPanel,'<div class="progression-overview"><section class="progression-player"><h2>Level '+number.format(xp.level)+'</h2>'+
    '<progress max="'+xp.goal+'" value="'+xp.xp+'" aria-label="Experience toward next level"></progress><p>'+number.format(xp.xp)+' / '+number.format(xp.goal)+' XP to Level '+number.format(xp.level+1)+'</p>'+
+   '<p class="drop-access-note">'+dropAccessSummary(xp.level)+'</p>'+
    '<dl><div><dt>Arena wins</dt><dd>'+number.format(progress.battle)+'</dd></div><div><dt>Army trilogies</dt><dd>'+number.format(progress.army)+'</dd></div>'+
    '<div><dt>Training levels</dt><dd>'+number.format(progress.training)+'</dd></div></dl></section>'+
    '<section class="progression-boosts"><h2>Achievement boosts</h2><ul>'+Object.entries(achievementBoostLabels).map(([key,label])=>
@@ -168,7 +170,7 @@ export function createProgression(root){
  return {show,leave(){active=null;},setWallet(next){wallet=next;if(active)render();}};
 }
 
-export function setupAchievementBanners(sound){
+export function setupAchievementBanners(sound,flights){
  const banner=document.createElement('a'),announcement=document.createElement('div');
  banner.className='achievement-toast';banner.href='#progression/achievements';banner.hidden=true;
  announcement.className='achievement-announcement';
@@ -177,7 +179,8 @@ export function setupAchievementBanners(sound){
  if(typeof banner.showPopover==='function')banner.setAttribute('popover','manual');
  document.body.append(banner,announcement);
  const queue=[],reduced=matchMedia('(prefers-reduced-motion: reduce)');
- let seen=null,revision=-1,timer=0,opening=false,current=null,keysToClaim=0;
+ let seen=null,revision=-1,timer=0,opening=false,current=null,paid=0;
+ const keyTickets=[];
  function hide(){
   clearTimeout(timer);timer=0;
   if(banner.hidePopover&&banner.matches(':popover-open'))banner.hidePopover();
@@ -191,47 +194,63 @@ export function setupAchievementBanners(sound){
   if(!current||banner.dataset.phase==='exit')return;
   clearTimeout(timer);
   if(banner.matches(':hover, :focus-within'))return;
-  const end=current.since+(queue.length?2300:3700);
+  const end=current.since+(queue.length||keyTickets.length?1900:3700);
   timer=setTimeout(exit,Math.max(160,end-performance.now()));
  }
  function show(){
-  if(current||opening||document.documentElement.dataset.levelUpPending||
-   document.querySelector('dialog[open]')||!queue.length||document.hidden)return;
-  const unlocked=queue.splice(0,queue.length>3?queue.length:1);
-  const item=unlocked.reduce((best,stage)=>stage.xp>best.xp?stage:best,unlocked[0]);
+  if(current||opening||(!queue.length&&!keyTickets.length)||document.hidden)return;
+  const unlocked=queue.splice(0,keyTickets.length||queue.length>3?queue.length:1);
+  const item=unlocked.reduce((best,stage)=>!best||stage.xp>best.xp?stage:best,null);
   const xp=unlocked.reduce((total,stage)=>total+stage.xp,0);
-  const keys=unlocked.reduce((total,stage)=>total+(stage.keys||0),0);
-  const many=unlocked.length>1,label=many?unlocked.length+' achievement stages earned':'Achievement stage earned';
+  const tickets=keyTickets.splice(0),keys=tickets.reduce((sum,ticket)=>sum+ticket.units/10,0);
+  const many=unlocked.length>1,label=many?unlocked.length+' achievement stages earned':item?'Achievement stage earned':'Achievement rewards';
   const showing=current={since:performance.now()};
-  const payout=many?'<span class="achievement-rewards"><b>+'+number.format(xp)+' XP</b><span>Permanent boosts earned</span>'+keyReward(keys)+'</span>':rewards(item);
-  const claim=keys&&keysToClaim?number.format(keysToClaim)+(keysToClaim===1?' key':' keys')+' ready to claim in the Key Shop':'';
-  banner.innerHTML=badge(item,true)+'<div><small>'+label+'</small><strong>'+item.name+'</strong>'+
-   '<span class="achievement-stage-meta">'+difficulty(item)+'<span class="achievement-stage-number">Stage '+item.stage+' of '+item.stageCount+'</span></span>'+
-   payout+(claim?'<small>'+claim+'</small>':'')+'</div>'+ico('right');
-  announcement.textContent=label+'. '+item.name+', stage '+item.stage+'. '+xp+' XP'+(keys?' and '+keys+' Demon '+(keys===1?'Key':'Keys'):'')+' earned.'+
-   (claim?' '+claim+'.':'');
+  const boost=item?(many?'Permanent boosts earned':boostLabel(item.boost)):'';
+  const payout='<span class="achievement-rewards">'+(xp?'<b>+'+number.format(xp)+' XP</b>':'')+
+   (boost?'<span>'+boost+'</span>':'')+keyReward(keys)+'</span>';
+  const medal=item?badge(item,true):'<span class="achievement-badge" data-badge-earned="true" style="--medal:#a9dafa">'+ico('demonKey')+'</span>';
+  banner.innerHTML=medal+'<div><small>'+label+'</small><strong>'+(item?item.name:'Keys received')+'</strong>'+
+   (item?'<span class="achievement-stage-meta">'+difficulty(item)+'<span class="achievement-stage-number">Stage '+item.stage+' of '+item.stageCount+'</span></span>':'')+
+   payout+'</div>'+ico('right');
+  announcement.textContent=label+'. '+(item?item.name+', stage '+item.stage+'. ':'')+
+   [xp?xp+' XP':'',keys?keys+' Demon '+(keys===1?'Key':'Keys'):''].filter(Boolean).join(' and ')+' earned.';
+  banner.toggleAttribute('data-key-payout',keys>0);
   banner.dataset.phase='enter';banner.hidden=false;
   if(banner.hasAttribute('popover'))banner.showPopover();
+  if(tickets.length){
+   const origin=banner.querySelector('.achievement-keys')||banner;
+   if(tickets.length===1)flights.launch(tickets[0],origin);
+   else{
+    for(const ticket of tickets)flights.settle(ticket);
+    flights.launch(flights.reserve('demonKeys',keys),origin);
+   }
+  }
   sound.playGameReady('gdAchievement',{level:.88},()=>current===showing&&banner.dataset.phase==='enter');
   scheduleExit();
  }
  document.addEventListener('gdlb-achievements',event=>{
-  const {earned,saveRevision,pending}=event.detail;
+  const {earned,saveRevision,pending,keys,paid:totalPaid,initialKeys}=event.detail;
   if(!earned){
-   seen=null;revision=-1;queue.length=0;announcement.textContent='';hide();return;
+   seen=null;paid=0;revision=-1;queue.length=0;
+   for(const ticket of keyTickets.splice(0))flights.settle(ticket);
+   announcement.textContent='';hide();return;
   }
   if(saveRevision<revision)return;
-  revision=saveRevision;opening=Boolean(pending);keysToClaim=event.detail.keysToClaim||0;
+  revision=saveRevision;opening=Boolean(pending);
+  const credited=seen?Math.max(0,totalPaid-paid):initialKeys;
+  paid=totalPaid;
+  if(credited>0)keyTickets.push(flights.reserve('demonKeys',credited));
+  flights.balance({demonKeys:keys});
   const now=new Set(Object.keys(earned));
   if(seen)for(const id of now){
    const item=achievementById(id);
    if(item&&!seen.has(id))queue.push(item);
   }
   seen=now;
-  if(current&&queue.length)scheduleExit();else show();
+  if(current&&(queue.length||keyTickets.length))scheduleExit();else show();
  });
  document.addEventListener('visibilitychange',show);
  document.addEventListener('close',event=>{if(event.target instanceof HTMLDialogElement)requestAnimationFrame(show);},true);
  for(const event of ['pointerenter','pointerleave','focusin','focusout'])banner.addEventListener(event,()=>requestAnimationFrame(scheduleExit));
- banner.addEventListener('click',()=>{queue.length=0;hide();});
+ banner.addEventListener('click',()=>{hide();requestAnimationFrame(show);});
 }

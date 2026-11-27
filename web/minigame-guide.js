@@ -48,11 +48,13 @@ export function drillGuide(kind,drill){
  return {...drillGuides[kind],id:drillGuideId(kind),name:drill.name,icon:drill.icon,color:drill.color,
   outcome:'Each clear earns 6 XP. Every two clears earn an upgrade up to your card’s cap.'};
 }
-export function remixGuide(remix,cubeIcon){
+export function remixGuide(remix,cubeIcon,{endless=false}={}){
  const mode=modes[remix.mode];
+ const tip=endless?['Watch the next section','Endless keeps generating new obstacles. Pause if you need a break or choose Finish and save to bank your progress.']:remixTips[remix.mark];
  return {id:remixGuideId(remix),name:remix.name,color:remix.color,icon:arcadeSprites[remix.mode]||cubeIcon,
-  keys:['Space','↑','W'],touch:mode.touch,tips:[mode.basics,remixTips[remix.mark]],
-  outcome:'A full clear gives your squad one extra starting charge in this level’s arena.'};
+  keys:['Space','↑','W'],touch:mode.touch,tips:[mode.basics,tip],
+  outcome:endless?'Survive for XP and Demon Keys. All courses share a 10-key limit per six-hour window.':
+   'A full Normal clear gives your squad one extra starting charge in this level’s arena.'};
 }
 
 export function installMinigameGuide(owner,guide,pause){

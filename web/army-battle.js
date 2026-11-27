@@ -7,6 +7,7 @@ import {attackTiming} from './combat-scene.js';
 export const armyLimit=10;
 export const armySpeed=.8;
 export const armyFrame=1/60;
+export const armyTacticsVersion=2;
 export const armyMaps={
  harbor:{name:'Prism Harbor',backdrop:'ultraviolet-shoals',description:'Crystal causeway',depth:206},
  foundry:{name:'Ember Foundry',backdrop:'molten-circuit',description:'Obsidian forge',depth:168}
@@ -75,34 +76,58 @@ export function mixedSquad(cards,count){
  });
 }
 
-export function makeArmyBattle(players,rivals,key,tier,random=Math.random,{preview=false,previousMoves=false,statsVersion}={}){
+export function makeArmyBattle(players,rivals,key,tier,random=Math.random,{preview=false,previousMoves=false,statsVersion,tacticsVersion=armyTacticsVersion}={}){
  if((!players.length&&!preview)||!rivals.length||players.length>armyLimit||rivals.length>armyLimit)throw Error('Deploy between one and ten fighters per side.');
  const map=armyMaps[key]||armyMaps.harbor;
  const signatures=previousMoves?previousLevelSignatures:undefined;
- return {map,tier,time:0,status:'fighting',teams:[players,rivals].map((team,side)=>
+ return {map,tier,tacticsVersion,time:0,status:'fighting',teams:[players,rivals].map((team,side)=>
   team.map((card,index)=>fighter(card,side,index,map,team.length,random,signatures,statsVersion))),random};
 }
 
-function chooseTarget(unit,enemies,tier){
+function chooseTarget(unit,enemies,tier,recentTactics){
  let best=null,score=Infinity;
  for(const candidate of enemies){
   if(!candidate.hp)continue;
-  const priority=distance(unit,candidate)*(1+(unit.side===1&&tier>=5?.32*(candidate.hp/candidate.maxHp):0));
+  let priority=distance(unit,candidate)*(1+(unit.side===1&&tier>=5?.32*(candidate.hp/candidate.maxHp):0));
+  if(recentTactics){
+   if(unit.role==='Runner')priority*=.77+.34*(candidate.hp/candidate.maxHp)+(candidate.shield?.15:0);
+   if(unit.role==='Sentinel'&&candidate.style==='Melee')priority*=.89;
+   if(unit.style==='Ranged'&&candidate.marked)priority*=.72;
+  }
   if(priority<score){score=priority;best=candidate}
  }
  return best;
 }
 
-function steer(unit,target,battle,dt){
+function steer(unit,target,battle,dt,recentTactics){
  const gap=distance(unit,target);
  if(gap<1)return;
  const dx=(target.x-unit.x)/gap,dy=(target.y-unit.y)/gap,melee=unit.style==='Melee';
  const advance=gap>unit.reach;
- const retreat=!melee&&!advance&&gap<unit.reach*.56&&unit.next>battle.time+.12;
+ const retreat=!melee&&!advance&&gap<unit.reach*(recentTactics?.69:.56)&&unit.next>battle.time+.12;
  const speed=unit.speed*(battle.time>24?1.14:1);
  const forward=advance?Math.min(gap-unit.reach*.91,speed*dt):retreat?-speed*.40*dt:0;
- const flank=advance?forward*.24*Math.sin(battle.time*2.8+unit.index*2.4):retreat?speed*.24*dt*(unit.index%2?1:-1):0;
+ const flank=advance?forward*(recentTactics&&unit.role==='Runner'?.76:.24)*Math.sin(battle.time*2.8+unit.index*2.4):retreat?speed*.24*dt*(unit.index%2?1:-1):0;
  unit.x+=dx*forward-dy*flank;unit.y+=dy*forward+dx*flank;
+}
+
+const moraleLines=['Nope!','Tactical panic!','Checking the exits!'];
+function checkMorale(target,source,battle,events){
+ if(target.captain||target.moraleChecked||target.hp>target.maxHp*.24)return;
+ target.moraleChecked=true;
+ const allies=battle.teams[target.side],nearby=allies.some(ally=>ally!==target&&ally.hp&&distance(ally,target)<104);
+ const roll=battle.random();
+ if(roll>=(nearby?.045:.11))return;
+ target.pending=null;
+ target.scaredUntil=battle.time+.80+roll*2;
+ target.next=Math.max(target.next,target.scaredUntil);
+ target.retreatFrom=source;
+ events.push({kind:'tactic',unit:target,name:moraleLines[(target.id+target.index)%moraleLines.length],cue:'armyEvade'});
+}
+function scramble(unit,dt){
+ const source=unit.retreatFrom,dx=unit.x-source.x,dy=unit.y-source.y,gap=Math.hypot(dx,dy)||1;
+ const side=unit.index%2?1:-1,step=unit.speed*1.34*dt;
+ unit.x+=(dx-dy*side*.45)/gap*step;unit.y+=(dy+dx*side*.45)/gap*step;
 }
 
 function displace(unit,dt){
@@ -193,6 +218,7 @@ function hit(unit,target,raw,pierce,battle,events,art,{impact='splash',cue,force
    hit(thief,target,Math.ceil(target.hp),1,battle,events,'scythe',{impact:'execute',force:420});
   }
  }
+ if(target.hp&&amount>0&&battle.tacticsVersion>=armyTacticsVersion)checkMorale(target,unit,battle,events);
  return amount;
 }
 
@@ -313,11 +339,13 @@ export function stepArmy(battle,dt){
   events.push({kind:'result',status:battle.status});return events;
  }
  if(battle.time>=180){battle.status='draw';events.push({kind:'result',status:'draw'});return events}
+ const recentTactics=battle.tacticsVersion>=armyTacticsVersion;
  for(const unit of standing){
   if(unit.pending)continue;
-  const target=chooseTarget(unit,battle.teams[1-unit.side],battle.tier);
+  if(recentTactics&&unit.scaredUntil>battle.time){scramble(unit,dt);continue}
+  const target=chooseTarget(unit,battle.teams[1-unit.side],battle.tier,recentTactics);
   if(distance(unit,target)<=unit.reach&&battle.time>=unit.next)plan(unit,target,battle,events);
-  else steer(unit,target,battle,dt);
+  else steer(unit,target,battle,dt,recentTactics);
  }
  separate(standing,battle.map);
  return events;

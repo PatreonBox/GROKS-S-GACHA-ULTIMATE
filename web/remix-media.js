@@ -4,17 +4,41 @@ export const remixTracks={
  tidal:'Tidal Wave soundtrack excerpt',
  'speed-of-light':'At the Speed of Light · Dimrain47',
  'ricochet-love':'Ricochet Love · Waterflame',
+ 'golden-haze':'Golden Haze (Prev) · Detious',
  carnivores:'Carnivores · Creo',
  epilogue:'Epilogue · Creo',
  reverie:'Reverie · EspiDev'
 };
+const newgrounds=id=>'https://www.newgrounds.com/audio/listen/'+id;
+const sourceIds={'speed-of-light':467339,'ricochet-love':233860,'golden-haze':557117,carnivores:690265,epilogue:723714,reverie:787986};
+const originalSoundtracks={
+ 86084399:['Isolation · NightHawk22',newgrounds(76743)],
+ 4284013:['Nine Circles · Rukkus',newgrounds(533927)],
+ 44062068:['What’s a Future Funk? · LemKuuja','https://soundcloud.com/lemkuuja/whats-a-future-funk'],
+ 34085027:['Beep Beep · Schtiffles',newgrounds(715825)],
+ 89886591:['BIKE · Tanger',newgrounds(1191782)],
+ 13519:['Polargeist · Step',newgrounds(523561)]
+};
 export const griefPoster='/assets/arcade/grief-finish.webp';
-export const remixTrackSource=track=>'/assets/audio/remix/'+track+'.mp3';
+export const remixTrackSource=track=>track==='golden-haze'?'/arcade-audio/golden-haze.mp3':'/assets/audio/remix/'+track+'.mp3';
 
-export function remixMusic(track,sound,button,isRunning){
- if(!track)return null;
+export function remixMusicCredit(track,levelId){
+ const original=originalSoundtracks[levelId];
+ const title=remixTracks[track];
+ const id=sourceIds[track];
+ const link=(href,label)=>'<a href="'+href+'" target="_blank" rel="noopener noreferrer">'+label+'</a>';
+ if(!title)return original?'<p class="runner-track">Original soundtrack · '+link(original[1],original[0])+'</p>':'';
+ const license=track==='golden-haze'||track==='ricochet-love'
+  ?' · '+link('https://creativecommons.org/licenses/by-nc-sa/3.0/','CC BY-NC-SA 3.0'):
+  ['speed-of-light','epilogue','carnivores'].includes(track)?' · '+link('https://creativecommons.org/licenses/by-nc/3.0/','CC BY-NC 3.0'):
+   track==='reverie'?' · '+link('https://creativecommons.org/licenses/by/3.0/','CC BY 3.0'):'';
+ return '<p class="runner-track">♫ '+(id?link(newgrounds(id),title)+' · Excerpt':title)+license+'</p>';
+}
+
+export function remixMusic(track,sound,button,isRunning,{loop=true}={}){
+ if(!Object.hasOwn(remixTracks,track))return null;
  const player=new Audio(remixTrackSource(track));
- player.preload='auto';player.volume=.48;
+ player.preload='auto';player.volume=.48;player.loop=loop;
  let enabled=true;
  try{enabled=localStorage.getItem('gdlb.arcadeMusic')!=='off'}catch{}
  function sync(){
@@ -28,17 +52,21 @@ export function remixMusic(track,sound,button,isRunning){
   if(enabled&&sound.enabled&&!document.hidden)player.play().catch(()=>{});
  }
  function pause(){player.pause()}
+ function applySound(){
+  if(enabled&&sound.enabled&&isRunning())start();else pause();
+  sync();
+ }
  button.onclick=()=>{
   enabled=!enabled;
   try{localStorage.setItem('gdlb.arcadeMusic',enabled?'on':'off')}catch{}
-  if(enabled&&isRunning())start();else pause();
-  sync();
+  applySound();
  };
+ document.addEventListener('gdlb-game-sound',applySound);
  sync();
  return {
   start,pause,
   reset(){pause();player.currentTime=0},
-  close(){pause();player.removeAttribute('src');player.load()}
+  close(){document.removeEventListener('gdlb-game-sound',applySound);pause();player.removeAttribute('src');player.load()}
  };
 }
 

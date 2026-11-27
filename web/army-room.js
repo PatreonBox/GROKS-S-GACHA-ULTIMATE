@@ -1,4 +1,4 @@
-import {armyChapters,armySeries,findArmySeries,seriesCleared,seriesUnlocked,seriesFinaleReward,chapterCleared,chapterUnlocked,chapterGems,configureTrilogy,armyLoot,armyTrialIds,armyRivals,beginArmyRun,startArmyBattle,settleArmyBattle} from './army-trilogy.js';
+import {armyChapters,armySeries,findArmySeries,seriesCleared,seriesUnlocked,seriesFinaleReward,chapterCleared,chapterUnlocked,chapterGems,trilogyStageKeys,configureTrilogy,armyLoot,armyTrialIds,armyRivals,beginArmyRun,startArmyBattle,settleArmyBattle} from './army-trilogy.js';
 import {stat} from './card-economy.js';
 import {difficulties,readCollection,pool} from './pack-engine.js';
 import {armyLimit,armySpeed,armyMaps,armyBackdrops,backdropSource,armyFrame,armyStats,mixedSquad,makeArmyBattle,stepArmy} from './army-battle.js';
@@ -12,21 +12,26 @@ const fixed=armyFrame;
 const resultText={won:'Victory',lost:'Army defeated',draw:'Draw',retreated:'Army withdrew'};
 const currencies={coins:'coin',gems:'gem'};
 const money=(kind,n)=>{
- const label=n===1?(kind==='gems'?'gem':'coin'):kind;
+ const label=kind==='demonKeys'?(n===1?'key':'keys'):n===1?currencies[kind]:kind;
+ const image=kind==='demonKeys'?ico('demonKey'):'<img src="/assets/packs/'+currencies[kind]+'.png" alt="">';
  return '<span class="army-money" data-currency="'+kind+'" title="'+n.toLocaleString('en-US')+' '+label+
-  '"><img src="/assets/packs/'+currencies[kind]+'.png" alt="">'+stat(n)+' '+label+'</span>';
+  '">'+image+stat(n)+' '+label+'</span>';
 };
 const clamp=(x,min,max)=>Math.min(max,Math.max(min,x));
 const timeText=n=>Math.floor(n/60)+':'+String(Math.floor(n%60)).padStart(2,'0');
+const defaultPitch=.94,turn=Math.PI*2;
+const wrapYaw=angle=>((angle+Math.PI)%turn+turn)%turn-Math.PI;
 
 export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet,rewards}){
  let open=false,world=null,frame=0,readId=0,poolId=0;
  let inventory=[],deployment=[],sample=[],arena='foundry',tier=1,chapter=0,query='',ready=false,loaded=false,poolError=false,collectionError=false;
  let trilogy=armySeries[0],lastTrilogy=trilogy,seriesQuery='',starterOnly=false,seriesBackdrop=null,skirmishTier=1;
- let battle=null,phase='setup',countdown=0,accumulator=0,clock=0,renderAt=-1,previous=0,angle=0,drag=null;
+ let battle=null,phase='setup',countdown=0,accumulator=0,clock=0,renderAt=-1,previous=0,drag=null;
  let casts=[],bursts=[],recentMove='',nextMove=0,lastStats=-1,slotsStamp='',cueTime=new Map();
- let payoutState='',receipt=null,hovered=null,pinned=null,cursor=null,callouts=[];
- const view={zoom:1,x:0,y:0};
+ let payoutState='',receipt=null,hovered=null,pinned=null,cursor=null,callouts=[],skyX,skyY;
+ const view={zoom:1,x:0,y:0,yaw:0,pitch:defaultPitch};
+ const camera={...view};
+ const cameraDrift={yaw:0,pitch:0};
  const pointers=new Map();
  let pinch=null;
  const currentChapter=()=>trilogy?.stages[chapter]||armyChapters[chapter];
@@ -56,15 +61,17 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   '<label>Choose a trilogy<select data-army-series-select></select></label><button class="outline" data-army-act="starters" aria-pressed="false" title="Show runs through Easy Demon">Starter trilogies</button></div>'+
   '<div class="army-series-info" data-army-series-info></div><div class="army-chapters" data-army-chapters role="group" aria-label="Trilogy levels"></div></section>'+
   '<div class="army-layout"><section class="army-stage" aria-label="Army battlefield">'+
-  '<div class="army-field" data-army-field><div class="army-field-head"><div><small data-army-chapter-name></small><h2 data-army-mapname></h2></div><span class="army-timer" data-army-time>0:00</span></div>'+
+  '<div class="army-field" data-army-field tabindex="0" aria-label="3D battlefield. Drag or use the arrow keys to orbit. Pinch, scroll, or use plus and minus to zoom."><div class="army-field-head"><div><small data-army-chapter-name></small><h2 data-army-mapname></h2></div><span class="army-timer" data-army-time>0:00</span></div>'+
   '<div class="army-floaters" data-army-floaters aria-hidden="true"></div>'+
   '<div class="army-inspect" data-army-inspect hidden></div>'+
   '<div class="army-score" data-army-score></div><div class="army-countdown" data-army-count aria-live="polite" hidden></div>'+
   '<div class="army-outcome" data-army-result role="status" hidden></div></div>'+
   '<div class="army-strip"><div class="army-feed" data-army-feed></div><div class="army-camera" role="group" aria-label="Army camera">'+
-  '<button class="iconbtn" type="button" data-army-act="left" aria-label="Rotate camera left">'+ico('left')+'</button>'+
-  '<button class="iconbtn" type="button" data-army-act="reset" aria-label="Reset camera">'+ico('camera')+'</button>'+
-  '<button class="iconbtn" type="button" data-army-act="right" aria-label="Rotate camera right">'+ico('right')+'</button>'+
+  '<button class="iconbtn" type="button" data-army-act="left" title="Orbit left" aria-label="Orbit left">'+ico('left')+'</button>'+
+  '<button class="iconbtn" type="button" data-army-act="up" title="Tilt higher" aria-label="Tilt higher">'+ico('down')+'</button>'+
+  '<button class="iconbtn" type="button" data-army-act="reset" title="Reset camera" aria-label="Reset camera">'+ico('camera')+'</button>'+
+  '<button class="iconbtn" type="button" data-army-act="down" title="Tilt lower" aria-label="Tilt lower">'+ico('down')+'</button>'+
+  '<button class="iconbtn" type="button" data-army-act="right" title="Orbit right" aria-label="Orbit right">'+ico('right')+'</button>'+
   '<button class="iconbtn" type="button" data-army-act="zoom-out" title="Zoom out" aria-label="Zoom out">'+ico('zoomOut')+'</button>'+
   '<output data-army-zoom aria-label="Camera zoom">100%</output>'+
   '<button class="iconbtn" type="button" data-army-act="zoom-in" title="Zoom in" aria-label="Zoom in">'+ico('zoomIn')+'</button></div></div>'+
@@ -132,7 +139,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
    const id=c.row[0],name=enc(c.row[1]),canAdd=deployment.length<armyLimit&&limit(c)>0;
    const kit=skillsFor(c.row),detail=armyStats(c.row,training(c),kit),skill=enc(kit.signatureName);
    return '<button type="button" class="army-pick" data-army-add="'+id+'" '+(canAdd?'':'disabled')+
-    ' aria-label="Deploy '+name+'" title="'+skill+' · '+detail.maxHp+' HP · '+detail.attack+' ATK">'+portrait(id)+
+    ' aria-label="Deploy '+name+'" title="'+detail.role+' · '+skill+' · '+detail.maxHp+' HP · '+detail.attack+' ATK">'+portrait(id)+
     '<span><b>'+name+'</b><small class="army-style" data-style="'+detail.style+'">'+detail.style+' · Lvl '+detail.level+' · '+enc(c.row[6])+
     '</small></span><span class="army-copy-count">'+'×'+limit(c)+'</span></button>';
   }).join('')+(filtered.length>64?'<p>Search to find more of your cards.</p>':'');
@@ -168,28 +175,31 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   const bonus=trilogy&&seriesFinaleReward(trilogy);
   info.hidden=!trilogy;
   info.innerHTML=trilogy?'<div><b>'+enc(trilogy.name)+'</b><small>'+(trilogy.group==='series'?'GD level series':'GD community trio')+'</small></div><div class="army-series-prize">'+
-   (clears===3?'<b>'+ico('check')+' Trilogy cleared</b>':'<small>First trilogy clear</small>'+money('coins',bonus.coins)+money('gems',bonus.gems))+'</div>':'';
+   (clears===3?'<b>'+ico('check')+' Trilogy cleared</b>':'<small>First trilogy clear</small>'+money('coins',bonus.coins)+money('gems',bonus.gems)+money('demonKeys',bonus.demonKeys))+'</div>':'';
   chips.innerHTML=stages.map((stage,i)=>{
    const clear=progress(wallet,i),locked=!unlocked(wallet,i);
    const art=trilogy?portrait(stage.row[0]):'';
    const note=trilogy?(stage.note||stage.row[6])+' · '+stage.count+' rivals':stage.count+' rivals';
+   const firstKeys=trilogy&&!clear?trilogyStageKeys(stage.tier,i):0;
    return '<button type="button" data-army-chapter="'+i+'" aria-pressed="'+(i===chapter)+'" '+(locked||!setup?'disabled':'')+
     ' title="'+enc(locked?'Clear '+stages[i-1].name+' to unlock':stage.tactic?.description||stage.name)+'"><span class="army-chapter-icon">'+
-    (clear?ico('check'):locked?ico('lock'):String(i+1))+'</span>'+art+'<span><b>'+enc(stage.name)+'</b><small>'+enc(note)+(clear?' · cleared':'')+'</small></span></button>';
+    (clear?ico('check'):locked?ico('lock'):String(i+1))+'</span>'+art+'<span><b>'+enc(stage.name)+'</b><small>'+enc(note)+(clear?' · cleared':firstKeys?' · +'+firstKeys+(firstKeys===1?' key':' keys'):'')+'</small></span></button>';
   }).join('');
   el('chapter-name').textContent=trilogy?trilogy.name+' · '+(chapter+1)+'/3':'Skirmish · '+currentChapter().name;
  }
  function lootPreview(){
   const box=el('spoils');
-  const first=!progress(getWallet(),chapter),prize=first&&chapter===2&&trilogy?seriesFinaleReward(trilogy):{coins:0,gems:0};
+  const first=!progress(getWallet(),chapter),prize=first&&chapter===2&&trilogy?seriesFinaleReward(trilogy):{coins:0,gems:0,demonKeys:0};
+  const keys=first&&trilogy?trilogyStageKeys(tier,chapter)+prize.demonKeys:0;
   box.innerHTML=phase==='setup'&&battle?'<small>On clear</small>'+money('coins',armyLoot(battle).total+prize.coins)+
-   (first?'<span class="army-first-clear" title="First clear bonus">'+money('gems',chapterGems(tier,chapter)+prize.gems)+'</span>':''):'';
+   (first?'<span class="army-first-clear" title="First clear bonus">'+money('gems',chapterGems(tier,chapter)+prize.gems)+(keys?money('demonKeys',keys):'')+'</span>':''):'';
   box.hidden=!box.innerHTML;
  }
  function mapControls(){
   const map=armyMaps[arena],field=el('field');
   const key=trilogy?(seriesBackdrop||trilogy.backdrop):(Object.hasOwn(armyBackdrops,backdrops[arena])?backdrops[arena]:map.backdrop);
-  field.style.setProperty('--sky','url('+backdropSource(key)+')');field.dataset.map=arena;
+  field.style.setProperty('--sky','url('+backdropSource(key)+')');field.dataset.map=arena;field.dataset.backdrop=key;
+  renderAt=-1;
   root.querySelector('#armyBackdrop').value=key;
   el('mapname').textContent=trilogy?currentChapter().name:map.name;el('mapname').title=trilogy?currentChapter().tactic.description:map.description;
   root.querySelector('.army-tier-setting').hidden=Boolean(trilogy);
@@ -258,7 +268,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   const left=battle?.teams[0]||[],right=battle?.teams[1]||[];
   el('time').textContent=timeText(time/armySpeed);
   el('score').innerHTML=tally(left,0)+tally(right,1);
-  const feed=recentMove||(phase==='setup'?(ready&&loaded?(currentChapter().tactic?.name||currentChapter().count+' rivals')+' · Battle speed 0.8×':'Preparing the arena…'):'Armies advancing');
+  const feed=recentMove||(phase==='setup'?(ready&&loaded?(currentChapter().tactic?.name||currentChapter().count+' rivals')+' · Drag to orbit':'Preparing the arena…'):'Armies advancing');
   const feedEl=el('feed');if(feedEl.textContent!==feed)feedEl.textContent=feed;
   if(phase!=='setup'){
    const lists=[left,right].map((units,side)=>
@@ -301,8 +311,9 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   if(!box)return;
   if(payoutState==='saving'){box.textContent='Saving rewards…';return}
   if(payoutState==='error'){box.textContent='Rewards could not save. Try again below.';return}
-  box.innerHTML=receipt?.coins||receipt?.gems?
-   (receipt.seriesComplete?'<b class="army-trilogy-clear">Trilogy cleared!</b>':'')+(receipt.coins?money('coins',receipt.coins):'')+(receipt.gems?money('gems',receipt.gems):''):
+  box.innerHTML=receipt?.coins||receipt?.gems||receipt?.demonKeys?
+   (receipt.seriesComplete?'<b class="army-trilogy-clear">Trilogy cleared!</b>':'')+(receipt.coins?money('coins',receipt.coins):'')+(receipt.gems?money('gems',receipt.gems):'')+
+   (receipt.demonKeys?money('demonKeys',receipt.demonKeys):''):
    '<span>No rewards earned</span>';
  }
  async function credit(match){
@@ -368,6 +379,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
     play('armyEvade',target,.44,.19);
    }else if(kind==='tactic'){
     addCallout({...event,target:unit});play(event.cue,unit,.47,.19);
+    if(unit.scaredUntil>at&&at>=nextMove){recentMove=unit.name+' · '+event.name;nextMove=at+1.2;}
    }else if(kind==='result')summary(event.status);
    else {
     const actor=target||unit;
@@ -392,7 +404,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   if(box.dataset.stamp!==stamp){
    box.dataset.stamp=stamp;
    box.dataset.side=unit.side;
-   box.innerHTML='<strong>'+enc(unit.name)+'</strong><small>'+unit.style+' · Lv. '+unit.level+
+   box.innerHTML='<strong>'+enc(unit.name)+'</strong><small>'+unit.role+' · '+unit.style+' · Lv. '+unit.level+
     (unit.rank?' · #'+unit.rank.toLocaleString('en-US'):'')+(unit.captain?' · Captain':'')+
     '</small><span>'+stat(unit.hp)+' / '+stat(unit.maxHp)+' HP <b>'+stat(unit.attack)+' ATK</b></span>'+
     '<small>'+enc(unit.kit.signatureName)+'</small>';
@@ -424,6 +436,30 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   root.querySelector('[data-army-act="zoom-out"]').disabled=view.zoom<=.82;
   root.querySelector('[data-army-act="zoom-in"]').disabled=view.zoom>=2.6;
   renderAt=-1;
+ }
+ function orbit(yaw,pitch){
+  view.yaw=wrapYaw(yaw);view.pitch=clamp(pitch,.31,1.37);
+  renderAt=-1;
+ }
+ function resetCamera(){orbit(0,defaultPitch);zoomTo(1)}
+ function moveCamera(x,y,heading=view.yaw){
+  const c=Math.cos(heading),s=Math.sin(heading);
+  return [x*c+y*s,y*c-x*s];
+ }
+ function paintCamera(field,dt){
+  const blend=reduced.matches?1:1-Math.exp(-Math.max(dt,1/60)*14);
+  const approach=(value,destination)=>Math.abs(value-destination)<.0001?destination:value+(destination-value)*blend;
+  const canDrift=cursor&&!drag&&!pinch&&!reduced.matches;
+  const targetYaw=canDrift?cursor.driftX*.14:0,targetPitch=canDrift?-cursor.driftY*.10:0;
+  cameraDrift.yaw=approach(cameraDrift.yaw,targetYaw);
+  cameraDrift.pitch=approach(cameraDrift.pitch,targetPitch);
+  const yawTarget=wrapYaw(view.yaw+cameraDrift.yaw),deltaYaw=wrapYaw(yawTarget-camera.yaw);
+  camera.yaw=Math.abs(deltaYaw)<.0001?yawTarget:wrapYaw(camera.yaw+deltaYaw*blend);
+  camera.pitch=approach(camera.pitch,clamp(view.pitch+cameraDrift.pitch,.31,1.37));
+  for(const axis of ['zoom','x','y'])camera[axis]=approach(camera[axis],view[axis]);
+  const x=(Math.sin(camera.yaw)*6).toFixed(1)+'%',y=((camera.pitch-defaultPitch)*13).toFixed(1)+'%';
+  if(skyX!==x){skyX=x;field.style.setProperty('--army-sky-x',x)}
+  if(skyY!==y){skyY=y;field.style.setProperty('--army-sky-y',y)}
  }
  function addCallout(event){
   if(reduced.matches)return;
@@ -477,8 +513,10 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   }
   const refresh=world?.software?phase==='live'?1/24:1/15:phase==='live'?1/60:1/27;
   if(world&&now/1000-renderAt>=refresh){
+   const field=el('field');
+   paintCamera(field,renderAt<0?dt:Math.min(.24,now/1000-renderAt));
    renderAt=now/1000;
-   world.render({key:arena,map:armyMaps[arena],teams:battle?.teams||[[],[]],time:clock,casts,bursts,angle,view,
+   world.render({key:arena,map:armyMaps[arena],backdrop:field.dataset.backdrop,teams:battle?.teams||[[],[]],time:clock,casts,bursts,view:camera,
     selected:pinned||hovered,reduced:reduced.matches});
    if(!drag&&!pinch)peekAtCursor();
    if(pinned&&!pinned.hp)pinned=null;
@@ -506,10 +544,14 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
    field.setPointerCapture(e.pointerId);
    if(pointers.size===2){pinch={distance:span(),zoom:view.zoom};drag=null;return}
    if(pointers.size>2)return;
-   drag={id:e.pointerId,x:e.clientX,y:e.clientY,angle,viewX:view.x,viewY:view.y,moved:false};
+   drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:view.yaw,pitch:view.pitch,viewX:view.x,viewY:view.y,moved:false,pan:e.shiftKey};
   });
   field.addEventListener('pointermove',e=>{
-   if(e.pointerType!=='touch')cursor={x:e.clientX,y:e.clientY};
+   if(e.pointerType==='mouse'){
+    const bounds=field.getBoundingClientRect();
+    cursor={x:e.clientX,y:e.clientY,driftX:clamp((e.clientX-bounds.left)/bounds.width*2-1,-1,1),
+     driftY:clamp((e.clientY-bounds.top)/bounds.height*2-1,-1,1)};
+   }
    if(pointers.has(e.pointerId))pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
    if(pinch&&pointers.size>=2){
     zoomTo(pinch.zoom*span()/Math.max(12,pinch.distance),pinned);return;
@@ -518,11 +560,11 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
    const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
    if(!drag.moved&&Math.hypot(dx,dy)<6)return;
    drag.moved=true;
-   if(view.zoom>1.18){
+   if(drag.pan&&view.zoom>1){
     const speed=1240/Math.max(1,field.clientWidth*view.zoom);
-    view.x=clamp(drag.viewX-dx*speed,-500,500);
-    view.y=clamp(drag.viewY-dy*speed*1.3,-200,200);
-   }else angle=clamp(drag.angle+dx*.002,-.37,.37);
+    const [x,y]=moveCamera(-dx*speed,-dy*speed*1.3,drag.yaw);
+    view.x=clamp(drag.viewX+x,-500,500);view.y=clamp(drag.viewY+y,-200,200);
+   }else orbit(drag.yaw+dx*.009,drag.pitch+dy*.004);
    renderAt=-1;
   });
   function lift(e){
@@ -538,6 +580,11 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   }
   for(const event of ['pointerup','pointercancel','lostpointercapture'])field.addEventListener(event,lift);
   field.addEventListener('pointerleave',()=>{cursor=null;hovered=null;showInspector(pinned)});
+  field.addEventListener('keydown',e=>{
+   const controls={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',Home:'reset','+':'zoom-in','=':'zoom-in','-':'zoom-out'};
+   const control=controls[e.key];if(!control||e.altKey||e.ctrlKey||e.metaKey)return;
+   e.preventDefault();cameraAction(control);
+  });
   root.addEventListener('click',e=>{
    const button=e.target.closest('button');if(!button||!open)return;
    sound.unlock();
@@ -570,11 +617,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
      starterOnly=!starterOnly;
      button.setAttribute('aria-pressed',String(starterOnly));listSeries();break;
     case 'sound':sound.toggle();speaker();break;
-    case 'left':angle=clamp(angle-.13,-.37,.37);renderAt=-1;break;
-    case 'right':angle=clamp(angle+.13,-.37,.37);renderAt=-1;break;
-    case 'reset':angle=0;zoomTo(1);break;
-    case 'zoom-in':zoomTo(view.zoom*1.23,hovered||pinned);break;
-    case 'zoom-out':zoomTo(view.zoom/1.23);break;
+    case 'left':case 'right':case 'up':case 'down':case 'reset':case 'zoom-in':case 'zoom-out':cameraAction(button.dataset.armyAct);break;
     case 'start':start();break;
     case 'deployment':
      el('config').scrollIntoView({block:'start',behavior:reduced.matches?'instant':'smooth'});
@@ -610,6 +653,17 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
    sound.play('select');mapControls();
   }});
   document.addEventListener('visibilitychange',()=>{previous=0});
+ }
+ function cameraAction(control){
+  switch(control){
+   case 'left':orbit(view.yaw-.28,view.pitch);break;
+   case 'right':orbit(view.yaw+.28,view.pitch);break;
+   case 'up':orbit(view.yaw,view.pitch-.15);break;
+   case 'down':orbit(view.yaw,view.pitch+.15);break;
+   case 'reset':resetCamera();break;
+   case 'zoom-in':zoomTo(view.zoom*1.23,pinned||hovered);break;
+   case 'zoom-out':zoomTo(view.zoom/1.23);break;
+  }
  }
  let built=false;
  function show(on){

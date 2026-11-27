@@ -41,8 +41,6 @@ export function setupNotifications({load,mark,membershipResult}){
  const badge=document.getElementById('notificationUnread'),list=document.getElementById('notificationList');
  const readAll=document.getElementById('readNotifications'),status=document.getElementById('notificationsStatus');
  const check=document.getElementById('discordKeyCheck'),reward=document.querySelector('[data-discord-invite-reward]');
- const logo=document.querySelector('#gameAccount .discord-symbol');
- if(logo)document.querySelector('[data-discord-mark]').replaceChildren(logo.cloneNode(true));
  let account=false,claimed=false,changing=false,loading=false,serial=0,seenData=false,previous='',state=empty(),pollId;
  let result=membershipResult;
  const hide=()=>{if(panel.matches(':popover-open'))panel.hidePopover();};

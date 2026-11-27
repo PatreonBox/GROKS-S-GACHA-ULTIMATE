@@ -327,14 +327,15 @@
 .wallet-control-gem{--wallet-accent:#92e8ff}
 .wallet-control-key{--wallet-accent:#ead0fa}
 .wallet-control :is(.wallet-link,.gem-link,.demon-key-link){border-start-end-radius:0;border-end-end-radius:0}
-.wallet-add{
- display:grid;place-items:center;flex:none;min-width:24px;min-height:32px;
+.head-tools .wallet-add{
+ display:grid;place-items:center;flex:none;min-width:30px;min-height:32px;
  color:var(--wallet-accent);border:1px solid color-mix(in srgb,var(--wallet-accent) 29%,#283142);border-inline-start:0;
  border-radius:0 9px 9px 0;background:color-mix(in srgb,var(--wallet-accent) 10%,#141824);font-size:16px;font-weight:800;
 }
 .wallet-add:hover,.wallet-add:focus-visible{background:color-mix(in srgb,var(--wallet-accent) 24%,#141824)}
-@media(max-width:680px){.wallet-add{min-width:18px;font-size:14px}.headwrap .wallet-control .wallet-link{padding-inline:4px}}
+@media(max-width:680px){.head-tools .wallet-add{min-width:23px;font-size:14px}.headwrap .wallet-control .wallet-link{padding-inline:4px}}
 .level-card:not(.holo-card,.antimatter-card){
  background:radial-gradient(ellipse at 100% 106%,color-mix(in srgb,var(--rarity-color,var(--card-color)) 22%,transparent),transparent 53%),
   linear-gradient(153deg,color-mix(in srgb,var(--card-color) 15%,#1b202a),#1a1a25 46%,#11121c);
 }
+.drop-access-note{color:#d3d9f1;font-weight:650;font-size:.88rem;line-height:1.45;margin:8px 0 12px}

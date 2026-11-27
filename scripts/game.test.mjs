@@ -5,21 +5,24 @@ import {Group} from 'three';
 import worker from '../dist/server/index.js';
 import {createGameDatabase} from './game-preview-db.mjs';
 import {createCardPool,difficulties,oddsFor,packs,rollPacks,packOddsVersion} from '../web/pack-engine.js';
-import {armyFrame,makeArmyBattle,stepArmy} from '../web/army-battle.js';
-import {armySignatureVersion,beginArmyRun} from '../web/army-trilogy.js';
+import {armyFrame,armyTacticsVersion,makeArmyBattle,stepArmy} from '../web/army-battle.js';
+import {armySeries,armySignatureVersion,beginArmyRun,seriesFinaleReward,trilogyStageKeys} from '../web/army-trilogy.js';
+import {armyOrbit} from '../web/army-world.js';
 import {makeBattle,playTurn,statsFor} from '../web/battle-engine.js';
 import {attackTiming,paintArmyCast} from '../web/combat-scene.js';
 import {classicCampaignMoves,previousBossMoves} from '../web/main-list-moves.js';
 import {skillsFor} from '../web/card-skills.js';
 import {drillStep,activeDrillGate,makeDrill,stepDrill} from '../web/drill-physics.js';
-import {seededRandom,drillInput} from '../web/game-replay.js';
+import {seededRandom,drillInput,replayEndlessRemix} from '../web/game-replay.js';
 import {findRemix} from '../web/remixes.js';
-import {STEP,makeCourse,newAttempt,advanceRunner,tunnelAt} from '../web/remix-physics.js';
+import {STEP,createEndlessCourse,makeCourse,newAttempt,advanceRunner,tunnelAt} from '../web/remix-physics.js';
+import {rewardEndlessRemix} from '../web/remix-endless.js';
 import {stageFor,settleCampaignClear} from '../web/campaign.js';
 import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/card-economy.js';
 import {mineEarnings,mineMachineRate,mineSkillRequirements,mineSkills,mineWalletRate,settleMine} from '../web/mine-economy.js';
 import {coinEconomyVersion,startingCoins} from '../web/coin-economy.js';
-import {playerProgress,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
+import {playerProgress,playerXpAtLevel as playerXpAt,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
+import {dropAccess,dropEligible,dropAccessSummary} from '../web/drop-access.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
 import {buildingFootprint,collectForge,forgePlan,gemMine,gemMinePlan,housePlacementError,housePlan,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
 import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
@@ -37,7 +40,6 @@ import {createKingdomWalker,kingdomCubeAnimations} from '../client/kingdom-walke
 
 const origin='https://game.example';
 const pool=createCardPool(path=>JSON.parse(fs.readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
-const playerXpAt=level=>Array.from({length:level},(_,i)=>120+34*i+2*i*i).reduce((sum,xp)=>sum+xp,0);
 const nonAchievementXp=wallet=>wallet.playerXp-(wallet.achievementRewardXp||0);
 
 function fixture(account={}) {
@@ -101,8 +103,10 @@ test('pack purchase commits the debit, cards, and receipt together',async()=>{
  assert.equal(cards.reduce((sum,entry)=>sum+entry.copies,0),5);
  assert.equal((await f.command(session,'pack.buy',{packId:'common',quantity:1})).status,400);
  assert.equal((await f.command(session,'pack.advance',{id:pulls[0].id,opened:1})).status,200);
- assert.equal((await f.wallet(session)).pending,null);
- assert.equal((await f.wallet(session)).demonKeys,starterDemonKeys);
+ const complete=await f.wallet(session);
+ assert.equal(complete.pending,null);
+ assert.equal(complete.demonKeys,starterDemonKeys+paid.demonKeysToClaim);
+ assert.equal(complete.demonKeysToClaim,undefined);
 });
 
 test('Gacha activity reports fresh cards, unclaimed gems, and eligible merges',async()=>{
@@ -267,25 +271,27 @@ test('mine milestones double at 20 and the extra branches have prerequisites',()
  assert.deepEqual(mineSkillRequirements({machines:{mint:12},skills:{network:true}},'receipts'),[]);
 });
 
-test('demon index gems follow the new payouts and Extreme rank range',async()=>{
- assert.deepEqual([6,7,8,9].map(tier=>levelRewardTenths(tier,0,0)),[25,40,80,120]);
- assert.deepEqual([1,51,101,0].map(rank=>levelRewardTenths(10,rank,101)),[300,215,130,130]);
+test('index gems use a 1.5× or 1.8× divisor and preserve earlier claims',async()=>{
+ assert.deepEqual([6,7,8,9].map(tier=>levelRewardTenths(tier,0,0)),[17,27,44,67]);
+ assert.deepEqual([1,51,101,0].map(rank=>levelRewardTenths(10,rank,101)),[167,119,72,72]);
+ assert.equal(levelRewardTenths(11,0,0),333);
  const f=fixture(),player=await f.open();
  const rows=(await pool('Easy Demon')).slice(0,2);
  f.addCards(player.id,rows);
  const oldCard={id:rows[0][0],row:rows[0],copies:2,indexReward:3};
  f.sqlite.prepare('UPDATE game_cards SET card=? WHERE player_id=? AND level_id=?').run(JSON.stringify(oldCard),player.id,oldCard.id);
  const {wallet}=await f.command(player,'card.claim',{tier:6,ids:rows.map(row=>row[0])}).then(response=>response.json());
- assert.equal(wallet.gems,12.5);
+ assert.equal(wallet.gems,11.7);
  const {cards}=await f.call('/api/game?view=cards',player).then(response=>response.json());
  assert.equal(cards.find(card=>card.id===oldCard.id).indexReward,3);
 });
 
 test('player level starts at zero and pack experience credits each opening once',async()=>{
  const f=fixture(),player=await f.open();
- assert.deepEqual(playerProgress(0),{level:0,xp:0,goal:120,total:0,ratio:0});
+ assert.deepEqual(playerProgress(0),{level:0,xp:0,goal:100,total:0,ratio:0});
  assert.equal(playerProgress(120).level,1);
- assert.equal(playerProgress(120).goal,156);
+ assert.equal(playerProgress(120).goal,130);
+ assert.equal(playerProgress(120).total,120);
  assert.equal((await f.wallet(player)).playerXp,0);
  const bought=await f.command(player,'pack.buy',{packId:'common',quantity:10}).then(r=>r.json());
  assert.equal(nonAchievementXp(bought.wallet),0);
@@ -690,7 +696,7 @@ test('feature and pack gates derive from player XP and cannot be opened early',a
  const ready=await f.wallet(player);
  assert.equal((await command('pack.advance',{id:ready.pending.id,opened:1})).status,200);
  assert.deepEqual([2,4,5,7,8,10,14,20,30],[packLevels.rare,featureLevel('arcade'),featureLevel('merge'),featureLevel('bulk'),featureLevel('kingdom'),featureLevel('upgrades'),packLevels.legendary,packLevels.mythic,packLevels.godly]);
- assert.deepEqual(unlockedBetween(7,8).map(item=>item.name),['Kingdom','Army mode','Cube shop','Epic pack']);
+ assert.deepEqual(unlockedBetween(7,8).map(item=>item.name),['Hard Demon','Kingdom','Army mode','Cube shop','Epic pack']);
  assert.deepEqual([levelCue(1,2),levelCue(1,3),levelCue(4,5),levelCue(3,6),levelCue(9,11)],
   ['levelSingle','levelMulti','levelMilestone','levelMilestone','levelMilestone']);
 });
@@ -760,7 +766,7 @@ test('minigame rewards are derived by replaying legal controls',async()=>{
  assert.equal(training.result.playerXpEarned,Math.min(36,run.score*2)+8);
  assert.equal(nonAchievementXp(training.wallet),playerXpAt(4)+training.result.playerXpEarned);
  assert.equal((await f.command(player,'drill.finish',{token:drill.token,proof:{ticks,trace:[]}})).status,400);
- const remix=findRemix(6508283),course=makeCourse(remix),runner=newAttempt(course);
+ const remix=findRemix(6508283),course=makeCourse(remix,{legacy:true}),runner=newAttempt(course);
  const attempt=await f.command(player,'remix.begin',{id:remix.id}).then(res=>res.json()).then(data=>data.result);
  let frames=0;
  do{frames++;}while(advanceRunner(runner,course,remix,STEP)==='running');
@@ -785,7 +791,7 @@ test('Meme Arcade rewards a verified Tidal Wave cut once, including an older cle
  assert.equal(outcome,'clear');
  assert.equal(remix.finish,94);
  async function start(){
-  const {result}=await f.command(player,'remix.begin',{id:remix.id}).then(r=>r.json());
+  const {result}=await f.command(player,'remix.begin',{id:remix.id,mode:'normal'}).then(r=>r.json());
   f.store(player.id,w=>{w.remixRun.start-=ticks*STEP*1000+1000;});
   return {token:result.token,proof:{ticks,trace}};
  }
@@ -806,6 +812,93 @@ test('Meme Arcade rewards a verified Tidal Wave cut once, including an older cle
  assert.equal(wallet.demonKeys,before.demonKeys+5);
 });
 
+test('Endless Mini Games verify survival and award incremental keys and XP under one six-hour limit',async t=>{
+ const now=Date.now(),reset=now+6*60*60*1000;
+ t.mock.timers.enable({apis:['Date'],now});
+ const f=fixture(),player=await f.open(),remix=findRemix(86407629);
+ f.store(player.id,w=>{
+  w.playerXp=playerXpAt(4);
+  w.remixEndlessKeyWindow={keys:9,resetsAt:reset};
+ });
+ const open=async id=>{
+  const response=await f.command(player,'remix.begin',{id,mode:'endless'});
+  assert.equal(response.status,200);
+  return (await response.json()).result;
+ };
+ const run=await open(remix.id),course=createEndlessCourse(remix,run.seed),runner=newAttempt(course),trace=[];
+ assert.equal(run.interval,10);
+ assert.equal(run.keysRemaining,1);
+ assert.equal(run.resetsAt,reset);
+ const before=await f.wallet(player),intervalTicks=Math.round(run.interval/STEP);
+ for(let tick=0;tick<2*intervalTicks;tick++){
+  const {top,bottom}=tunnelAt(course,runner.x+12),offset=runner.y-(top+bottom)/2;
+  if(Math.abs(offset)>5&&(offset>0)!==runner.held){runner.held=offset>0;trace.push([tick,'held',runner.held]);}
+  assert.equal(advanceRunner(runner,course,remix,STEP),'running');
+ }
+ const first={token:run.token,proof:{ticks:intervalTicks,trace:trace.filter(event=>event[0]<intervalTicks)}};
+ assert.equal((await f.command(player,'remix.checkpoint',first)).status,400);
+ t.mock.timers.setTime(now+run.interval*1000);
+ const requestId=crypto.randomUUID();
+ const responses=await Promise.all([f.command(player,'remix.checkpoint',first,requestId),f.command(player,'remix.checkpoint',first,requestId)]);
+ for(const response of responses){
+  assert.equal(response.status,200);
+  const {result,wallet}=await response.json();
+  assert.equal(result.verifiedTicks,intervalTicks);
+  assert.equal(result.survivedSeconds,10);
+  assert.equal(result.demonKeys,1);
+  assert.equal(result.terminal,false);
+  assert.equal(result.keysRemaining,0);
+  assert.equal(result.resetsAt,reset);
+  assert.equal(result.playerXpEarned,8);
+  assert.equal(wallet.demonKeys,before.demonKeys+1);
+ }
+ const repeated=await f.command(player,'remix.checkpoint',first).then(response=>response.json());
+ assert.equal(repeated.result.demonKeys,0);
+ assert.equal(repeated.result.playerXpEarned,0);
+ t.mock.timers.setTime(now+run.interval*2000);
+ const second={token:run.token,proof:{from:intervalTicks,ticks:intervalTicks*2,trace:trace.filter(event=>event[0]>=intervalTicks)}};
+ assert.equal((await f.command(player,'remix.finish',{...second,proof:{...second.proof,from:intervalTicks+1}})).status,400);
+ const finished=await f.command(player,'remix.finish',second);
+ assert.equal(finished.status,200);
+ const {result:receipt,wallet}=await finished.json();
+ assert.equal(receipt.terminal,true);
+ assert.equal(receipt.demonKeys,0);
+ assert.equal(receipt.playerXpEarned,9);
+ assert.equal(wallet.remixEndlessBest[remix.id],20);
+ assert.equal(wallet.remixBest?.[remix.id],undefined);
+ assert.equal((await f.command(player,'remix.finish',second)).status,400);
+ const another=await open(86084399);
+ assert.equal(another.keysRemaining,0);
+ assert.equal((await f.command(player,'remix.finale',{token:another.token})).status,400);
+ t.mock.timers.setTime(reset);
+ const fresh=await open(6508283);
+ assert.equal(fresh.interval,30);
+ assert.equal(fresh.keysRemaining,10);
+ assert.equal(fresh.resetsAt,null);
+});
+
+test('Endless course generation and checkpoint replays can run beyond five minutes',()=>{
+ const remix=findRemix(86407629),session={seed:2026,start:0};
+ const course=createEndlessCourse(remix,session.seed),runner=newAttempt(course),wallet={playerXp:0};
+ const milestoneTicks=Math.round(10/STEP);
+ let ticks=0;
+ for(let elapsed=10;elapsed<=310;elapsed+=10){
+  const from=ticks,trace=[];
+  for(;ticks<from+milestoneTicks;ticks++){
+   const {top,bottom}=tunnelAt(course,runner.x+12),offset=runner.y-(top+bottom)/2;
+   if(Math.abs(offset)>5&&(offset>0)!==runner.held){runner.held=offset>0;trace.push([ticks,'held',runner.held]);}
+   assert.equal(advanceRunner(runner,course,remix,STEP),'running');
+  }
+  const result=rewardEndlessRemix(wallet,session,remix,replayEndlessRemix(remix,session,{from,ticks,trace},elapsed*1000),elapsed*1000);
+  assert.equal(result.survivedSeconds,elapsed);
+  assert.equal(result.terminal,false);
+  assert.equal(result.demonKeys,elapsed<=100?1:0);
+  assert.equal(session.checkedState.x,runner.x);
+ }
+ assert.equal(wallet.remixEndlessBest[remix.id],310);
+ assert.equal(wallet.playerXp,271);
+});
+
 test('Army rewards are replayed from a server-issued deployment and paid once',async()=>{
  const f=fixture(),player=await f.open();
  f.store(player.id,w=>{w.playerXp=playerXpAt(8)});
@@ -814,6 +907,7 @@ test('Army rewards are replayed from a server-issued deployment and paid once',a
  const request=await f.command(player,'army.begin',{map:'harbor',chapter:0,tier:1,ids:rows.map(row=>row[0])});
  assert.equal(request.status,200);
  const {result:run}=await request.json();
+ assert.equal(run.tacticsVersion,armyTacticsVersion);
  assert.equal((await f.command(player,'army.finish',{id:run.id,frames:0,withdrawn:false})).status,400);
  const battle=beginArmyRun(run);
  while(battle.status==='fighting')stepArmy(battle,armyFrame);
@@ -826,6 +920,52 @@ test('Army rewards are replayed from a server-issued deployment and paid once',a
  const replay=await f.command(player,'army.finish',{id:run.id,frames:battle.frames,withdrawn:false}).then(r=>r.json());
  assert.equal(replay.wallet.coins,wallet.coins);
  assert.equal(replay.wallet.gems,wallet.gems);
+});
+
+test('Army trilogies show less inflated coin rewards and add Demon Keys only on the first verified clear',async()=>{
+ const f=fixture(),player=await f.open(),series=armySeries.find(item=>item.stages[0].tier===1);
+ const {tier}=series.stages[0],rows=(await pool('Extreme Demon')).slice(0,4);
+ f.store(player.id,w=>{w.playerXp=playerXpAt(8)});
+ f.addCards(player.id,rows);
+ assert.ok(seriesFinaleReward(series).coins<seriesFinaleReward(series,1).coins);
+ const play=async()=>{
+  const response=await f.command(player,'army.begin',{map:series.map,chapter:0,tier,seriesKey:series.key,ids:rows.map(row=>row[0])});
+  assert.equal(response.status,200);
+  const {result:run}=await response.json(),battle=beginArmyRun(run),legacy=beginArmyRun({...run,tacticsVersion:undefined});
+  assert.ok(battle.teams[1].every((unit,i)=>unit.bounty<=legacy.teams[1][i].bounty));
+  while(battle.status==='fighting')stepArmy(battle,armyFrame);
+  assert.equal(battle.status,'won');
+  f.store(player.id,w=>{w.armyRun.started-=300000;});
+  const receipt=await f.command(player,'army.finish',{id:run.id,frames:battle.frames,withdrawn:false});
+  assert.equal(receipt.status,200);
+  return receipt.json();
+ };
+ const before=await f.wallet(player),first=await play(),repeat=await play();
+ assert.equal(first.result.demonKeys,trilogyStageKeys(tier,0));
+ assert.ok(first.wallet.demonKeys>=before.demonKeys+first.result.demonKeys);
+ assert.equal(repeat.result.demonKeys,0);
+});
+
+test('Army orbit supports a complete turn and morale changes stay out of legacy replays',async()=>{
+ for(const pitch of [.31,.94,1.37])for(const yaw of [-Math.PI,-1,0,1,Math.PI]){
+  const basis=Object.values(armyOrbit(pitch,yaw,1.25));
+  for(const axis of basis)assert.ok(Math.abs(Math.hypot(...axis)-1.25)<1e-10);
+  for(let i=0;i<3;i++)assert.ok(Math.abs(basis[i].reduce((sum,n,j)=>sum+n*basis[(i+1)%3][j],0))<1e-10);
+ }
+ const [a,b]=(await pool('Easy')).slice(0,2).map(row=>({row}));
+ const simulate=tacticsVersion=>{
+  const battle=makeArmyBattle([a],[b],'harbor',1,()=>0,{tacticsVersion});
+  const [[player],[rival]]=battle.teams;
+  Object.assign(player,{x:-25,y:0,hp:Math.floor(player.maxHp*.20),next:80});
+  Object.assign(rival,{x:25,y:0,attack:4,next:0});
+  const events=[];
+  for(let i=0;i<100;i++)events.push(...stepArmy(battle,armyFrame));
+  return events.filter(event=>['Nope!','Tactical panic!','Checking the exits!'].includes(event.name)).map(event=>event.name);
+ };
+ assert.deepEqual(simulate(1),[]);
+ const scare=simulate(armyTacticsVersion);
+ assert.equal(scare.length,1);
+ assert.deepEqual(scare,simulate(armyTacticsVersion));
 });
 
 test('the renamed campaign stages use four opponents from their own difficulty',async()=>{
@@ -850,7 +990,7 @@ test('Mythic rolls mostly Insane Demons and caps Extreme Demon odds with luck',a
   assert.ok(odds[10].percent<=15&&odds[9].percent>80&&odds[8].weight>0);
  }
  const pools=await Promise.all(difficulties.map(pool));
- const run=rollPacks(mythic,1,{luck:500,bonus:0},pools,n=>n===1_000_000?849_999:0);
+ const run=rollPacks(mythic,1,{luck:500,bonus:0,playerXp:playerXpAt(20)},pools,n=>n===1_000_000?849_999:0);
  assert.equal(run.packOddsVersion,packOddsVersion);
  assert.ok(run.rows.every(row=>row[6]==='Insane Demon'));
 });
@@ -1261,7 +1401,7 @@ test('LIMBO verifies the eight-key shuffle and pays XP and first-clear Demon Key
   outcome=advanceRunner(runner,course,remix,STEP);ticks++;
  }while(outcome==='running');
  assert.equal(outcome,'clear');
- const {result:attempt}=await f.command(player,'remix.begin',{id:remix.id}).then(r=>r.json());
+ const {result:attempt}=await f.command(player,'remix.begin',{id:remix.id,mode:'normal'}).then(r=>r.json());
  assert.equal((await f.command(player,'remix.finale',{token:attempt.token,proof:{ticks:0,trace:[]}})).status,400);
  t.mock.timers.setTime(start+15_000);
  const {result:finale}=await f.command(player,'remix.finale',{token:attempt.token,proof:{ticks,trace}}).then(r=>r.json());
@@ -1351,7 +1491,8 @@ test('Legacy revealed Banner draws backfill once and only newly opened guarantee
   const {wallet}=await response.json();
   assert.equal(wallet.achievementProgress.specialChests,3);
   assert.equal(wallet.achievementProgress.bannerGuarantees,3);
-  assert.equal(wallet.demonKeys,starterDemonKeys);
+  assert.equal(wallet.demonKeys,starterDemonKeys+seeded.demonKeysToClaim);
+  assert.equal(wallet.demonKeysToClaim,undefined);
  }
  assert.equal((await f.wallet(player)).achievementProgress.bannerGuarantees,3);
 });
@@ -1432,7 +1573,10 @@ test('Demon banner groups, feature gates, key prices and pity are server-proven'
  const catalogue=await demonCatalogue(pool);
  assert.equal(catalogue.groups.at(-1).length,10);
  const wallet={playerXp:0,bonus:90,luck:0,demonBanner:{pity:{standard:{legendary:demonPity.legendary-1,mythic:demonPity.mythic-1}}}};
- const certain=rollDemonBanner('standard',1,wallet,{catalogue},()=>0);
+ const paused=rollDemonBanner('standard',1,wallet,{catalogue},()=>0);
+ assert.deepEqual(paused.guarantees,[]);
+ assert.deepEqual(paused.pity,wallet.demonBanner.pity.standard);
+ const certain=rollDemonBanner('standard',1,{...wallet,playerXp:playerXpAt(13)},{catalogue},()=>0);
  assert.equal(certain.rows.length,6);
  assert.equal(cardRarity(certain.rows[0]).id,'mythic');
  assert.deepEqual(certain.pity,{legendary:0,mythic:0});
@@ -1463,22 +1607,34 @@ test('Demon banner groups, feature gates, key prices and pity are server-proven'
  }
  assert.equal((await pull('standard',1)).status,400);
  assert.equal((await f.command(player,'demon.keys.claim')).status,400);
- assert.equal((await f.command(player,'pack.advance',{id:results[0].wallet.pending.id,opened:12})).status,200);
+ const openRequest=crypto.randomUUID(),openArgs={id:results[0].wallet.pending.id,opened:12};
+ const completions=await Promise.all([f.command(player,'pack.advance',openArgs,openRequest),f.command(player,'pack.advance',openArgs,openRequest)]);
+ const earnedKeys=results[0].wallet.demonKeysToClaim+achievementById('opened-packs:1').keys;
+ for(const response of completions){
+  assert.equal(response.status,200);
+  const {wallet}=await response.json();
+  assert.equal(wallet.demonKeys,4+earnedKeys);
+  assert.equal(wallet.achievementKeysPaid,earnedKeys);
+  assert.equal(wallet.demonKeysToClaim,undefined);
+ }
  const saved=await f.wallet(player);
  assert.equal(saved.lastPull.playerXpEarned,12*44);
  assert.equal(saved.pending,null);
- assert.equal(saved.demonKeys,4);
- assert.equal(saved.demonKeysToClaim,results[0].wallet.demonKeysToClaim+achievementById('opened-packs:1').keys);
- const claimRequest=crypto.randomUUID();
- const claims=await Promise.all([f.command(player,'demon.keys.claim',{},claimRequest),f.command(player,'demon.keys.claim',{},claimRequest)]);
- for(const response of claims){
-  assert.equal(response.status,200);
-  const {wallet,result}=await response.json();
-  assert.equal(result.keys,saved.demonKeysToClaim);
-  assert.equal(wallet.demonKeys,4+saved.demonKeysToClaim);
-  assert.equal(wallet.demonKeysToClaim,undefined);
- }
+ assert.equal(saved.demonKeys,4+earnedKeys);
  assert.equal((await f.command(player,'demon.keys.claim')).status,400);
+});
+
+test('achievement keys from an existing wallet are added automatically on refresh once',async()=>{
+ const f=fixture(),player=await f.open();
+ f.store(player.id,w=>{w.demonKeys=20;w.demonKeysToClaim=9});
+ const responses=await Promise.all([f.call('/api/game',player),f.call('/api/game',player)]);
+ const data=await Promise.all(responses.map(response=>response.json()));
+ for(const {wallet} of data){
+  assert.equal(wallet.demonKeys,29);
+  assert.equal(wallet.demonKeysToClaim,undefined);
+  assert.equal(wallet.achievementKeysPaid,9);
+ }
+ assert.deepEqual(data.map(result=>result.achievementKeysReleased||0).sort(),[0,9]);
 });
 
 test('Coin pack stock is per pack, capped, and regenerated by server time',async t=>{
@@ -1524,7 +1680,7 @@ test('Special banner picker browses every eligible level without exposing hidden
   return response.json();
  };
  const first=await browse({}),second=await browse({page:'2'});
- const eligible=new Set((await Promise.all(difficulties.map(pool))).flat().map(row=>row[0]));
+ const eligible=new Set((await Promise.all(difficulties.slice(0,5).map(pool))).flat().map(row=>row[0]));
  assert.equal(first.total,eligible.size);
  assert.equal(first.page,1);
  assert.equal(second.page,2);
@@ -1535,6 +1691,40 @@ test('Special banner picker browses every eligible level without exposing hidden
  assert(named.rows.every(row=>row[6]==='Easy'));
  assert.deepEqual((await browse({q:'11280109'})).rows,[]);
  assert.deepEqual((await browse({category:'Impossible',impossible:'1'})).rows,[]);
+ assert.deepEqual((await browse({category:'Easy Demon'})).rows,[]);
+ f.store(player.id,w=>{w.playerXp=playerXpAt(13);});
+ const ranked=await browse({category:'Extreme Demon'});
+ assert.ok(ranked.rows.length);
+ assert.ok(ranked.rows.every(row=>!row[10]||row[10]>=151));
+ const top=(await pool('Extreme Demon')).find(row=>row[10]===1);
+ assert.equal((await f.command(player,'demon.pull',{banner:'special',targetId:top[0],quantity:1})).status,400);
+ f.store(player.id,w=>{w.playerXp=playerXpAt(15);});
+ assert.ok((await browse({category:'Extreme Demon'})).total>ranked.total);
+});
+
+test('Difficulty caps apply to refocused banner and coin rolls at every unlock threshold',async()=>{
+ const catalogue=await demonCatalogue(pool);
+ const pools=await Promise.all([...difficulties,'Impossible'].map(pool));
+ const caps=['Harder','Harder','Harder','Easy Demon','Easy Demon','Easy Demon','Medium Demon','Medium Demon',
+  'Hard Demon','Hard Demon','Insane Demon','Insane Demon','Insane Demon','Extreme Demon','Extreme Demon','Extreme Demon'];
+ for(const [level,cap] of caps.entries()){
+  const access=dropAccess(level),wallet={playerXp:playerXpAt(level),luck:500,bonus:0};
+  assert.equal(access.name,cap);
+  for(const pack of packs){
+   const odds=oddsFor(pack,wallet.luck,{playerLevel:level});
+   assert.equal(odds.reduce((sum,{weight})=>sum+weight,0),1_000_000);
+   assert.ok(odds.every(({weight},i)=>i<=access.tier||!weight));
+   const result=rollPacks(pack,1,wallet,pools,range=>range-1);
+   assert.ok(result.rows.every(row=>dropEligible(row,access)));
+   assert.equal(result.playerLevelAtPurchase,level);
+  }
+  for(const banner of ['standard','special','pro']){
+   const result=rollDemonBanner(banner,1,wallet,{catalogue},range=>range-1);
+   assert.ok(result.rows.every(row=>dropEligible(row,access)));
+  }
+ }
+ assert.equal(dropEligible([0,0,0,0,0,0,'Extreme Demon',0,0,0,150],dropAccess(14)),false);
+ assert.match(dropAccessSummary(14),/Level 15 unlocks/);
 });
 
 test('Owner-only chest test can select all ten Impossible cards and leaves the save untouched',async()=>{
