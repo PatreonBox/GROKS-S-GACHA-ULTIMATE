@@ -5,6 +5,7 @@ import {cubeCatalog,ownsCube,starterCube} from '../web/cube-catalog.js';
 import {drillTypes,trainingCapacity,trainingOf} from '../web/card-skills.js';
 import {mineLevelCap,mineMachines,mineSkills,mineSkillLock,settleMine} from '../web/mine-economy.js';
 import {findRemix} from '../web/remixes.js';
+import {oldCoinAmount} from '../web/coin-economy.js';
 
 const record=value=>value&&typeof value==='object'&&!Array.isArray(value)?value:{};
 const count=(value,limit=Number.MAX_SAFE_INTEGER)=>Number.isSafeInteger(value)&&value>0?Math.min(value,limit):0;
@@ -53,15 +54,16 @@ function combineCard(current,old){
 function transferMine(wallet,old,now){
  if(!old.mine||typeof old.mine!=='object')return;
  const saved=old.mine,machines=record(saved.machines),skills=record(saved.skills);
- const mine={machines:{},skills:{},collectedAt:Math.min(now,count(saved.collectedAt)||now),remainder:0};
+ const mine={machines:{},skills:{},collectedAt:Math.min(now,count(saved.collectedAt)||now),remainder:count(saved.remainder,999)};
  for(const {id} of mineMachines)mine.machines[id]=count(machines[id],mineLevelCap);
  for(const {id} of mineSkills)if(skills[id]===true&&!mineSkillLock(mine,id))mine.skills[id]=true;
- const legacy={mine,coins:count(old.coins)};
+ const legacy={mine,coins:oldCoinAmount(count(old.coins))};
  settleMine(legacy,now);
  wallet.coins=Math.max(wallet.coins,legacy.coins);
  const current=wallet.mine??{machines:{},skills:{},collectedAt:now,remainder:0};
  for(const {id} of mineMachines)current.machines[id]=Math.max(current.machines[id]||0,mine.machines[id]);
  for(const {id} of mineSkills)if(mine.skills[id])current.skills[id]=true;
+ current.remainder=Math.max(current.remainder||0,mine.remainder);
  wallet.mine=current;
 }
 
@@ -94,12 +96,13 @@ function transferCampaign(wallet,old){
   const saved=stages[tier];
   if(!saved||typeof saved!=='object'||Array.isArray(saved))continue;
   const campaign=wallet.campaign??={},current=campaign[tier];
-  const masteryPrize=Math.max(current?.masteryPrize||0,count(saved.masteryPrize));
+  const clearPrize=Math.max(current?.clearPrize||0,oldCoinAmount(count(saved.clearPrize)));
+  const masteryPrize=Math.max(current?.masteryPrize||0,oldCoinAmount(count(saved.masteryPrize)));
   campaign[tier]={
    turns:Math.min(current?.turns??Infinity,count(saved.turns,100000)||current?.turns||100000),
    survivors:Math.max(current?.survivors||0,count(saved.survivors,4)),
    tempo:current?.tempo===true||saved.tempo===true,squad:current?.squad===true||saved.squad===true,
-   ...(masteryPrize?{masteryPrize}:{})
+   ...(clearPrize?{clearPrize}:{}),...(masteryPrize?{masteryPrize}:{})
   };
  }
  const chapters=record(old.armyTrilogy),series=record(old.armySeries);

@@ -1,0 +1,55 @@
+export const coinEconomyVersion=1;
+export const coinDivisor=10;
+export const startingCoins=150;
+
+export const oldCoinAmount=value=>Math.floor(Math.max(0,value)/coinDivisor);
+
+function rescale(record,fields){
+ if(!record)return;
+ for(const key of fields)if(Number.isFinite(record[key]))record[key]=oldCoinAmount(record[key]);
+}
+
+export function normalizeCoinWallet(wallet){
+ if(!wallet||wallet.coinEconomyVersion>=coinEconomyVersion)return wallet;
+ rescale(wallet,['coins']);
+ if(wallet.achievementProgress)rescale(wallet.achievementProgress,['mine']);
+ for(const stage of Object.values(wallet.campaign||{}))rescale(stage,['clearPrize','masteryPrize']);
+ rescale(wallet.armyReceipt?.result,['coins']);
+ const kingdom=wallet.kingdom;
+ for(const group of ['houses','forges','gemMines','defences','storage']){
+  for(const building of kingdom?.[group]||[])rescale(building,['price']);
+ }
+ const battle=wallet.battle;
+ if(battle){
+  rescale(battle,['earned']);
+  for(const enemy of battle.enemies||[])rescale(enemy,['bounty']);
+  for(const event of battle.events||[]){
+   if(event.kind==='knockout')rescale(event,['amount']);
+  }
+  if(Array.isArray(battle.log)){
+   battle.log=battle.log.map(line=>line.replace(/ · \+([0-9,]+) coins\.$/u,(_,value)=>
+    ' · +'+oldCoinAmount(Number(value.replaceAll(',',''))).toLocaleString('en-US')+' coins.'));
+  }
+  rescale(battle.campaignReceipt,['coins','clearPrize','masteryPrize','bountyBonus']);
+ }
+ // The legacy mine remainder was recorded in thousandths of an old coin.
+ // Its integer also equals the new remainder in ten-thousandths of a coin.
+ wallet.coinEconomyVersion=coinEconomyVersion;
+ return wallet;
+}
+
+export function normalizeCoinReceipt(action,result){
+ if(typeof action!=='string')return result;
+ if(action==='mine.code')rescale(result,['amount']);
+ if(action==='mine.tap')rescale(result,['gain']);
+ if(action==='mine.machine')rescale(result,['cost']);
+ if(action==='mine.collect')rescale(result?.receipt,['coins']);
+ if(action==='army.finish')rescale(result,['coins']);
+ if(action==='cube.equip')rescale(result?.cube,['price']);
+ if(action==='admin.adjust'&&result?.field==='coins')rescale(result,['value']);
+ if(action==='admin.kingdom.finish'||action.startsWith('kingdom.')){
+  rescale(result,['price']);
+  for(const key of ['tower','house','forge','building','spike-shooter'])rescale(result?.[key],['price']);
+ }
+ return result;
+}

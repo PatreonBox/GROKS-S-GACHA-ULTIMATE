@@ -1,8 +1,9 @@
-import {cardCategories,difficulties,packs,packQuantities,rollPacks,upgrades,quoteUpgrade,randomBelow,
+import {cardCategories,difficulties,packs,rollPacks,upgrades,quoteUpgrade,randomBelow,
  grantCoinCode,applyFeeding,fuseCollection} from './pack-engine.js';
 import {createMergePlanner,extremeTable,gemTenths,levelRewardTenths} from './card-economy.js';
 import {starterCube,cubeCatalogVersion,claimCube,ownsCube} from './cube-catalog.js';
-import {settleMine,mineTapPower,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines,mineSkill} from './mine-economy.js';
+import {settleMine,creditMineTaps,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines,mineSkill} from './mine-economy.js';
+import {coinDivisor,coinEconomyVersion,startingCoins} from './coin-economy.js';
 import {combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
@@ -16,9 +17,12 @@ import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.
 import {buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
 import {validTradeMinimum} from './trade-rules.js';
 import {achievementBoost} from './achievement-boosts.js';
+import {bannerPrice,demonBanners,maxBannerDraws,prepareDemonPull,rollDemonBanner} from './demon-banner.js';
+import {buyDemonKeys,campaignKeyReward,initDemonKeys,rewardDemonKeys} from './demon-keys.js';
+import {packAvailability,packStockLimit,spendPackStock} from './pack-stock.js';
 
 export function newWallet() {
- return {coins:1500,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
+ return {coins:startingCoins,coinEconomyVersion,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
 }
 const levelId = value => Number.isSafeInteger(value)&&value>0;
 const key = value => typeof value==='string'&&value.length>0&&value.length<=80;
@@ -59,10 +63,37 @@ function readySquad(wallet,ids,now) {
 function awardPack(wallet,records,changes,pack,quantity,pools,now) {
  requireRule(!wallet.pending,'Finish your current opening first.');
  requireLevel(wallet,packLevels[pack.id],pack.name+' packs');
- if(quantity===50)requireLevel(wallet,featureLevel('bulk'),'50-pack pulls');
+ if(quantity==='max'){
+  quantity=Math.min(packAvailability(wallet,pack.id,now).quantity,Math.floor(wallet.coins/pack.price));
+  requireRule(quantity>0,'You need coins and available stock for this pull.');
+ }
  const price=quantity*pack.price;
  requireRule(wallet.coins>=price,'You need more coins for this pull.');
- const pull=rollPacks(pack,quantity,wallet,pools),owned=new Map(records.map(c=>[c.id,c]));
+ spendPackStock(wallet,pack.id,quantity,now);
+ const pull=rollPacks(pack,quantity,wallet,pools);
+ wallet.coins-=price;
+ saveOpening(wallet,records,changes,pull,now);
+}
+
+function awardDemonPull(wallet,records,changes,{banner,quantity},prepared,now){
+ requireRule(!wallet.pending,'Finish your current opening first.');
+ const definition=demonBanners[banner];
+ requireLevel(wallet,definition.level,definition.name+' Demon banner');
+ initDemonKeys(wallet,now);
+ if(quantity==='max')quantity=maxBannerDraws(wallet,banner);
+ requireRule([1,10,50].includes(quantity)||within(quantity,2,49),'You need more Demon Keys for this draw.');
+ if(quantity===50)requireLevel(wallet,featureLevel('bulk'),'50-draw pulls');
+ const keyCost=bannerPrice(banner,quantity);
+ requireRule(wallet.demonKeys>=keyCost,'You need '+keyCost+' Demon Keys for these draws.');
+ const pull=rollDemonBanner(banner,quantity,wallet,prepared);
+ const pities=wallet.demonBanner.pity??={};
+ pities[banner]=pull.pity;
+ wallet.demonKeys-=keyCost;
+ saveOpening(wallet,records,changes,pull,now);
+}
+
+function saveOpening(wallet,records,changes,pull,now){
+ const owned=new Map(records.map(c=>[c.id,c]));
  const holo=new Set(pull.holos),antimatter=new Set(pull.antimatters);
  const newIds=[];
  pull.rows.forEach((row,index)=>{
@@ -78,7 +109,6 @@ function awardPack(wallet,records,changes,pack,quantity,pools,now) {
   entry.last=now;
   changes.set(id,entry);
  });
- wallet.coins-=price;
  wallet.pending={...pull,id:crypto.randomUUID(),opened:0,gemsEarned:0,newIds};
 }
 
@@ -140,8 +170,7 @@ const rules={
    w.tapLimit={at:now,credit:credit-accepted};
    if(accepted<count)retryAfter=Math.ceil((Math.min(mineTapBatch,count-accepted)-w.tapLimit.credit)/refill);
   }
-  const gain=Math.min(Number.MAX_SAFE_INTEGER-w.coins,accepted*mineTapPower(w.mine));
-  w.coins+=gain;
+  const gain=creditMineTaps(w,accepted);
   minePlayerXp(w,accepted,now);
   return {gain,accepted,retryAfter};
  }},
@@ -153,13 +182,13 @@ const rules={
  'mine.skill':{run:({w,args,now})=>{
   requireRule(key(args.id),'Choose a mine skill.');
   buyMineSkill(w,args.id,now);
-  awardPlayerXp(w,10+Math.floor(6*Math.log10(mineSkill(args.id).price)));
+  awardPlayerXp(w,10+Math.floor(6*Math.log10(mineSkill(args.id).price*coinDivisor)));
  }},
  'mine.code':{run:({w,args})=>{requireRule(key(args.code),'Enter a valid code.');return {amount:grantCoinCode(w,args.code)};}},
  'cube.equip':{run:({w,args})=>{
   requireRule(key(args.id),'Choose a cube.');
   const buying=!ownsCube(w,args.id),cube=claimCube(w,args.id);
-  if(buying)awardPlayerXp(w,6+Math.floor(4*Math.log10(cube.price)));
+  if(buying)awardPlayerXp(w,6+Math.floor(4*Math.log10(cube.price*coinDivisor)));
   return {cube};
  }},
  'kingdom.house':{run:({w,args,now})=>{
@@ -208,9 +237,14 @@ const rules={
  'kingdom.construction.finish':{run:({finishedTower,finishedHouses,finishedForges,finishedDefences})=>({tower:finishedTower,houses:finishedHouses,forges:finishedForges,defences:finishedDefences})},
  'pack.buy':{cards:true,prepare:async ({packId,quantity},getPool)=>{
   const pack=packs.find(item=>item.id===packId);
-  requireRule(pack&&packQuantities.includes(quantity),'Choose a valid pack and quantity.');
+  requireRule(pack&&(quantity==='max'||within(quantity,1,packStockLimit)),'Choose between 1 and '+packStockLimit+' packs.');
   return {pack,pools:await allPools(getPool,pack.id==='godly'?cardCategories:difficulties)};
  },run:({w,records,changes,args,prepared,now})=>awardPack(w,records,changes,prepared.pack,args.quantity,prepared.pools,now)},
+ 'demon.keys.buy':{run:({w,args,now})=>buyDemonKeys(w,args,now)},
+ 'demon.pull':{cards:true,prepare:async (args,getPool)=>{
+  requireRule(args.quantity==='max'||[1,10,50].includes(args.quantity),'Choose 1, 10, 50, or Max draws.');
+  return prepareDemonPull(args,getPool);
+ },run:({w,records,changes,args,prepared,now})=>awardDemonPull(w,records,changes,args,prepared,now)},
  'pack.advance':{run:({w,args,now})=>{
   requireRule(key(args.id)&&within(args.opened,0,50),'Choose a valid opening step.');
   const run=w.pending;
@@ -218,7 +252,7 @@ const rules={
   const previous=run.opened;
   run.opened=Math.max(run.opened,Math.min(run.quantity,args.opened));
   if(run.opened>previous){
-   const {xp,capped}=awardPackXp(w,run.packId,run.opened-previous,now);
+   const {xp,capped}=awardPackXp(w,run.packId,run.opened-previous,now,demonBanners[run.banner]?.xp);
    run.playerXpEarned=(run.playerXpEarned||0)+xp;
    if(capped)run.playerXpCappedPacks=(run.playerXpCappedPacks||0)+capped;
   }
@@ -294,6 +328,7 @@ const rules={
   if(battle.status==='won'){
    xp+=campaignReceipt?.first?55+14*tier:22+7*tier;
    if(campaignReceipt?.mastered)xp+=24+7*tier;
+   if(campaignReceipt?.first)campaignReceipt.demonKeys=rewardDemonKeys(w,campaignKeyReward,now);
   }
   awardPlayerXp(w,xp);
  }},
@@ -387,6 +422,7 @@ export async function prepareGameAction(name,args,getPool,hasArt=()=>true){
  const rule=rules[name];
  const prepared=await rule.prepare?.(args,getPool,hasArt);
  return {cards:rule.cards,apply(w,records,changes,now,online){
+  initDemonKeys(w,now);
   const {tower:finishedTower,houses:finishedHouses,forges:finishedForges,defences:finishedDefences}=settleKingdomConstruction(w,now);
   const feature=Object.hasOwn(gatedActions,name)?features[gatedActions[name]]:null;
   if(feature)requireLevel(w,feature.level,feature.name);

@@ -5,18 +5,18 @@ import {gemTenths} from './card-economy.js';
 import {awardPlayerXp} from './player-progression.js';
 import {spikeInvestment,spikeKind,spikePlan,spikePrice} from './kingdom-defences.js';
 
-export const housePrice=50_000;
+export const housePrice=5_000;
 export const houseSize={width:3.15,depth:2.72};
 export const houseHeight=3.26,manorHeight=3.86;
 export const houseEntry={front:1.16,width:1.24,height:1.43,floor:.164};
-export const forgePrice=120_000,forgeWelcomeMana=100,forgeMinimum=5;
-export const gemMine={towerLevel:2,coins:150_000,mana:800,interval:300_000,capacity:20};
+export const forgePrice=12_000,forgeWelcomeMana=100,forgeMinimum=5;
+export const gemMine={towerLevel:2,coins:15_000,mana:800,interval:300_000,capacity:20};
 export const visitorWelcomeMs=20_000;
 export const houseUpgrades=[{mana:30,buildMs:10_000,stars:.02},
- {coins:1_000_000,mana:200,buildMs:30_000,stars:.03,towerLevel:2}];
+ {coins:100_000,mana:200,buildMs:30_000,stars:.03,towerLevel:2}];
 const houseHp=[150,220,310];
 export const houseStars=level=>(30+houseUpgrades.slice(0,level-1).reduce((sum,tier)=>sum+Math.round(tier.stars*100),0))/100;
-export const forgeUpgrade={coins:1_000_000,mana:300,buildMs:30_000,towerLevel:2};
+export const forgeUpgrade={coins:100_000,mana:300,buildMs:30_000,towerLevel:2};
 export const towerUpgradeMana=500;
 const forgeTiers=[{rate:1,capacity:300},{rate:3,capacity:1200}];
 export const manaIcon='/assets/kingdom/mana-orbs.webp';
@@ -28,7 +28,7 @@ export const buildingSpecs={
 };
 export const plotBounds={left:-14,right:14,back:-13,front:14};
 export const lastLandLevel=5;
-const landCost=level=>10_000_000*10**level;
+const landCost=level=>1_000_000*10**level;
 export function kingdomBounds(level=0){
  const scale=Math.sqrt(1.25**level);
  return Object.fromEntries(Object.entries(plotBounds).map(([edge,point])=>[edge,point*scale]));
@@ -45,9 +45,9 @@ export const visitorSlots=[
 ].map(([rarity,stars],slot)=>({slot,rarity,stars}));
 export const maxTowerLevel=3;
 const towerTiers=[
- {limit:2,price:0,hp:1000},{limit:3,price:500_000,mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
- {limit:4,price:1_000_000,mana:2_500,buildMs:180_000,xp:600,hp:2200},
- {limit:13,price:10_000_000,mana:towerUpgradeMana,hp:3000},{limit:17,price:75_000_000,mana:towerUpgradeMana,hp:4000}
+ {limit:2,price:0,hp:1000},{limit:3,price:50_000,mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
+ {limit:4,price:100_000,mana:2_500,buildMs:180_000,xp:600,hp:2200},
+ {limit:13,price:1_000_000,mana:towerUpgradeMana,hp:3000},{limit:17,price:7_500_000,mana:towerUpgradeMana,hp:4000}
 ];
 export const towerExperience=level=>towerTiers[level-1]?.xp||0;
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];

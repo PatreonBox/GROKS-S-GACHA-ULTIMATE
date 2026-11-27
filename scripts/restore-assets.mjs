@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
-import {existsSync,readFileSync,readdirSync} from 'node:fs';
+import {existsSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
+import {gunzipSync} from 'node:zlib';
 
 export function restoreAssets(root) {
  const bundle=new URL('media/',root);
@@ -13,4 +14,6 @@ export function restoreAssets(root) {
  const restored=spawnSync('tar',['-xzf','-','--no-same-owner'],{cwd:root,input:archive,stdio:['pipe','inherit','inherit']});
  if(restored.error)throw restored.error;
  if(restored.status!==0)throw Error('The game asset bundle could not be extracted.');
+ const demons=new URL('demons.json.gz',bundle);
+ if(existsSync(demons))writeFileSync(new URL('web/data/demons.json',root),gunzipSync(readFileSync(demons)));
 }

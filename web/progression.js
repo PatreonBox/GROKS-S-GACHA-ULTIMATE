@@ -25,7 +25,11 @@ function boostLabel({key,percent:amount}){
  return '+'+percent.format(amount)+'% '+achievementBoostLabels[key];
 }
 function rewards(stage){
- return '<span class="achievement-rewards"><b>+'+number.format(stage.xp)+' XP</b><span>'+boostLabel(stage.boost)+'</span></span>';
+ return '<span class="achievement-rewards"><b>+'+number.format(stage.xp)+' XP</b><span>'+boostLabel(stage.boost)+'</span>'+
+  keyReward(stage.keys)+'</span>';
+}
+function keyReward(keys){
+ return keys?'<span class="achievement-keys">+'+number.format(keys)+' Demon '+(keys===1?'Key':'Keys')+'</span>':'';
 }
 function stageState(stage,earned){
  return Object.hasOwn(earned,stage.id)?'<span class="achievement-earned">'+ico('check')+' Earned</span>':'<span class="achievement-unearned">In progress</span>';
@@ -89,7 +93,7 @@ export function createProgression(root){
  }
  function buildAchievementPane(){
   rootPanel.innerHTML='<section class="achievement-library" aria-label="Achievements">'+
-   '<div class="achievement-tools"><div class="achievement-tools-copy"><h2>Achievement badges</h2><p>Each stage awards XP and a permanent boost when earned.</p></div>'+
+   '<div class="achievement-tools"><div class="achievement-tools-copy"><h2>Achievement badges</h2><p>Earn XP, Demon Keys and permanent boosts at each stage.</p></div>'+
    '<div class="achievement-filters" role="group" aria-label="Filter achievements">'+
    filterSelect('category','Category',{all:'All categories',...Object.fromEntries(groups.map(group=>[group,group]))},selection.category)+
    filterSelect('difficulty','Difficulty',{all:'All difficulties',...Object.fromEntries(Object.keys(difficultyFaces).map(label=>[label,label]))},selection.difficulty)+
@@ -196,13 +200,14 @@ export function setupAchievementBanners(sound){
   const unlocked=queue.splice(0,queue.length>3?queue.length:1);
   const item=unlocked.reduce((best,stage)=>stage.xp>best.xp?stage:best,unlocked[0]);
   const xp=unlocked.reduce((total,stage)=>total+stage.xp,0);
+  const keys=unlocked.reduce((total,stage)=>total+(stage.keys||0),0);
   const many=unlocked.length>1,label=many?unlocked.length+' achievement stages earned':'Achievement stage earned';
   const showing=current={since:performance.now()};
-  const payout=many?'<span class="achievement-rewards"><b>+'+number.format(xp)+' XP</b><span>Permanent boosts earned</span></span>':rewards(item);
+  const payout=many?'<span class="achievement-rewards"><b>+'+number.format(xp)+' XP</b><span>Permanent boosts earned</span>'+keyReward(keys)+'</span>':rewards(item);
   banner.innerHTML=badge(item,true)+'<div><small>'+label+'</small><strong>'+item.name+'</strong>'+
    '<span class="achievement-stage-meta">'+difficulty(item)+'<span class="achievement-stage-number">Stage '+item.stage+' of '+item.stageCount+'</span></span>'+
    payout+'</div>'+ico('right');
-  announcement.textContent=label+'. '+item.name+', stage '+item.stage+'. '+xp+' XP earned.';
+  announcement.textContent=label+'. '+item.name+', stage '+item.stage+'. '+xp+' XP'+(keys?' and '+keys+' Demon '+(keys===1?'Key':'Keys'):'')+' earned.';
   banner.dataset.phase='enter';banner.hidden=false;
   if(banner.hasAttribute('popover'))banner.showPopover();
   sound.playGameReady('gdAchievement',{level:.88},()=>current===showing&&banner.dataset.phase==='enter');

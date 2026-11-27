@@ -4,13 +4,15 @@ export const features={
  training:{level:3,name:'Training zone',href:'#battle/training',icon:'spark',detail:'Run drills and strengthen your cards.'},
  arcade:{level:4,name:'Meme levels',href:'#battle/arcade',icon:'flame',detail:'Play short Geometry Dash challenges.'},
  merge:{level:5,name:'Merge station',href:'#gacha/merge',icon:'grid',detail:'Fuse duplicate cards and claim gems.'},
- bulk:{level:7,name:'50-pack pulls',href:'#gacha',icon:'pack',detail:'Open up to 50 packs in one purchase.'},
+ demonSpecial:{level:5,name:'Special Demon banner',href:'#gacha/demon',icon:'spark',detail:'Choose a level to focus with Demon Keys.'},
+ bulk:{level:7,name:'50-draw pulls',href:'#gacha/demon',icon:'pack',detail:'Open 50 Demon Key draws in one purchase.'},
  kingdom:{level:8,name:'Kingdom',href:'#kingdom',icon:'tower',detail:'Build a village and discover visiting creators.'},
  army:{level:8,name:'Army mode',href:'#battle/army',icon:'battle',detail:'Deploy a squad in real-time battles.'},
  cubes:{level:8,name:'Cube shop',href:'#gacha/cubes',icon:'box',detail:'Equip a new cube to roam your Kingdom.'},
- upgrades:{level:11,name:'Gem Upgrades',href:'#gacha/upgrades',icon:'spark',detail:'Improve your card luck and bonus card chance.'},
+ upgrades:{level:10,name:'Gem Upgrades',href:'#gacha/upgrades',icon:'spark',detail:'Improve your card luck and bonus card chance.'},
  trading:{level:15,name:'Trading',href:'#trading',icon:'exchange',detail:'Find players and exchange cards at Level 15.'},
- towerExpansion:{level:15,name:'Tower Level 3',href:'#kingdom',icon:'tower',detail:'Upgrade the Kingdom tower and open a fourth housing lot.'}
+ towerExpansion:{level:15,name:'Tower Level 3',href:'#kingdom',icon:'tower',detail:'Upgrade the Kingdom tower and open a fourth housing lot.'},
+ demonPro:{level:20,name:'Pro Demon banner',href:'#gacha/demon',icon:'pack',detail:'Spend five Demon Keys per draw for higher premium rarity odds.'}
 };
 export const packLevels={common:0,uncommon:0,rare:2,'super-rare':5,epic:8,legendary:14,mythic:20,godly:30};
 const packTitles={rare:'Rare','super-rare':'Super Rare',epic:'Epic',legendary:'Legendary',mythic:'Mythic',godly:'Godly'};

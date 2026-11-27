@@ -8,7 +8,7 @@ import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {updateAchievements} from '../web/progression-rules.js';
 
 function managePlayer(record){
- const {coins}=JSON.parse(record.wallet);
+ const {coins}=normalizeWallet(JSON.parse(record.wallet));
  return {...directoryPlayer(record),coins,bannedAt:record.banned_at};
 }
 

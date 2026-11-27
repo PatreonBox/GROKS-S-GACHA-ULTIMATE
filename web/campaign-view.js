@@ -1,6 +1,7 @@
 import {campaignStages,medalCount,stageFor,stageUnlocked,stageCleared,stageRules,campaignFirstCoins,campaignMasterCoins,campaignFirstMultiplier,campaignRepeatMultiplier} from './campaign.js';
 import {difficulties} from './pack-engine.js';
 import {ico,ratingIcon} from './icons.js';
+import {campaignKeyReward} from './demon-keys.js';
 
 const number=n=>n.toLocaleString('en-US');
 const coin='<img src="/assets/packs/coin.png" alt="">';
@@ -32,7 +33,9 @@ export function campaignView(w,tier,{action,coverSource,face,enc,colors}){
   '<ul class="campaign-rules">'+rules.map(rule=>'<li>'+rule+'</li>').join('')+'</ul>'+
   '<ul class="campaign-goals">'+goals.map(([done,label])=>'<li class="'+(done?'earned':'')+'">'+ratingIcon()+
    '<span>'+label+'</span>'+(done?'<strong>Earned</strong>':'')+'</li>').join('')+'</ul>'+
-  '<div class="campaign-prizes"><span>'+coin+' <b>'+number(clearPrize)+'</b> first clear'+(cleared?' ✓':'')+'</span><span>'+coin+' <b>'+number(masteryPrize)+'</b> 3-star bonus'+(mastered?' ✓':'')+
+  '<div class="campaign-prizes"><span>'+coin+' <b>'+number(clearPrize)+'</b> first clear'+(cleared?' ✓':'')+'</span>'+
+  '<span class="campaign-key-prize">'+ico('demonKey')+' <b>'+campaignKeyReward+' Demon Keys</b> first clear'+(cleared?' ✓':'')+'</span>'+
+  '<span>'+coin+' <b>'+number(masteryPrize)+'</b> 3-star bonus'+(mastered?' ✓':'')+
   '</span><span>'+coin+' <b>'+(cleared?campaignRepeatMultiplier+'×</b> replay bounties':campaignFirstMultiplier+'×</b> bounties on first clear')+'</span></div>'+
   '<div class="campaign-actions">'+action+'</div></div></article><div class="campaign-map" aria-label="Campaign stages">'+map+'</div></div></section>';
 }
@@ -44,5 +47,6 @@ export function campaignOutcome(b){
  const awards=[receipt.first?'First clear':'',receipt.mastered?'3-star mastery':''].filter(Boolean).join(' · ');
  return '<div class="campaign-outcome"><span class="earned-stars" aria-label="'+receipt.medals+' of 3 stars">'+stars+'</span>'+
   '<span>'+b.seq+' / '+stage.turns+' turns · '+receipt.survivors+' / 4 standing</span>'+
-  (receipt.coins?'<strong class="campaign-clear-reward">'+coin+' +'+number(receipt.coins)+' · '+(awards||'Campaign reward')+'</strong>':'')+'</div>';
+  (receipt.coins?'<strong class="campaign-clear-reward">'+coin+' +'+number(receipt.coins)+' · '+(awards||'Campaign reward')+'</strong>':'')+
+  (receipt.demonKeys?'<strong class="campaign-key-prize">'+ico('demonKey')+' +'+number(receipt.demonKeys)+' Demon Keys</strong>':'')+'</div>';
 }

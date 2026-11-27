@@ -1,7 +1,7 @@
 import {createRewardFlight,rewardOrigin} from './reward-flight.js';
 import {cardStations} from './card-stations.js';
 import {stat,extremeTable,extremeOdds,extremeBandOdds,bandNames,stageNames,extremeStage,compareMergeStrength} from './card-economy.js';
-import {packs,packQuantities,difficulties,cardCategories,oddsFor,mostLikelyDifficulty,mythicExtremeCap,godlyExtremeTickets,inventoryOdds,readWallet,readCollection,buyPack,collectMineIncome,redeemCoinCode,advanceOpening,onOtherTab,upgrades,quoteUpgrade,bonusChance,purchaseUpgrade,orderedPull,pool} from './pack-engine.js';
+import {packs,difficulties,cardCategories,oddsFor,mostLikelyDifficulty,mythicExtremeCap,godlyExtremeTickets,inventoryOdds,readWallet,readCollection,buyPack,collectMineIncome,redeemCoinCode,advanceOpening,onOtherTab,upgrades,quoteUpgrade,bonusChance,purchaseUpgrade,orderedPull,pool} from './pack-engine.js';
 import {ico,ratingLabel} from './icons.js';
 import {playRareReveal,prepareRareReveal,revealTier} from './rare-reveal.js';
 import {impossibleCategory,impossibleCover} from './impossible-cards.js';
@@ -26,6 +26,11 @@ import {lockAttributes,lockBadge,lockedPage,setLevelLock} from './level-lock.js'
 import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,skillOwned} from './mine-economy.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
+import {createDemonBannerRoom,demonKeyIcon} from './demon-banner-room.js';
+import {openChestReveal,prepareChestReveal} from './chest-reveal.js';
+import {demonBanners} from './demon-banner.js';
+import {packAvailability,packStockLimit} from './pack-stock.js';
+import {cardRarity,rarityBadge} from './card-rarity.js';
 
 const byId=id=>document.getElementById(id);
 const enc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -45,7 +50,7 @@ const coin='<img class="gd-coin" src="/assets/packs/coin.png" alt="">';
 const faceIcon=label=>'<img class="p-face" src="'+cardFace(label)+'" alt="">';
 const colors=p=>'--foil:'+p.color+';--ink:'+p.dark;
 const setText=(sel,text)=>{const el=byId(sel);if(el)el.textContent=text};
-const tabLinks=[['shop','Pack shop','Shop','pack'],['collection','My cards','Cards','grid'],['index','Card index','Index','list'],['merge','Merge station','Merge','grid'],['mine','Coin mine','Mine','mine'],['upgrades','Upgrades','Upgrades','spark'],['cubes','Cube shop','Cubes','box']];
+const tabLinks=[['banners','Demon Banners','Banners','flame'],['shop','Coin Packs','Packs','pack'],['collection','My cards','Cards','grid'],['index','Card index','Index','list'],['merge','Merge station','Merge','grid'],['mine','Coin mine','Mine','mine'],['upgrades','Gem Upgrades','Gems','spark'],['cubes','Cube shop','Cubes','box']];
 const tabVisit=key=>'gacha-tab-'+key+'-1';
 const plural=n=>n===1?'pack':'packs';
 const visiblePackLimit=10;
@@ -59,7 +64,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  let cards=[],filter='',category='all',collectionPage=0,collectionSort='recent';
  let rarityPack='all',rankedPool=null,rarityLoading=null,rarityFailure=false;
  let run=null,packIndex=0,stage='closed',timers=[],animationId=0,activeRare=null;
+ let chestRun=null,chestScene=null;
  let walletError='',refreshId=0,displayedCoins=-1,savingMine=null;
+ let serverClockOffset=0,stockStamp='';
  let activity=null,activityKey='',activityRequest=0,activityRetryAt=0,acknowledging=0;
  const stopTimers=(keepRare=false)=>{
   animationId++;timers.forEach(clearTimeout);timers=[];
@@ -91,6 +98,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  const progressionRoom=createProgression(root);
  const trade=createTrading(root,{coverSource,syncWallet:sync});
  const coinMine=createCoinMine({sound,rewards,applyWallet,announce,onCode:openCode});
+ const keyLink=byId('demonKeyLink');
+ keyLink.insertAdjacentHTML('afterbegin',demonKeyIcon);
+ const banners=createDemonBannerRoom({sound,applyWallet,begin,preview:pull=>beginChest(pull,true),coverSource,onError:e=>failure(e)});
  const locked=id=>playerLevel<featureLevel(id);
  const kingdomTab=byId('kingdomNew').parentElement;
  const navLocks=[['kingdom',kingdomTab],['trading',byId('tradingTab')],['progression',byId('progressionTab')]];
@@ -113,6 +123,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  function applyWallet(w,{pans=[],credited=0}={}){
   const first=!wallet,oldLuck=wallet?.luck,previousLevel=playerLevel;
   wallet=w;walletError='';refreshId++;
+  if(Number.isFinite(w.kingdomClock))serverClockOffset=w.kingdomClock-Date.now();
   playerLevel=playerProgress(w.playerXp).level;
   if(first||previousLevel!==playerLevel){
    paintNavLocks();
@@ -127,9 +138,14 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(view==='collection'&&collectionSort==='rarity'&&oldLuck!==w.luck&&byId('binderResults'))binder();
   if(first&&!routeLocked&&['merge','index','vault'].includes(view))stations.show(view,w);battle.setWallet(w);army.setWallet(w);
   coinMine.setWallet(w);
+  banners.setWallet(w);
+  const keys=w.demonKeys||0;
+  byId('demonKeyCount').textContent=headerAmount(keys);
+  keyLink.setAttribute('aria-label',number(keys)+' Demon Keys. Open Key Shop');
+  keyLink.title=number(keys)+' Demon Keys';
   refreshCoins(true,pans,credited);
-  byId('gemLink').title=number(w.gems)+' gems'+(locked('upgrades')?' · Upgrades at Level '+featureLevel('upgrades'):'');
-  byId('gemLink').setAttribute('aria-label',byId('gemLink').title+(locked('upgrades')?'':'. Open upgrades'));
+  byId('gemLink').title=number(w.gems)+' gems'+(locked('upgrades')?' · Gem Upgrades at Level '+featureLevel('upgrades'):'');
+  byId('gemLink').setAttribute('aria-label',byId('gemLink').title+(locked('upgrades')?'':'. Open Gem Upgrades'));
   if(view==='upgrades'&&!routeLocked)renderUpgrades();
   if(view==='results')resultsPage();
   refreshActivity();
@@ -193,6 +209,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(document.hidden)return;
   refreshCoins();
   refreshPackXp();
+  if(view==='shop')updateStock();
+  banners.tick();
   kingdom.tick();
   refreshActivity();
   if(wallet?.mine?.collectedAt&&Date.now()-wallet.mine.collectedAt>=mineCheckpointMs)checkpointMine();
@@ -248,12 +266,12 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   }).catch(()=>{if(request===activityRequest){activityKey='';activityRetryAt=Date.now()+15000;}});
  }
  function sectionNav(){
-  return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short,icon])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'?'aria-current="page"':'')+' href="#gacha'+(key==='shop'?'':'/'+key)+'">'+ico(icon)+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small>'+
+  return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short,icon])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'||['keys','banner-test'].includes(view)&&key==='banners'?'aria-current="page"':'')+' href="#gacha'+(key==='banners'?'':key==='shop'?'/packs':'/'+key)+'">'+ico(icon)+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small>'+
    (featureLevel(key)?lockBadge(featureLevel(key),locked(key)):'')+'</a>').join('')+'</nav>';
  }
  function page(next,packId){
-  if(view!==next){stopTimers();rewards.clear()}
-  stations.leave();coinMine.leave();trade.leave();progressionRoom.leave();version++;view=next;routePack=packId;
+  if(view!==next){closeChest();stopTimers();rewards.clear()}
+  banners.leave();stations.leave();coinMine.leave();trade.leave();progressionRoom.leave();version++;view=next;routePack=packId;
   const progression=['progression','achievements'].includes(next),feature=progression?'progression':next;
   routeLocked=locked(feature);
   const classic=['battle','campaign','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom',trading=next==='trading';
@@ -281,6 +299,11 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const destination=next==='vault'?'index':next;
   if(tabLinks.some(([key])=>key===destination))markGuide(tabVisit(destination));
   root.innerHTML='<div class="arc-heading"><h1>Gacha</h1><div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div></div><div id="arcBody"></div>';
+  if(['banners','keys','banner-test'].includes(view)){
+   const owner=!byId('openAdminTools').hidden;
+   banners.show(byId('arcBody'),view,wallet,owner);
+   if(view==='banner-test'&&owner)banners.openTest();
+  }
   if(['index','merge','vault'].includes(view))stations.show(view,wallet);
   if(view==='results'){root.innerHTML='<div id="arcBody"></div>';resultsPage();window.scrollTo(0,0);bestSound()}
   if(view==='shop'){
@@ -308,16 +331,15 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const shelf=packs.map(p=>{
    const needed=packLevels[p.id];
    return '<button class="pack-choice" data-choose="'+p.id+'" aria-pressed="'+(p===pack)+'"'+lockAttributes(needed,playerLevel)+
-    ' style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small></span>'+
+    ' style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small><small class="pack-stock-chip" data-pack-stock="'+p.id+'"></small></span>'+
     (needed?lockBadge(needed,playerLevel<needed):'')+'</button>';
   }).join('');
-  const quantityButtons=packQuantities.map(q=>'<button data-qty="'+q+'">'+q+' '+plural(q)+' <small data-pack-size="'+q+'">'+5*q+' cards</small>'+
-   (q===50?lockBadge(featureLevel('bulk'),locked('bulk')):'')+'</button>').join('');
+  const quantityButtons=[1,10,'max'].map(q=>'<button type="button" data-qty="'+q+'">'+(q==='max'?'Max stock':q+' '+plural(q))+' <small data-pack-size="'+q+'"></small></button>').join('');
   byId('arcBody').innerHTML='<div class="pack-shelf" role="group" aria-label="Choose a gacha pack">'+shelf+'</div>'+
    '<div class="shop-display" style="'+colors(pack)+'"><div class="foil-stage" id="foilStage"><div class="pack-scene-caption" id="packSceneCaption" hidden></div><div class="package-float" id="previewPile"></div><div class="turn-handle" role="group" tabindex="0"></div><div class="turn-tools"><span>Drag to rotate</span><button data-reset-view aria-label="Reset pack rotation">Reset view</button></div></div>'+
-   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' BOOSTER PACK</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+quantityButtons+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per eligible pack</div><p class="pack-xp-allowance" id="packXpAllowance" title="All pack tiers share this rolling 60-minute allowance."></p><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
+   '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' COIN PACKS</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><p class="pack-stock-detail" id="packStockDetail"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+quantityButtons+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per eligible pack</div><p class="pack-xp-allowance" id="packXpAllowance" title="All pack tiers share this rolling 60-minute allowance."></p><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
    '<section class="odds-panel" style="'+colors(pack)+'"><div class="odds-heading"><h3>Difficulty odds</h3>'+(pack.id==='godly'?'<span>Includes an exclusive ??? slot.</span>':pack.id==='mythic'?'<span>Extreme Demon chance caps at '+mythicExtremeCap+'%.</span>':'')+'<a id="luckStatus" class="luck-link" href="#gacha/upgrades"></a></div><p class="pull-odds-note">Each card rolls a difficulty, then a level and a finish.</p><div class="odds-groups" id="oddsTable"></div><details class="rank-odds"><summary>Extreme Demon rank odds per card</summary><div id="rankOdds"></div></details></section>';
-  updatePurchase();bindTurntable(byId('foilStage'));
+  stockStamp='';updatePurchase();bindTurntable(byId('foilStage'));
  }
  function previewArtwork(stage,odds,category){
   if(stage.dataset.sceneTier===category)return;
@@ -404,40 +426,56 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  function updatePurchase(){
   const buy=byId('buyPack');if(!buy)return;
   refreshPackXp();
-  if(quantity===50&&locked('bulk'))quantity=1;
   for(const el of root.querySelectorAll('[data-choose]'))setLevelLock(el,packLevels[el.dataset.choose],playerLevel);
   setLevelLock(byId('luckStatus'),featureLevel('upgrades'),playerLevel);
   renderOdds();
-  const bonus=bonusChance(wallet?.bonus||0)>0;
-  for(const label of root.querySelectorAll('[data-pack-size]')){
-   const q=Number(label.dataset.packSize);
-   label.textContent=5*q+(bonus?'–'+6*q:'')+' cards';
+  updateStock(true);
+ }
+ function updateStock(force=false){
+  const buy=byId('buyPack');if(!buy)return;
+  const now=Date.now()+serverClockOffset,availability=packAvailability(wallet,selected.id,now);
+  const time=Math.max(0,Math.ceil((availability.nextAt-now)/1000));
+  const stock=packs.map(p=>packAvailability(wallet,p.id,now).quantity);
+  const maximum=Math.min(availability.quantity,Math.floor(Math.max(0,displayedCoins)/selected.price));
+  const count=quantity==='max'?maximum:quantity,bonus=bonusChance(wallet?.bonus||0)>0;
+  const stamp=[stock.join(','),time,count,quantity,bonus,displayedCoins,busy,wallet?.pending?.id,playerLevel,walletError].join('/');
+  if(!force&&stamp===stockStamp)return;
+  stockStamp=stamp;
+  for(const [i,p] of packs.entries()){
+   const label=root.querySelector('[data-pack-stock="'+p.id+'"]');
+   label.textContent=stock[i]+' / '+packStockLimit+' in stock';
+   label.closest('button').dataset.stockEmpty=String(stock[i]===0);
   }
-  const cost=quantity*selected.price,pending=wallet?.pending;
+  byId('packStockDetail').textContent=availability.quantity+' / '+packStockLimit+' packs in stock'+(time?' · Next in '+time+'s':' · Restocks 1 pack per minute');
+  for(const label of root.querySelectorAll('[data-pack-size]')){
+   const size=label.dataset.packSize==='max'?maximum:Number(label.dataset.packSize);
+   label.textContent=5*size+(bonus?'–'+6*size:'')+' cards';
+  }
+  const cost=count*selected.price,pending=wallet?.pending;
   const preview=byId('previewPile');
-  const peak=byId('oddsTable').dataset.peak,previewKey=quantity+'-'+peak;
+  const peak=byId('oddsTable').dataset.peak,previewKey=count+'-'+peak;
   if(preview&&preview.dataset.size!==previewKey){
    preview.dataset.size=previewKey;
-   const visible=Math.min(quantity,visiblePackLimit);
+   const visible=Math.max(1,Math.min(count,visiblePackLimit));
    preview.innerHTML=Array.from({length:visible},(_,i)=>'<span class="preview-layer" style="--i:'+i+';z-index:'+(visible-i)+'">'+wrapper(selected,5,peak)+'</span>').reverse().join('');
   }
   for(const el of root.querySelectorAll('[data-qty]')){
-   const count=Number(el.dataset.qty);
-   el.setAttribute('aria-pressed',String(count===quantity));
-   if(count===50)setLevelLock(el,featureLevel('bulk'),playerLevel);
+   const size=el.dataset.qty==='max'?maximum:Number(el.dataset.qty);
+   el.setAttribute('aria-pressed',String(el.dataset.qty===String(quantity)));
+   el.disabled=busy||!size||size>availability.quantity;
   }
   const requirement=packLevels[selected.id],lockedPack=playerLevel<requirement;
-  buy.disabled=busy||!wallet||(!pending&&(lockedPack||cost>displayedCoins));
+  buy.disabled=busy||!wallet||(!pending&&(lockedPack||!count||count>availability.quantity||cost>displayedCoins));
   buy.innerHTML=busy?'Preparing cards…':pending?'Resume opening':lockedPack?ico('lock')+' Unlocks at Level '+requirement:
-   'Pull '+quantity+' '+plural(quantity)+'<span>'+coin+number(cost)+'</span>';
+   'Pull '+count+' '+plural(count)+'<span>'+coin+number(cost)+'</span>';
   byId('buyHint').innerHTML=walletError?enc(walletError):!wallet?'Loading wallet…':pending?'Your purchased cards are saved.':
-   lockedPack?'Reach Level '+requirement+' for '+selected.name+' packs.':cost>displayedCoins?'You need '+number(cost-displayedCoins)+' more coins. '+
+   lockedPack?'Reach Level '+requirement+' for '+selected.name+' packs.':count>availability.quantity?'Wait for more stock or choose a smaller pull.':!count||cost>displayedCoins?'You need more coins. '+
     (locked('mine')?'Earn coins in Battle mode.':'<a href="#gacha/mine">Visit the mine</a>'):'';
  }
  async function purchase(){
   if(busy||!wallet)return;
   if(wallet.pending){begin(wallet.pending);sound.play('stack');return}
-  if(playerLevel<packLevels[selected.id]||quantity===50&&locked('bulk'))return;
+  if(playerLevel<packLevels[selected.id]||byId('buyPack')?.disabled)return;
   busy=true;updatePurchase();
   try{const w=await buyPack(selected,quantity);applyWallet(w);if(view==='shop'){begin(w.pending);sound.play('buy')}}
   catch(e){failure(e);await sync()}
@@ -475,11 +513,11 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const finishes=(holo||antimatter)?'<span class="finish-labels">'+
    (antimatter?'<span class="antimatter-label">◈ Antimatter'+(antimatterCopies?' ×'+antimatterCopies:'')+'</span>':'')+
    (holo?'<span class="holo-label">✧ Holo'+(holoCopies?' ×'+holoCopies:'')+'</span>':'')+'</span>':'';
-  const byline=author?'by '+author:secret?'Impossible Levels List':'by Unknown';
-  return '<button class="level-card '+finishClass(shownFinish)+(secret?' impossible-card':'')+(top?' pinnacle-card':'')+(bonus?' bonus-card':'')+(fresh?' new-pull':'')+'" data-card="'+id+'" style="--card-color:'+commonColors[tier]+';--order:'+index+'">'+
+  const byline=author?'by '+author:secret?'Impossible Levels List':'by Unknown',rarity=cardRarity(row);
+  return '<button class="level-card '+finishClass(shownFinish)+(secret?' impossible-card':'')+(top?' pinnacle-card':'')+(bonus?' bonus-card':'')+(fresh?' new-pull':'')+'" data-card="'+id+'" data-card-rarity="'+rarity.id+'" style="--card-color:'+commonColors[tier]+';--order:'+index+'">'+
    '<span class="card-art"><img class="art-face" src="'+cardFace(diff)+'" alt=""><img class="scene-shot" loading="'+(deal?'eager':'lazy')+'" src="'+enc(art)+'" data-id="'+id+'" alt="">'+
    '<span class="card-stats">'+rank+'</span>'+finishes+(bonus?'<span class="bonus-tag">'+gem+'Bonus</span>':'')+(copies?'<span class="card-copies">×'+copies+'</span>':'')+'</span>'+
-   '<span class="card-type">'+faceIcon(diff)+enc(diff)+'</span><strong>'+enc(title)+'</strong><small>'+enc(byline)+'</small>'+caption+
+   '<span class="card-type">'+faceIcon(diff)+enc(diff)+'</span><strong>'+enc(title)+'</strong><small>'+enc(byline)+'</small>'+rarityBadge(rarity)+caption+
    (drawChance&&drawChance.percent!==null?'<small class="draw-chance">'+(drawChance.percent>0?
     '<span>'+enc(rarityLabel(drawChance))+'</span> <b>'+rarityValue(drawChance)+'</b>':
     drawChance.percent===0?'Unavailable from this pack':'')+'</small>':'')+
@@ -543,11 +581,77 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  }
  function begin(pending){
   if(!pending)return;
+  if(pending.banner){beginChest(pending);return}
   run=pending;packIndex=pending.opened;stage='sealed';stopTimers();
   preparePullOdds(pending).then(()=>{
    if(run===pending)prepareRareReveal(pullCards(pending),sound);
   });
   if(!reveal.open)reveal.showModal();drawReveal();
+ }
+ function closeChest(){
+  if(!chestScene)return;
+  chestRun=null;
+  chestScene.close();chestScene=null;
+  activeRare?.scene.close();activeRare=null;
+ }
+ function beginChest(pull,test=false){
+  if(!pull?.rows.length)return;
+  closeChest();stopTimers();prepareChestReveal();
+  if(reveal.open)reveal.close();
+  const opening={pull,test,index:pull.opened||0,seenRare:new Set()};
+  chestRun=opening;
+  drawChest(opening);
+ }
+ function drawChest(opening){
+  const {pull,index,test}=opening;
+  const hand=pullCards(pull,index);
+  const cards=hand.map(item=>({html:card(item.row,{deal:true,fresh:item.fresh,bonus:item.bonus,finish:item.finish,drawChance:test?null:item}),
+   title:item.row[1],rarity:cardRarity(item.row)}));
+  prepareRareReveal(hand,sound);
+  chestScene=openChestReveal({
+   tier:pull.banner,cards,step:index+1,total:pull.quantity,sound,toggleSound,observeArt,
+   onClose:()=>{
+    if(chestRun!==opening)return;
+    closeChest();banners.setWallet(wallet);
+    if(view==='shop')updatePurchase();
+   },
+   onCard:async i=>{
+    const item=hand[i],scene=openRare(item,{hold:true});
+    if(scene){opening.seenRare.add(item.drawIndex);await scene.done}
+    else landPull(item,i,0);
+   },
+   advance:()=>advanceChest(opening,false),
+   onSkip:()=>advanceChest(opening,true)
+  });
+ }
+ async function advanceChest(opening,skip){
+  if(opening!==chestRun)return;
+  const {pull,index,test}=opening;
+  if(test){
+   if(skip){
+    const best=(pull.forcedLevelId?pullCards(pull).find(item=>item.drawIndex===0&&revealTier(item.percent)):null)||rarestHighlight(pull);
+    if(best&&!opening.seenRare.has(best.drawIndex))await openRare(best)?.done;
+   }
+   if(opening===chestRun)closeChest();
+   return;
+  }
+  try{
+   const next=await advanceOpening(pull.id,skip?pull.quantity:index+1);
+   applyWallet(next);
+   if(opening!==chestRun)return;
+   if(next.pending?.id===pull.id){
+    chestScene.close();opening.index=next.pending.opened;
+    drawChest(opening);
+    return;
+   }
+   if(skip&&next.lastPull?.id===pull.id){
+    const best=rarestHighlight(pull);
+    if(best&&!opening.seenRare.has(best.drawIndex))await openRare(best)?.done;
+   }
+   if(opening!==chestRun)return;
+   closeChest();
+   location.hash='#gacha/results';
+  }catch(error){failure(error)}
  }
  function preparePullOdds(pull){
   if(pull.drawPercents||(pull.oddsVersion??1)<2||rankedPool||!pull.rows.some(row=>row[6]==='Extreme Demon'))return Promise.resolve();
@@ -594,6 +698,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   const entries=pullCards(last),best=entries[0],counts=new Map();
   for(const item of entries)counts.set(item.row[6],(counts.get(item.row[6])||0)+1);
   const p=packs.find(v=>v.id===last.packId),bonuses=entries.filter(x=>x.bonus).length;
+  const banner=demonBanners[last.banner],openingName=banner?banner.name+' Demon Banner':p.name+' Gacha';
+  const unit=banner?'draw':'pack',packCount=last.quantity+' '+unit+(last.quantity===1?'':'s');
+  const shopLink=banner?'#gacha':'#gacha/packs';
   const bestRank=best.tier===10&&best.row[10]?'#'+number(best.row[10])+' ':best.tier>10?'ILL #'+best.row[10]+' ':'';
   const rare=entries.map((item,i)=>({item,i})).filter(x=>revealTier(x.item.percent));
   prepareRareReveal(rare.map(({item})=>item),sound);
@@ -601,13 +708,14 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    rare.map(({item,i})=>'<option value="'+i+'">'+enc(item.row[1]+' · '+rarityLabel(item)+' · '+rarityValue(item))+'</option>').join('')+'</select>':'')+
    '<button class="outline" data-rare-replay>'+ico('spark')+' Replay rare reveal</button></div>':
    '<button class="sound-replay" data-encore>'+ico('volume')+' Replay best pull sound</button>';
-  body.innerHTML='<section class="result-sheet" style="'+colors(p)+'"><div class="result-hero"><div class="result-emblem"><img src="'+packArt(p)+'" alt=""></div><div><div class="pack-meta">'+p.name.toUpperCase()+' GACHA</div><h1>Opened '+last.quantity+' '+plural(last.quantity)+'</h1><p>Rarest pull <b>'+bestRank+enc(best.row[1])+'</b> · '+enc(best.row[6])+'</p>'+replay+'</div><div class="result-metrics"><b>'+last.rows.length+'</b><span>cards collected</span></div></div>'+
+  body.innerHTML='<section class="result-sheet" style="'+colors(p)+'"><div class="result-hero"><div class="result-emblem">'+(banner?demonKeyIcon:'<img src="'+packArt(p)+'" alt="">')+'</div><div><div class="pack-meta">'+openingName+'</div><h1>Opened '+packCount+'</h1><p>Rarest pull <b>'+bestRank+enc(best.row[1])+'</b> · '+enc(best.row[6])+' '+rarityBadge(cardRarity(best.row))+'</p>'+replay+'</div><div class="result-metrics"><b>'+last.rows.length+'</b><span>cards collected</span></div></div>'+
    '<div class="result-rewards">'+(Array.isArray(last.newIds)?'<strong>✦ '+last.newIds.length+' new levels</strong>':'')+(last.playerXpEarned?'<span>'+ico('spark')+' +'+number(last.playerXpEarned)+' player XP</span>':'')+
    (last.playerXpCappedPacks?'<span class="capped-pack-xp">'+last.playerXpCappedPacks+' '+plural(last.playerXpCappedPacks)+' over the hourly XP limit</span>':'')+
    (last.gemsEarned?'<span>'+gem+' +'+last.gemsEarned+' gems</span>':'')+(last.holos?.length?'<span>✧ '+last.holos.length+' holo</span>':'')+(last.antimatters?.length?'<span class="antimatter-label">◈ '+last.antimatters.length+' Antimatter</span>':'')+(bonuses?'<span>+'+bonuses+' bonus '+(bonuses===1?'card':'cards')+'</span>':'')+'</div>'+
    '<div class="result-counts">'+[...counts].map(([d,n])=>'<span>'+faceIcon(d)+enc(d)+' <b>×'+n+'</b></span>').join('')+'</div>'+
-   '<p class="pull-odds-note">Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,drawChance:item})).join('')+'</div>'+
-   '<div class="result-actions"><a class="outline" href="#gacha/collection">My cards</a><a class="primary" href="#gacha">Continue</a></div></section>';
+   '<p class="pull-odds-note">'+(banner?'Per card at player Level '+(last.playerLevelAtPurchase??0)+' with +'+(last.luckAtPurchase??0)+'% Luck. '+(last.guarantees?.length?last.guarantees.length+' pity guarantees applied. ':'')+'Foil odds include the finish roll.':
+    'Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.')+'</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,drawChance:item})).join('')+'</div>'+
+   '<div class="result-actions"><a class="outline" href="#gacha/collection">My cards</a><a class="primary" href="'+shopLink+'">Continue</a></div></section>';
  }
  function lastHandShown(){return stage==='shown'&&packIndex+1===run.quantity}
  function revealActions(){
@@ -763,7 +871,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(b.hasAttribute('data-encore')){sound.stop();bestSound();return}
   if(b.dataset.upgrade){upgrade(b.dataset.upgrade,b.dataset.upgradeMode==='max'?'max':Number(b.dataset.upgradeMode));return}
   if(b.dataset.choose){if(selected.id!==b.dataset.choose){selected=packs.find(p=>p.id===b.dataset.choose);shop();}return}
-  if(b.dataset.qty){if(quantity!==Number(b.dataset.qty))sound.play('stack');quantity=Number(b.dataset.qty);updatePurchase();return}
+  if(b.dataset.qty){
+   const next=b.dataset.qty==='max'?'max':Number(b.dataset.qty);
+   if(quantity!==next)sound.play('stack');quantity=next;updatePurchase();return
+  }
   if(b.id==='buyPack'){purchase();return}
   if('rareReplay'in b.dataset&&view==='results'&&wallet?.lastPull){
    const item=pullCards(wallet.lastPull)[Number(byId('rareReplayPick')?.value||0)];

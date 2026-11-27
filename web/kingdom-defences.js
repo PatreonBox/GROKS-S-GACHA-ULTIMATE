@@ -1,12 +1,12 @@
 export const spikeKind='spike-shooter';
 export const spikeIcon='/assets/training/spike.webp';
-export const spikePrice=80_000;
+export const spikePrice=8_000;
 export const spikeDamage=[10,15,22,28,36];
 const spikeHp=[200,250,320,410];
 const spikeUpgrades=[
  {towerLevel:1,coins:0,mana:30,buildMs:10_000},
- {towerLevel:2,coins:120_000,mana:100,buildMs:20_000},
- {towerLevel:3,coins:300_000,mana:200,buildMs:30_000}
+ {towerLevel:2,coins:12_000,mana:100,buildMs:20_000},
+ {towerLevel:3,coins:30_000,mana:200,buildMs:30_000}
 ];
 
 export function spikePlan(building,now=Date.now()){

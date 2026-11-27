@@ -1,0 +1,45 @@
+[data-card-rarity="common"]{--rarity-color:#aeb9cf}
+[data-card-rarity="uncommon"]{--rarity-color:#8ad6ae}
+[data-card-rarity="rare"]{--rarity-color:#84c8ff}
+[data-card-rarity="epic"]{--rarity-color:#c4a0ff}
+[data-card-rarity="legendary"]{--rarity-color:#ffd47a;--rarity-reflection:#fff0b3}
+[data-card-rarity="mythic"]{--rarity-color:#ff9aab;--rarity-reflection:#ffc1ca}
+[data-card-rarity="ancient"]{--rarity-color:#f0ae7a;--rarity-reflection:#ffdc9e}
+[data-card-rarity="exotic"]{--rarity-color:#76e9cf;--rarity-reflection:#9bffe8}
+[data-card-rarity="celestial"]{--rarity-color:#b5b5ff;--rarity-reflection:#d9e7ff}
+[data-card-rarity="secret"]{--rarity-color:#ed90f1;--rarity-reflection:#ffc1f4}
+[data-card-rarity="divine"]{--rarity-color:#ffebae;--rarity-reflection:#fff9df}
+[data-card-rarity="apex"]{--rarity-color:#ff9d84;--rarity-reflection:#fff1bb}
+[data-card-rarity="impossible"]{--rarity-color:#e6c1ff;--rarity-reflection:#b898ff}
+
+.card-rarity{
+ display:inline-flex;align-items:center;align-self:flex-start;justify-content:center;gap:4px;flex:none;width:max-content;max-width:100%;
+ padding:2px 6px;border-radius:4px;border:1px solid color-mix(in srgb,var(--rarity-color) 54%,#242039);
+ background:linear-gradient(120deg,color-mix(in srgb,var(--rarity-color) 17%,#141727),#151827);
+ color:var(--rarity-color);font:750 .68rem/1.15 Barlow,system-ui,sans-serif;letter-spacing:.015em;white-space:nowrap;
+}
+.card-rarity::before{
+ content:"";width:5px;height:5px;flex:none;transform:rotate(45deg);border-radius:1px;background:var(--rarity-color);
+}
+:where(.card-art,.combat-art,.trade-card-art)>.card-rarity{
+ z-index:3;
+}
+:is(.level-card,.fighter.full-card,.merge-result,.trade-card)[data-card-rarity]:not(.holo-card,.antimatter-card,[data-finish="holo"],[data-finish="antimatter"]),
+.profile-best-card[data-card-rarity][data-finish="standard"] :is(.profile-card-face,.profile-card-back){
+ border-color:color-mix(in srgb,var(--rarity-color) 70%,#333849);
+}
+:is(.level-card,.fighter.full-card,.trade-card):is([data-card-rarity="legendary"],[data-card-rarity="mythic"],[data-card-rarity="ancient"],[data-card-rarity="exotic"],[data-card-rarity="celestial"],[data-card-rarity="secret"],[data-card-rarity="divine"],[data-card-rarity="apex"],[data-card-rarity="impossible"]){
+ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rarity-reflection) 28%,transparent),
+  0 0 12px color-mix(in srgb,var(--rarity-color) 18%,transparent);
+}
+:is(.level-card,.fighter.full-card,.trade-card):is([data-card-rarity="divine"],[data-card-rarity="apex"],[data-card-rarity="impossible"]):not(.holo-card,.antimatter-card,[data-finish="holo"],[data-finish="antimatter"]){
+ outline:1px solid color-mix(in srgb,var(--rarity-reflection) 44%,transparent);outline-offset:-4px;
+}
+:is(.level-card,.fighter.full-card,.trade-card)[data-card-rarity]:focus-visible{
+ outline:2px solid #fff4fc;outline-offset:2px;
+}
+.profile-card-face>span:first-child{align-items:center}
+.profile-card-face .card-rarity{display:inline-flex;line-height:1.15;color:var(--rarity-color)}
+.profile-card-details>.card-rarity{margin:0 0 5px}
+.index-name>.card-rarity,.merge-result>.card-rarity{margin-top:4px}
+.merge-result li .card-rarity{font-size:.65rem;flex:none}

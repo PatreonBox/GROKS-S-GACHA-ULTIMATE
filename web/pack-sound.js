@@ -41,6 +41,9 @@ const gameCues={
  uiTap:[[0,.13],'select','ui','ui']
 };
 const slideRates=[.94,.99,1.04,1.10,1.16,1.23];
+const chestMixes=new Set(['legendary','mythic','ancient','exotic','celestial','secret','divine','apex','impossible']);
+const chestSource=rarity=>'/reveal-media/chests/'+rarity+'.mp3';
+const chestAccents={uncommon:['star',.18],rare:['star',.36],epic:['elite',.48]};
 
 const channels={
  select:'menu',inspect:'menu',stack:'menu',buy:'pack',tear:'pack',sweep:'paper',
@@ -51,12 +54,12 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,rareMusic:1,rareBed:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,rareMusic:1,rareBed:1,chest:1};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
  const gameBuffers=new Map(),gameLoading=new Map(),gameFiles=new Map();
- let stopRare=null;
+ let stopRare=null,chestVersion=0;
  let mineCount=0,generation=0,lastMine=-Infinity,lastMint=-Infinity,failedAt=-Infinity,cueSerial=0;
  const synths=new Set(),voices=new Set(),waiting=new Map(),accents=new Set();
  try{enabled=localStorage.getItem('gdlb.packSound')!=='off'}catch{}
@@ -90,7 +93,7 @@ export function createPackSound(){
  function fadeOut(voice){
   if(voice.stopping)return;
   voice.stopping=true;
-  const now=ctx.currentTime,end=now+(['rareMusic','rareBed'].includes(voice.lane)?.095:.014);
+  const now=ctx.currentTime,end=now+(['rareMusic','rareBed','chest'].includes(voice.lane)?.095:.014);
   const level=voice.gain.gain;
   if(typeof level.cancelAndHoldAtTime==='function')level.cancelAndHoldAtTime(now);
   else{level.cancelScheduledValues(now);level.setValueAtTime(level.value,now)}
@@ -109,6 +112,7 @@ export function createPackSound(){
  }
  function silence(keepAchievement=false){
   stopScore();
+  chestVersion++;
   accents.forEach(clearTimeout);accents.clear();waiting.clear();
   for(const v of synths)v.stop();
   synths.clear();for(const voice of voices)if(!keepAchievement||voice.lane!=='achievement')fadeOut(voice);
@@ -178,6 +182,35 @@ export function createPackSound(){
  }
  const playRevealTrack=(src,offset,seconds)=>playRevealClip(src,offset,seconds,'rareMusic',.58);
  const playRevealBed=(src,offset,seconds)=>playRevealClip(src,offset,seconds,'rareBed',.66);
+ function stopChestAudio(){
+  chestVersion++;
+  for(const voice of voices)if(voice.lane==='chest')fadeOut(voice);
+ }
+ function prepareChestRarity(rarity){
+  const id=String(rarity).toLowerCase();
+  if(chestMixes.has(id))return prepareRevealTrack(chestSource(id));
+ }
+ function playChestRarity(rarity){
+  const id=String(rarity).toLowerCase();
+  if(!enabled||document.hidden)return;
+  stopChestAudio();
+  if(!chestMixes.has(id)){
+   if(Object.hasOwn(chestAccents,id)){
+    const [cue,level]=chestAccents[id];
+    play(cue,{level});
+   }
+   return;
+  }
+  const src=chestSource(id),version=chestVersion,started=performance.now();
+  const ready=()=>{
+   const offset=(performance.now()-started)/1000,track=gameBuffers.get(src);
+   if(!enabled||document.hidden||version!==chestVersion||offset>.55||ctx?.state!=='running')return;
+   if(track&&track.duration>offset)emitClip(track,[offset,track.duration-offset],'chest',1,0,.77);
+   else play('extreme',{level:.43});
+  };
+  const loading=prepareRevealTrack(src);
+  if(loading)loading.then(ready);else ready();
+ }
  function playGame(name,{rate=1,pan=0,level=1}={}){
   if(!enabled||!ctx||document.hidden||!Object.hasOwn(gameCues,name))return;
   const [clip,fallback,lane,bank='arcade']=gameCues[name];
@@ -287,5 +320,5 @@ export function createPackSound(){
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll()});
  window.addEventListener('pagehide',stopAll);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed,prepareChestRarity,playChestRarity,stopChestAudio};
 }

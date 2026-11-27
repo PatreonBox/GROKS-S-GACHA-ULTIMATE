@@ -3,27 +3,28 @@ import {pickExtreme,extremeOdds,compareMergeStrength,mergeGems,extremeTable,gemT
 import {impossibleCategory,impossibleCount,impossibleTier,impossiblePercent} from './impossible-cards.js';
 import {finishVersion,finishPercent,rollFinish,bestFinish,finishAt,finishOrder} from './card-finishes.js';
 import {gameRead,gameCommand} from './game-client.js';
+import {normalizeCoinWallet} from './coin-economy.js';
 export {onOtherTab} from './game-client.js';
 
 export const difficulties=['Auto','Easy','Normal','Hard','Harder','Insane','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'];
 export const cardCategories=[...difficulties,impossibleCategory];
 // Percentages follow the same Auto-to-Extreme order as difficulties.
 export const packs=[
- {id:'common',name:'Common',price:100,color:'#82eddf',dark:'#144c58',
+ {id:'common',name:'Common',price:10,color:'#82eddf',dark:'#144c58',
   base:[40,30,18,8,3,.88,.115,.005,0,0,0]},
- {id:'uncommon',name:'Uncommon',price:1500,color:'#adf06a',dark:'#365730',
+ {id:'uncommon',name:'Uncommon',price:150,color:'#adf06a',dark:'#365730',
   base:[5,15,26,28,17,8.5,.47,.03,0,0,0]},
- {id:'rare',name:'Rare',price:20000,color:'#65baff',dark:'#1c477e',
+ {id:'rare',name:'Rare',price:2000,color:'#65baff',dark:'#1c477e',
   base:[.25,1.75,5,20,30,35,7,1,0,0,0]},
- {id:'super-rare',name:'Super Rare',price:250000,color:'#ef97ff',dark:'#603278',
+ {id:'super-rare',name:'Super Rare',price:25000,color:'#ef97ff',dark:'#603278',
   base:[0,0,0,0,2,8,58,31.95,.05,0,0]},
- {id:'epic',name:'Epic',price:2000000,color:'#ffcb65',dark:'#805124',
+ {id:'epic',name:'Epic',price:200000,color:'#ffcb65',dark:'#805124',
   base:[0,0,0,0,0,1,7,57,34.95,.05,0]},
- {id:'legendary',name:'Legendary',price:10000000,color:'#b3ecff',dark:'#504389',
+ {id:'legendary',name:'Legendary',price:1000000,color:'#b3ecff',dark:'#504389',
   base:[0,0,0,0,0,0,.5,5.5,63,30.95,.05]},
- {id:'mythic',name:'Mythic',price:200000000,color:'#ff97bc',dark:'#842954',
+ {id:'mythic',name:'Mythic',price:20000000,color:'#ff97bc',dark:'#842954',
   base:[0,0,0,0,0,0,0,0,2,88,10]},
- {id:'godly',name:'Godly',price:3000000000,color:'#ffedaa',dark:'#8a652e',
+ {id:'godly',name:'Godly',price:300000000,color:'#ffedaa',dark:'#8a652e',
   base:[0,0,0,0,0,0,0,0,0,0,100]},
 ];
 
@@ -58,7 +59,7 @@ export function normalizeWallet(wallet){
   wallet.gems=(gemTenths(wallet.gems||0)+upgradeTenths(cap,retired))/10;
   wallet.bonus=cap;
  }
- return wallet;
+ return normalizeCoinWallet(wallet);
 }
 export function quoteUpgrade(key,level,gems,mode=1){
  const max=upgrades[key]?.max||0,remaining=Math.max(0,max-level),budget=gemTenths(gems);
@@ -195,7 +196,7 @@ export function randomBelow(limit){
  return word[0]%limit;
 }
 export function rollPacks(pack,quantity,wallet,pools,random=randomBelow){
- if(!packs.includes(pack)||!packQuantities.includes(quantity))throw Error('Choose 1, 10, or 50 packs.');
+ if(!packs.includes(pack)||!Number.isSafeInteger(quantity)||quantity<1||quantity>50)throw Error('Choose a valid pack quantity.');
  const odds=oddsFor(pack,wallet.luck),bonus=Math.round(bonusChance(wallet.bonus)*100);
  const referenceTickets=godlyExtremeTickets(wallet.luck);
  const rows=[],sizes=[],holos=[],antimatters=[],drawPercents=[];
@@ -241,7 +242,7 @@ export const mergeDuplicates = (options={}) => resultFrom('card.merge',options);
 export function grantCoinCode(wallet,code){
  if(code.trim().toLowerCase()!=='john')throw Error('Unknown code.');
  if(wallet.redeemedCodes?.john)throw Error('You’ve already redeemed john.');
- const amount=Math.min(49_999_999,Math.max(10_000,Math.floor(wallet.coins/10)),Number.MAX_SAFE_INTEGER-wallet.coins);
+ const amount=Math.min(4_999_999,Math.max(1_000,Math.floor(wallet.coins/10)),Number.MAX_SAFE_INTEGER-wallet.coins);
  if(!amount)throw Error('Your coin balance is full.');
  wallet.redeemedCodes??={};wallet.redeemedCodes.john=true;
  wallet.coins+=amount;
@@ -267,12 +268,13 @@ export function orderedPull(run,packIndex=null,legacyExtremes){
   const fresh=newIds.delete(row[0]);
   if(i<offset||i>=offset+count)return;
   const tier=cardCategories.indexOf(row[6]),holo=holos.has(i),finish=antimatters.has(i)?'antimatter':holo?'holo':'standard';
-  const difficultyPercent=odds[tier]?.percent,usesRank=tier===11||(tier===10&&rankVersion>=2);
+  const difficultyPercent=run.drawDifficultyPercents?.[i]??odds[tier]?.percent,usesRank=tier===11||(tier===10&&rankVersion>=2);
   const exact=usesRank?(run.drawPercents?.[i]??cardDrawPercent(row,legacyExtremes,difficultyPercent,{
    finish,finishOddsVersion,version:rankVersion,reference
   })):null;
-  entries.push({row,tier,drawIndex:i,bonus:bonuses.has(i),holo,fresh,
-   ...rarityOdds(row,difficultyPercent,finish,exact,finishOddsVersion)});
+  const drop=rarityOdds(row,difficultyPercent,finish,exact,finishOddsVersion);
+  if(run.banner&&!usesRank&&Number.isFinite(run.drawRarityPercents?.[i]))drop.percent=run.drawRarityPercents[i]*(finish==='standard'?1:finishPercent(finish,finishOddsVersion)/100);
+  entries.push({row,tier,drawIndex:i,bonus:bonuses.has(i),holo,fresh,...drop});
  });
  return entries.sort((a,b)=>{
   const rarity=(a.percent||Infinity)-(b.percent||Infinity);

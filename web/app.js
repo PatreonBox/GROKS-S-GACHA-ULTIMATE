@@ -15,6 +15,7 @@ import {sectionGuideId} from './section-guides.js';
 import {setupLevelUps} from './level-up.js';
 import {setupAchievementBanners} from './progression.js';
 import {levelMarketDetails} from './trade-card-view.js';
+import {cardRarity,indexCardRanks,rarityBadge} from './card-rarity.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=n=>n==null?'—':Number(n).toLocaleString('en-US');
@@ -295,7 +296,7 @@ function showDetails(id,uuid){
  if(r[6]==='Extreme Demon'&&!r[15])stats.push(['AREDL',d?.status==='MainList'?'#'+num(d.position):d?.status==='Legacy'?'Legacy':'—']);
  else if(tierLevel||r[15])stats.push(['GDDL tier',r[11]!=null?formatRating(r[11]):'Unscored']);
  if(meta?.rankSource&&r[12]>0)stats.push([meta.rankSource+' rank','#'+num(r[12])]);
- $('detail').innerHTML='<div class="detail-cover">'+cover(id,true)+'</div><div class="modalbody"><div class="sectionline"><span></span>LEVEL DETAILS</div><h2 id="modalTitle">'+esc(r[1])+'</h2><div class="modalmeta">'+badge(r[6])+'<span>by '+esc(author(r))+'</span></div>'+(r[14]?'<p class="rank-note">'+esc(r[14])+'</p>':'')+'<div class="stats">'+stats.map(([k,v])=>'<div class="stat"><small>'+k+'</small><strong>'+(k==='Stars'||k==='Moons'?ratingLabel(r[7],k==='Moons'):esc(v))+'</strong></div>').join('')+'</div>'+(d?.tags?.length?'<div class="tags">'+d.tags.slice(0,8).map(x=>'<span>'+esc(x)+'</span>').join('')+'</div>':'')+'<div class="detailactions"><button class="primary" id="copyId">'+ico('copy')+'Copy level ID</button><button class="outline" data-save="'+id+'"></button><a class="outline" href="https://history.geometrydash.eu/level/'+id+'" target="_blank" rel="noopener">GDHistory '+ico('external')+'</a>'+(meta?.rankUrl&&r[12]>0?'<a class="outline" href="'+esc(meta.rankUrl)+'" target="_blank" rel="noopener">'+esc(meta.rankSource)+' '+ico('external')+'</a>':'')+(r[13]?'<a class="outline" href="https://www.youtube.com/watch?v='+esc(r[13])+'" target="_blank" rel="noopener">Watch verification '+ico('external')+'</a>':'')+'</div></div>';refreshSaves();openModal();
+ $('detail').innerHTML='<div class="detail-cover">'+cover(id,true)+'</div><div class="modalbody"><div class="sectionline"><span></span>LEVEL DETAILS</div><h2 id="modalTitle">'+esc(r[1])+'</h2><div class="modalmeta">'+badge(r[6])+(cardTiers.includes(r[6])?rarityBadge(cardRarity(r)):'')+'<span>by '+esc(author(r))+'</span></div>'+(r[14]?'<p class="rank-note">'+esc(r[14])+'</p>':'')+'<div class="stats">'+stats.map(([k,v])=>'<div class="stat"><small>'+k+'</small><strong>'+(k==='Stars'||k==='Moons'?ratingLabel(r[7],k==='Moons'):esc(v))+'</strong></div>').join('')+'</div>'+(d?.tags?.length?'<div class="tags">'+d.tags.slice(0,8).map(x=>'<span>'+esc(x)+'</span>').join('')+'</div>':'')+'<div class="detailactions"><button class="primary" id="copyId">'+ico('copy')+'Copy level ID</button><button class="outline" data-save="'+id+'"></button><a class="outline" href="https://history.geometrydash.eu/level/'+id+'" target="_blank" rel="noopener">GDHistory '+ico('external')+'</a>'+(meta?.rankUrl&&r[12]>0?'<a class="outline" href="'+esc(meta.rankUrl)+'" target="_blank" rel="noopener">'+esc(meta.rankSource)+' '+ico('external')+'</a>':'')+(r[13]?'<a class="outline" href="https://www.youtube.com/watch?v='+esc(r[13])+'" target="_blank" rel="noopener">Watch verification '+ico('external')+'</a>':'')+'</div></div>';refreshSaves();openModal();
  if(cardTiers.includes(r[6]))levelMarketDetails($('detail'),id);
  if(cardTiers.includes(r[6]))Promise.all([readWallet(),r[6]==='Extreme Demon'?cardPool(r[6]).catch(()=>[]):[]]).then(([w,extremes])=>{
   if(!dlg.open||currentDetails!==r)return;
@@ -310,7 +311,7 @@ function showSecretDetails(row){
  const id=row[0],gdId=row[16],stats=statsFor(row);
  $('detail').innerHTML='<div class="detail-cover"><img class="shot" src="'+impossibleCover(id)+'" alt=""></div><div class="modalbody secret-detail">'+
   '<div class="sectionline"><span></span>SECRET VAULT · ILL #'+row[10]+'</div><h2 id="modalTitle">'+esc(row[1])+'</h2>'+
-  '<div class="modalmeta"><img class="face" src="/assets/impossible/mark.webp" alt="">Impossible'+(row[2]?'<span>by '+esc(row[2])+'</span>':'')+'</div>'+
+  '<div class="modalmeta"><img class="face" src="/assets/impossible/mark.webp" alt="">'+rarityBadge(cardRarity(row))+(row[2]?'<span>by '+esc(row[2])+'</span>':'')+'</div>'+
   '<section class="level-combat-stats"><h3>Battle stats</h3><div><span>HP <b data-secret-hp>'+cardNum(stats.maxHp)+'</b></span><span>Attack <b data-secret-atk>'+cardNum(stats.attack)+'</b></span></div></section>'+
   '<div class="detailactions"><a class="outline" href="https://impossiblelevels.com/" target="_blank" rel="noopener">Impossible Levels List '+ico('external')+'</a>'+
   (gdId?'<a class="outline" href="https://history.geometrydash.eu/level/'+gdId+'" target="_blank" rel="noopener">Level ID '+gdId+' '+ico('external')+'</a>':'')+'</div></div>';
@@ -363,6 +364,7 @@ async function start(){
  try{
   const session=await gameSession();
   if(session.banned||session.requiresSignIn&&!session.signedIn)return;
+  const cardRanks=cardPool('Extreme Demon').then(indexCardRanks).catch(()=>{});
   setGuideProgress(session.wallet.guideSeen,id=>gameCommand('guide.seen',{id},null).catch(()=>{}));
   guides=createSectionGuides($('gameGuide'));
   arcade=createPackRoom({
@@ -371,6 +373,7 @@ async function start(){
    openLevel:row=>{storeRows([row]);showDetails(row[0])},
    announce,onGuide:guides.select,
   });
+  await Promise.race([cardRanks,new Promise(resolve=>setTimeout(resolve,1500))]);
   init();
  }catch(error){
   $('gameGateLoading').hidden=true;

@@ -1,12 +1,15 @@
 import {achievementVersion,updateAchievements} from '../web/progression-rules.js';
 import {normalizeWallet} from '../web/pack-engine.js';
+import {coinEconomyVersion} from '../web/coin-economy.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {one,reject} from './game-http.mjs';
+import {initDemonKeys} from '../web/demon-keys.js';
 
 export const needsAchievementSeed=wallet=>wallet.achievementProgress?.version!==achievementVersion;
 const olderBattleWins=wallet=>Object.keys(wallet.campaign||{}).length+Object.values(wallet.remixWins||{}).reduce((sum,wins)=>sum+wins,0);
 
 export async function seedAchievements(db,player,wallet,now,records){
+ initDemonKeys(wallet,now);
  if(!needsAchievementSeed(wallet))return;
  const progress=wallet.achievementProgress??={};
  const cardRows=records??(await db.prepare('SELECT card FROM game_cards WHERE player_id=?').bind(player).all())
@@ -24,7 +27,9 @@ export async function refreshAchievementWallet(db,record,now=Date.now()){
  for(let attempt=0;attempt<4;attempt++){
   if(!record)reject('Reload the page to reconnect to your save.',401);
   if(record.banned_at!==null)reject('This account is banned from GD Kingdom.',403,{banned:true});
-  const wallet=normalizeWallet(JSON.parse(record.wallet)),seed=needsAchievementSeed(wallet);
+  const prior=JSON.parse(record.wallet),coinMigration=(prior.coinEconomyVersion||0)<coinEconomyVersion;
+  const wallet=normalizeWallet(prior),seed=needsAchievementSeed(wallet);
+  const keyMigration=initDemonKeys(wallet,now);
   const originalXp=wallet.achievementRewardXp||0;
   let visitors=0;
   if(seed)await seedAchievements(db,record.player_id,wallet,now);
@@ -34,7 +39,7 @@ export async function refreshAchievementWallet(db,record,now=Date.now()){
   }
   const changed=(wallet.achievementRewardXp||0)!==originalXp;
   // Untouched brand-new profiles only need the migration the first time they play.
-  if(!changed&&(!seed||record.revision===0))return {wallet,saveRevision:record.revision};
+  if(!coinMigration&&!keyMigration&&!changed&&(!seed||record.revision===0))return {wallet,saveRevision:record.revision};
   const {meta}=await db.prepare(`UPDATE game_profiles SET wallet=?,revision=revision+1,updated_at=?,ranking_xp=?
    WHERE player_id=? AND owner=? AND revision=? AND banned_at IS NULL`)
    .bind(JSON.stringify(wallet),now,wallet.playerXp||0,record.player_id,record.owner,record.revision).run();

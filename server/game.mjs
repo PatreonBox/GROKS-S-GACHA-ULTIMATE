@@ -1,4 +1,5 @@
 import {cardCategories,difficulties,createCardPool,mergeBlocked,normalizeWallet} from '../web/pack-engine.js';
+import {coinEconomyVersion,normalizeCoinReceipt} from '../web/coin-economy.js';
 import {newWallet,prepareGameAction} from '../web/game-rules.js';
 import {campaignStages,stageCleared} from '../web/campaign.js';
 import {mineEarnings,settleMine} from '../web/mine-economy.js';
@@ -16,6 +17,8 @@ import {trading} from './trading.mjs';
 import {trainingLevels,updateAchievements} from '../web/progression-rules.js';
 import {achievementActionEvents,refreshAchievementWallet,seedAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
+import {demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
+import {initDemonKeys} from '../web/demon-keys.js';
 
 const guestCookie='__Host-gdlb-save';
 const cookieLifetime=60*60*24*365;
@@ -148,7 +151,7 @@ async function commit(db,{owner,record,wallet,changes,requestId,result,now,power
  }
  statements.push(
   db.prepare(`INSERT OR IGNORE INTO game_requests(player_id,request_id,result,created_at)
-   SELECT ?,?,?,? WHERE ${guard}`).bind(id,requestId,JSON.stringify(result),now,id,version,writeId),
+   SELECT ?,?,?,? WHERE ${guard}`).bind(id,requestId,JSON.stringify({coinEconomyVersion,result}),now,id,version,writeId),
   db.prepare('DELETE FROM game_requests WHERE player_id=? AND created_at<?').bind(id,now-receiptLifetime)
  );
  const [change]=await db.batch(statements);
@@ -196,6 +199,22 @@ function finishAdminConstruction(wallet,now){
  return settleKingdomConstruction(wallet,now);
 }
 
+async function previewDemonPull(db,session,args,getPool){
+ const record=await profile(db,session.owner,false);
+ if(!record)reject('Open the game to start your save.',401);
+ if(record.banned_at!==null)reject(banMessage,403,{banned:true});
+ const wallet=JSON.parse(record.wallet);
+ try{
+  const {banner,quantity=1}=args;
+  if(![1,10,50].includes(quantity))throw Error('Choose 1, 10, or 50 test draws.');
+  const prepared=await prepareDemonPull(args,getPool,{preview:true});
+  const pull=rollDemonBanner(banner,quantity,wallet,prepared);
+  const forcedLevelId=prepared.force?pull.rows[0][0]:undefined;
+  return {wallet:visibleWallet(normalizeWallet(wallet)),saveRevision:record.revision,
+   result:{pull:{...pull,id:'preview-'+crypto.randomUUID(),opened:0,newIds:[],gemsEarned:0,preview:true,forcedLevelId}}};
+ }catch(error){reject(error instanceof TypeError?'Choose a valid Demon banner preview.':error.message);}
+}
+
 async function play(db,session,{action,args,requestId},getPool,hasArt,administrator){
  const testing=action==='admin.kingdom.finish';
  const admin=action==='admin.adjust'||action==='admin.reset'||testing;
@@ -216,15 +235,21 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    if(!current)reject('Reload the page to reconnect to your save.',401);
    if(current.banned_at!==null)reject(banMessage,403,{banned:true});
    const saved=await refreshAchievementWallet(db,current);
-   return {...saved,wallet:visibleWallet(saved.wallet),result:JSON.parse(previous.result)};
+   const receipt=JSON.parse(previous.result);
+   const result=receipt?.coinEconomyVersion===coinEconomyVersion?receipt.result:normalizeCoinReceipt(action,receipt);
+   return {...saved,wallet:visibleWallet(saved.wallet),result};
   }
   const changes=new Map(),now=Date.now();
   const trainingVersion=wallet.trainingRevision,battleWasActive=wallet.battle?.status==='active',trainingAction=['card.feed','drill.finish'].includes(action);
   let result,records;
   if(reset){
-   const legacyTransfer=wallet.legacyTransfer;
+   const legacyTransfer=wallet.legacyTransfer,demonBanner=wallet.demonBanner;
    wallet=newWallet();
    if(legacyTransfer)wallet.legacyTransfer=legacyTransfer;
+   if(demonBanner){
+    wallet.demonKeys=0;
+    wallet.demonBanner={offerEndsAt:demonBanner.offerEndsAt,starterOfferBought:demonBanner.starterOfferBought};
+   }else initDemonKeys(wallet,now);
    result={reset:true};
   }else if(admin){
    await seedAchievements(db,record.player_id,wallet,now);
@@ -402,7 +427,14 @@ export function gameRoutes(readJson,hasArt){
     return await standings(request,db,session,chatgpt,adminOwner,requiresSignIn,request.method==='GET'&&view==='trading');
    }
    if(isTransfer)return json({...await transferSave(db,session,await readBody(request,maxTransferBody),getPool),...account});
-   if(request.method==='POST')return json({...await play(db,session,await readBody(request),getPool,hasArt,admin),...account});
+   if(request.method==='POST'){
+    const body=await readBody(request);
+    if(body.action==='admin.demon.preview'){
+     if(!admin)reject('Admin tools are unavailable for this account.',403);
+     return json({...await previewDemonPull(db,session,body.args,getPool),...account});
+    }
+    return json({...await play(db,session,body,getPool,hasArt,admin),...account});
+   }
    const record=await profile(db,session.owner,initial);
    if(!record)reject('Open the game to start your save.',401);
    if(view==='wallet'){
@@ -411,6 +443,12 @@ export function gameRoutes(readJson,hasArt){
    }
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
+   if(view==='demon-targets'){
+    const category=url.searchParams.get('category');
+    const impossible=url.searchParams.get('impossible')==='1'||category==='Impossible';
+    if(impossible&&!admin)reject('Admin tools are unavailable for this account.',403);
+    return json({rows:await demonTargetSearch(getPool,url.searchParams.get('q')||'',{category,impossible})});
+   }
    if(view==='gacha-activity')return json({activity:await gachaActivity(db,record)});
    if(view==='profile')return json({profile:await profileStats(db,record,await getCollectibleIds(),{adminOwner,discordOnly:requiresSignIn,admin})});
    reject('Unknown save view.');

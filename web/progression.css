@@ -98,6 +98,7 @@
 .achievement-rewards>b,.achievement-rewards>span{border-radius:4px;padding:2px 5px;font-weight:760;line-height:1.25}
 .achievement-rewards>b{color:#f8dfab;background:#493621}
 .achievement-rewards>span{color:#c0f4e2;background:#1c3c3a}
+.achievement-rewards>.achievement-keys{color:#f2c9ff;background:#452b59}
 .achievement-earned{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:#a9efd1;font-size:.73rem;font-weight:780}
 .achievement-earned svg{width:13px;height:13px}
 .achievement-stages{border-top:1px solid #3b3b54}

@@ -6,6 +6,7 @@ import {levelRewardTenths,extremeTable,mergeRoutes,mergeGems} from './card-econo
 
 import {rewardOrigin} from './reward-flight.js';
 import {fusionPairHTML,playFusion} from './fusion-show.js';
+import {cardRarity,displayCardRank,rarityBadge} from './card-rarity.js';
 
 export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,openLevel,announce}){
  let current=null,all=[],pools=[],wallet=null,revision=0,category=0,filter='',status='all',page=0,selected=0,busy=false;
@@ -105,7 +106,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
   return '<div class="index-list">'+records.slice(page*24,page*24+24).map(row=>{
    const id=row[0],c=own.get(id),claimed=c?.indexReward!==undefined,units=valueFor(t,row),value=claimed?c.indexReward:gems(units);
    const reward=c&&!claimed&&units?'<button class="level-claim" data-claim="'+id+'" aria-label="Claim '+value+' gems for '+enc(row[1])+'">'+gem+'Claim '+value+'</button>':'<span class="level-yield">'+gem+value+(claimed?' · Claimed':units?' gems':' gems')+'</span>';
-   return '<article class="index-entry '+(c?'found':'missing')+'"><button class="index-name" data-inspect-level="'+id+'"><b>'+enc(row[1])+'</b><small>'+(t===10?'#'+row[10]:ratingLabel(row[7],row[8]==='Platformer'))+' · '+(c?(c.everAntimatter?'◈ Antimatter found':c.everHolo?'✧ Holo found':'Discovered'):'Undiscovered')+'</small></button>'+reward+'</article>';
+   return '<article class="index-entry '+(c?'found':'missing')+'"><button class="index-name" data-inspect-level="'+id+'"><b>'+enc(row[1])+'</b><small>'+(t===10?'#'+row[10]:ratingLabel(row[7],row[8]==='Platformer'))+' · '+(c?(c.everAntimatter?'◈ Antimatter found':c.everHolo?'✧ Holo found':'Discovered'):'Undiscovered')+'</small>'+rarityBadge(cardRarity(row))+'</button>'+reward+'</article>';
   }).join('')+'</div>'+(records.length?'':'<p>No matching levels.</p>')+(pages>1?'<div class="station-paging"><button class="outline" data-leaf="-1" '+(!page?'disabled':'')+'>Previous</button> '+(page+1)+' / '+pages+' <button class="outline" data-leaf="1" '+(page+1>=pages?'disabled':'')+'>Next</button></div>':'');
  }
  function index(){
@@ -140,13 +141,14 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
  function mergeReceipt(previous){
   if(!previous)return '';
   const count=previous.count||1,highlight=previous.highlights||[],finish=savedFinish(previous);
-  return '<section class="merge-result '+finishClass(finish)+'"><small>'+
+  const rarity=cardRarity(previous.row),rank=displayCardRank(previous.row);
+  return '<section class="merge-result '+finishClass(finish)+'" data-card-rarity="'+rarity.id+'"><small>'+
    (count>1?count.toLocaleString('en-US')+' PAIRS MERGED':'LAST MERGE')+'</small><h3>'+enc(previous.row[1])+'</h3>'+
    '<p>'+enc(previous.from)+' → '+enc(previous.row[1])+' · '+enc(previous.row[6])+
-   (previous.row[10]?' #'+previous.row[10]:'')+(finish==='standard'?'':' · '+finishLabels[finish])+'</p>'+
+   (rank?' #'+rank:'')+(finish==='standard'?'':' · '+finishLabels[finish])+'</p>'+rarityBadge(rarity)+
    '<strong class="merge-gems">'+gem+'+'+previous.gems.toLocaleString('en-US')+' '+(previous.gems===1?'gem':'gems')+'</strong>'+
    (count>1?'<details><summary>Best results'+(previous.promotions?' · '+previous.promotions+' promoted':'')+'</summary><ul>'+
-    highlight.map(item=>'<li>'+faceIcon(item.row[6])+'<span>'+enc(item.row[1])+(savedFinish(item)==='standard'?'':' · '+finishLabels[savedFinish(item)])+'</span><b>×'+item.count+'</b></li>').join('')+'</ul></details>':'')+'</section>';
+    highlight.map(item=>'<li>'+faceIcon(item.row[6])+'<span>'+enc(item.row[1])+(savedFinish(item)==='standard'?'':' · '+finishLabels[savedFinish(item)])+'</span>'+rarityBadge(cardRarity(item.row))+'<b>×'+item.count+'</b></li>').join('')+'</ul></details>':'')+'</section>';
  }
  function merge(){
   const duplicates=all.filter(x=>x.copies>=2&&x.row[6]!==impossibleCategory).sort(strongestMergeFirst);

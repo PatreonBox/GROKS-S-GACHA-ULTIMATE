@@ -11,8 +11,8 @@ import {skillsFor,technique,hasOpening,signatureCost,remainingCooldown,trainingO
 import {allyEffects,castConditions,effectTargets} from './signature-rules.js';
 
 export const arenas=[
- [40,200],[320,640],[1200,2000],[6000,10000],[20000,36000],
- [40000,80000],[140000,260000],[300000,500000],[1200000,2000000],[4000000,32000000]
+ [4,20],[32,64],[120,200],[600,1000],[2000,3600],
+ [4000,8000],[14000,26000],[30000,50000],[120000,200000],[400000,3200000]
 ];
 export const combatStatsVersion=2;
 const titles=['Runner','Striker','Sentinel'];

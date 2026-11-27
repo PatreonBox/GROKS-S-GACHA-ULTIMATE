@@ -12,10 +12,10 @@ export function packXpAllowance(wallet,now=Date.now()){
  };
 }
 
-export function awardPackXp(wallet,packId,count,now){
+export function awardPackXp(wallet,packId,count,now,perDraw=packPlayerXp(packId)){
  const recent=recentPackOpenings(wallet,now);
  const packs=Math.min(count,packXpLimit-recent.length);
- const xp=packs*packPlayerXp(packId);
+ const xp=packs*perDraw;
  if(xp>0){
   wallet.packXpOpenings=recent.concat(Array(packs).fill(now));
   awardPlayerXp(wallet,xp);

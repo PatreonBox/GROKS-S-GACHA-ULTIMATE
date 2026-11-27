@@ -24,7 +24,10 @@ export function readRoute(hash) {
   if (page === 'trading') return {section:'trading',tier:'trading'};
   if (page === 'cubes') return {section:'gacha',tier:'cubes'};
   if (page==='gacha'&&Object.hasOwn(packLevels,slug))return {section:'gacha',tier:'shop',pack:slug};
-  if (page === 'gacha') return {section: 'gacha', tier: ['mine','collection','upgrades','results','index','merge','vault','cubes'].includes(slug) ? slug : 'shop'};
+  if (page === 'gacha'){
+    if(slug==='packs'||slug==='shop')return {section:'gacha',tier:'shop'};
+    return {section:'gacha',tier:['mine','collection','upgrades','results','index','merge','vault','cubes','keys','banner-test'].includes(slug)?slug:'banners'};
+  }
   if (page === 'stars') return {section: 'stars', tier: Object.hasOwn(starTiers, slug) ? slug : 'auto'};
   const section = ['demons', 'leaderboard', 'saved'].includes(page) ? page : 'leaderboard';
   return {section, tier: Object.hasOwn(tierNames, slug) ? slug : 'extreme'};

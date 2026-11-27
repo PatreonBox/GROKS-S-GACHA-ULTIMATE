@@ -11,9 +11,17 @@ export const sectionGuides={
   ['Choose a demon tier','Browse Easy through Extreme Demons. Extreme Demons show their AREDL placements.'],
   ['Narrow it down','Search a level or creator. Use the format and sort controls to find the type of level you want.']
  ]},
- 'pack-shop':{title:'Pack shop',art:'/assets/packs/common.png',steps:[
-  ['Open a Common pack','A new save starts with 1,500 coins and 10 gems. A Common pack costs 100 coins and deals at least five cards.'],
-  ['Compare the packs','Select a pack to see its difficulty odds. Buy one, ten, or fifty at a time, then reveal your cards.']
+ 'demon-banners':{title:'Demon Banners',art:'/assets/faces/demon-extreme.webp',steps:[
+  ['Start with 30 Demon Keys','Open the Standard chest with one Demon Key, then flip its five cards. Earn more keys from campaign first clears and achievement stages.'],
+  ['Unlock stronger banners','At Level 5, Special lets you feature a level. At Level 20, Pro costs five keys and has twenty times the Legendary-and-higher odds.'],
+  ['Check the guarantees','Each banner tracks its own progress toward Legendary or better at 150 draws and Mythic or better at 600.']
+ ]},
+ 'demon-key-shop':{title:'Demon Key Shop',art:'/assets/packs/gem.png',steps:[
+  ['Trade gems for keys','Buy a Demon Key for 10 gems. The one-time starter offer gives you 50 keys for 20 gems during your first 24 hours.']
+ ]},
+ 'pack-shop':{title:'Coin Packs',art:'/assets/packs/common.png',steps:[
+  ['Open a Common pack','A Common pack costs 10 coins and deals at least five cards. Different packs have their own difficulty odds and stock.'],
+  ['Watch the stock','Each pack type stores up to 20 packs, or 100 base cards, and refills by one pack per minute, even while you’re away.']
  ]},
  'pack-results':{title:'Pack results',art:'/assets/packs/common.png',steps:[
   ['Check your new cards','Each pull shows its difficulty and rarity. Holo and Antimatter finishes have their own odds.'],
@@ -28,7 +36,7 @@ export const sectionGuides={
   ['Claim gems','Collect the one-time gem reward for each discovered level with an available claim. Harder levels award more gems.']
  ]},
  'secret-vault':{title:'Secret vault',art:'/assets/impossible/mark.webp',steps:[
-  ['Discover Impossible cards','Godly packs can reveal a hidden level. A vault entry shows its identity after you discover it.'],
+  ['Discover Impossible cards','Demon Banners and Godly coin packs can reveal a hidden level. A vault entry shows its identity after you discover it.'],
   ['Check your collection','Return here to see which secrets you’ve uncovered.']
  ]},
  'merge-station':{title:'Merge station',art:'/assets/packs/gem.png',steps:[
@@ -40,7 +48,7 @@ export const sectionGuides={
   ['Upgrade your mine','Spend coins on the skill tree to increase production. Your machines can build up five hours of earnings while you’re away.']
  ]},
  'gem-upgrades':{title:'Gem upgrades',art:'/assets/packs/gem.png',steps:[
-  ['Spend your gems','Card luck improves difficulty rolls. Extra card increases the chance of drawing an additional card in a pack.'],
+  ['Spend your gems at Level 10','Gacha Luck improves natural pull odds. Extra Gacha Card increases the chance of receiving a sixth card in a draw.'],
   ['Choose a purchase size','Check the cost before buying one level, ten levels, or the most you can afford.']
  ]},
  'cube-shop':{title:'Cube shop',art:'/assets/cubes/01.webp',steps:[
@@ -56,7 +64,7 @@ export const sectionGuides={
  'battle-campaign':{title:'Battle campaign',art:'/assets/faces/demon-extreme.webp',steps:[
   ['Build a squad of four','Choose four different cards from your collection. Start at the earliest unlocked campaign stage.'],
   ['Plan your moves','Read enemy intent. Basic attacks build charge. Spend it on signature moves or interrupt a dangerous cast.'],
-  ['Clear the objectives','Win to unlock the next stage. Each stage shows its medal goals and rewards.']
+  ['Clear the objectives','Win to unlock the next stage and receive 10 Demon Keys on the first clear. Each stage shows its medal goals and rewards.']
  ]},
  'battle-arenas':{title:'Battle arenas',art:'/assets/faces/demon-hard.webp',steps:[
   ['Choose a difficulty','Equip four cards and choose an arena. Stronger opponents award more coins.'],
@@ -84,7 +92,7 @@ export const sectionGuides={
  ]},
 };
 
-const gachaGuides={shop:'pack-shop',collection:'my-cards',index:'card-index',vault:'secret-vault',
+const gachaGuides={banners:'demon-banners',keys:'demon-key-shop',shop:'pack-shop',collection:'my-cards',index:'card-index',vault:'secret-vault',
  merge:'merge-station',mine:'coin-mine',upgrades:'gem-upgrades',results:'pack-results',cubes:'cube-shop'};
 const battleGuides={easy:'battle-arenas',campaign:'battle-campaign',army:'army-mode',training:'training-zone',arcade:'meme-levels'};
 const mainGuides={leaderboard:'level-leaderboard',stars:'star-levels',demons:'demon-lists',kingdom:'kingdom',saved:'saved-levels'};

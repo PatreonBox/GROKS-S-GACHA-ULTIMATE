@@ -55,7 +55,6 @@
 .trade-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,185px),1fr));gap:9px;align-items:start}
 .trade-side .trade-card-grid,.trade-receipt-side .trade-card-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,155px),1fr))}
 .trade-card{--card-edge:#55748e;position:relative;min-width:0;overflow:hidden;border:1px solid var(--card-edge);border-radius:9px;background:#101523;box-shadow:0 4px 12px #090d1855}
-.trade-card[data-tier="9"]{--card-edge:#a34774}.trade-card[data-tier="10"]{--card-edge:#b88c49}.trade-card[data-tier="11"]{--card-edge:#986ae2}
 .trade-card-art{position:relative;display:grid;place-items:center;isolation:isolate;min-height:70px;aspect-ratio:2.15;background:linear-gradient(145deg,#21283d,#151823);overflow:hidden}
 .trade-card-art img{width:38px;height:38px;object-fit:contain}
 .trade-card-art [data-trade-cover]{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}

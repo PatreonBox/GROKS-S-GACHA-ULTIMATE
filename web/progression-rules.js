@@ -5,19 +5,21 @@ import {spikeKind,spikePlan} from './kingdom-defences.js';
 import {campaignStages,medalCount,stageCleared} from './campaign.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {awardPlayerXp} from './player-progression.js';
+import {rewardDemonKeys} from './demon-keys.js';
 
 export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js';
 export const achievementVersion=2;
 export const achievementXp={Easy:20,Normal:45,Hard:70,Harder:85,Insane:100,Demon:150};
 const difficultyNames=Object.keys(achievementXp);
 const boostPercents=[.1,.15,.2,.25,.35,.5];
+const achievementKeys={Easy:1,Normal:2,Hard:3,Harder:4,Insane:5,Demon:7};
 const format=new Intl.NumberFormat('en-US');
 const n=value=>format.format(value);
 const plural=(count,singular,plural=singular+'s')=>count===1?singular:plural;
 
 function achievement({id,group,name,stat,symbol,color,href,icon},boost,targets,describe,legacyStage=targets.length){
  const stages=targets.map(([goal,difficulty],i)=>({
-  id:i+1===legacyStage?id:id+':'+(i+1),stage:i+1,goal,difficulty,xp:achievementXp[difficulty],
+  id:i+1===legacyStage?id:id+':'+(i+1),stage:i+1,goal,difficulty,xp:achievementXp[difficulty],keys:achievementKeys[difficulty],
   boost:{key:boost,percent:boostPercents[difficultyNames.indexOf(difficulty)]},description:describe(goal)
  }));
  const last=stages.at(-1);
@@ -64,9 +66,9 @@ const land=goal=>'Purchase '+n(goal)+' Kingdom '+plural(goal,'land expansion')+'
 
 export const achievements=[
  ...achievementsForCards,
- track('Coin mine','mine-100','Pocket Change','mine',[[20,'Easy'],[50,'Easy'],[100,'Normal']],mineRateGoal),
- track('Coin mine','mine-10k','Clockwork Fortune','mine',[[500,'Normal'],[2500,'Normal'],[10000,'Hard']],mineRateGoal),
- track('Coin mine','mine-1m','Million a Second','mine',[[50000,'Hard'],[250000,'Harder'],[1000000,'Insane']],mineRateGoal),
+ track('Coin mine','mine-100','Pocket Change','mine',[[2,'Easy'],[5,'Easy'],[10,'Normal']],mineRateGoal),
+ track('Coin mine','mine-10k','Clockwork Fortune','mine',[[50,'Normal'],[250,'Normal'],[1_000,'Hard']],mineRateGoal),
+ track('Coin mine','mine-1m','Six-Figure Mint','mine',[[5_000,'Hard'],[25_000,'Harder'],[100_000,'Insane']],mineRateGoal),
  track('Battle','battle-first','First Victory','battle',[[1,'Easy'],[5,'Normal'],[10,'Normal']],battles,{legacyStage:1}),
  track('Battle','battle-20','Arena Regular','battle',[[15,'Hard'],[18,'Hard'],[20,'Harder']],battles),
  track('Battle','army-one','Three Acts','army',[[1,'Normal'],[2,'Hard']],trilogies,{legacyStage:1,href:'#battle/army',symbol:'guard'}),
@@ -125,7 +127,7 @@ export const achievements=[
   goal=>'Own '+n(goal)+' coin mine machines.'),
  track('Coin mine','mine-skills','A Mind for Mining','skills',[[3,'Normal'],[12,'Hard'],[24,'Insane']],
   goal=>'Unlock '+n(goal)+' coin mine skills.'),
- track('Coin mine','mine-megaforge','Mint Condition','mine',[[10_000_000,'Insane'],[250_000_000,'Demon'],[1_000_000_000,'Demon']],
+ track('Coin mine','mine-megaforge','Mint Condition','mine',[[1_000_000,'Insane'],[25_000_000,'Demon'],[100_000_000,'Demon']],
   mineRateGoal),
  track('Coin mine','mine-tap-count','Hands on the Job','taps',[[200,'Easy'],[1250,'Hard'],[6000,'Harder']],
   goal=>'Register '+n(goal)+' coin mine taps.'),
@@ -244,13 +246,15 @@ export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train
  // Settle time earned at the old rate before a new permanent income boost takes effect.
  if(awarded.some(stage=>stage.boost.key==='mine'))settleMine(wallet,now);
  const bonus=wallet.achievementBonusBp??={};
- let xp=0;
+ let xp=0,keys=0;
  for(const stage of awarded){
   rewards[stage.id]=now;
   bonus[stage.boost.key]=(bonus[stage.boost.key]||0)+Math.round(stage.boost.percent*100);
   xp+=stage.xp;
+  keys+=stage.keys;
  }
  wallet.achievementRewardXp=(wallet.achievementRewardXp||0)+xp;
  awardPlayerXp(wallet,xp);
+ rewardDemonKeys(wallet,keys,now);
  return awarded;
 }

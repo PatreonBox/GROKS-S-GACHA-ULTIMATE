@@ -92,8 +92,8 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   insert.run(player_id,6508283,JSON.stringify({copies:0}));
   const stats=request('/api/game?view=profile',sessionCookie);
   assert.deepEqual((await (await worker.fetch(stats,configure(stats))).json()).profile,
-   {coins:1500,gems:10,unique:2,copies:3,level:0,rank:1,privateRank:false,power:0,collectible:catalog.size,campaignClears:0,campaignTotal:10});
-  assert.equal((await (await game(sessionCookie)).json()).wallet.coins,1500);
+   {coins:150,gems:10,unique:2,copies:3,level:0,rank:1,privateRank:false,power:0,collectible:catalog.size,campaignClears:0,campaignTotal:10});
+  assert.equal((await (await game(sessionCookie)).json()).wallet.coins,150);
   for(let i=0;i<2;i++){
    const guide=new Request(to('/api/game'),{method:'POST',headers:{Cookie:sessionCookie,
     Origin:publicOrigin,'Content-Type':'application/json'},
@@ -235,7 +235,7 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
   const requestId=crypto.randomUUID(),args={field:'coins',mode:'add',amount:700};
   for(const result of await Promise.all([command(adminId,'admin.adjust',args,requestId),command(adminId,'admin.adjust',args,requestId)])){
    assert.equal(result.status,200);
-   assert.equal((await result.json()).wallet.coins,2200);
+   assert.equal((await result.json()).wallet.coins,850);
   }
   for(const [field,mode,amount,value] of [['luck','set',120,120],['luck','add',35,155],['gems','set',20.5,20.5]]){
    const response=await command(adminId,'admin.adjust',{field,mode,amount});
@@ -270,10 +270,10 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
   assert.equal((await command(adminId,'admin.reset',{confirmation:'reset'})).status,400);
   const reset=await command(adminId,'admin.reset',{confirmation:'RESET'});
   assert.equal(reset.status,200);
-  assert.equal((await reset.json()).wallet.coins,1500);
+  assert.equal((await reset.json()).wallet.coins,150);
   assert.deepEqual((await (await call(adminId,'/api/game?view=cards')).json()).cards,[]);
   assert.equal(sqlite.prepare('SELECT COUNT(*) AS count FROM game_scores WHERE player_id=?').get(owner).count,0);
-  assert.equal((await (await call(memberId)).json()).wallet.coins,1500);
+  assert.equal((await (await call(memberId)).json()).wallet.coins,150);
  }finally{sqlite.close();}
 });
 async function unusedPort(){
@@ -366,11 +366,11 @@ test('the HTTP server keeps the wallet and cards across a restart',async()=>{
   assert.equal(attempt.status,403);
   const bought=await fetch(base+'/api/game',{method:'POST',body,headers});
   assert.equal(bought.status,200);
-  assert.equal((await bought.json()).wallet.coins,1400);
+  assert.equal((await bought.json()).wallet.coins,140);
   await stop(child);
   child=await launch(port,volume);
   const save=await fetch(base+'/api/game',{headers:{cookie}});
-  assert.equal((await save.json()).wallet.coins,1400);
+  assert.equal((await save.json()).wallet.coins,140);
   const inventory=await fetch(base+'/api/game?view=cards',{headers:{cookie}});
   assert.equal((await inventory.json()).cards.reduce((sum,entry)=>sum+entry.copies,0),5);
   const ranks=await fetch(base+'/api/players',{headers:{cookie}});
