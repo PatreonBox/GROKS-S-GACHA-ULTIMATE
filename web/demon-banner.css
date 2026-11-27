@@ -105,8 +105,6 @@
 .banner-test-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .banner-test-form>p,.banner-test-form>button{grid-column:1/-1}
 .banner-test-form>button{min-height:44px}
-.pack-choice .pack-stock-chip{display:block;color:#abd9d7;font-variant-numeric:tabular-nums;font-size:11px}
-.pack-choice[data-stock-empty="true"] .pack-stock-chip{color:#ffbd8e}
 .pack-stock-detail{margin:5px 0 10px;color:#e0faf7;font-variant-numeric:tabular-nums;font-size:13px}
 .pack-stock-detail b{color:#b5e9e2}
 @media(min-width:681px){

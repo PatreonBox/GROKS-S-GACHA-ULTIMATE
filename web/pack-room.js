@@ -31,7 +31,7 @@ import {gameCommand,gameRead} from './game-client.js';
 import {createDemonBannerRoom,demonKeyIcon} from './demon-banner-room.js';
 import {openChestReveal,prepareChestReveal} from './chest-reveal.js';
 import {bannerLuckBonus,demonBanners} from './demon-banner.js';
-import {packAvailability,packRestockMinutes,packStockLimit} from './pack-stock.js';
+import {packAvailability,packStockLimit} from './pack-stock.js';
 import {formatCoins,roundCoins} from './coin-economy.js';
 import {cardRarity,rarityBadge} from './card-rarity.js';
 
@@ -331,10 +331,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   const shelf=packs.map(p=>{
    const needed=packLevels[p.id];
    return '<button class="pack-choice" data-choose="'+p.id+'" aria-pressed="'+(p===pack)+'"'+lockAttributes(needed,playerLevel)+
-    ' style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small><small class="pack-stock-chip" data-pack-stock="'+p.id+'"></small></span>'+
+    ' style="'+colors(p)+'"><img src="'+packArt(p)+'" alt=""><span><strong>'+p.name+'</strong><small>'+coin+number(p.price)+'</small></span>'+
     (needed?lockBadge(needed,playerLevel<needed):'')+'</button>';
   }).join('');
-  const quantityButtons=[1,10,'max'].map(q=>'<button type="button" data-qty="'+q+'">'+(q==='max'?'Max stock':q+' '+plural(q))+' <small data-pack-size="'+q+'"></small></button>').join('');
+  const quantityButtons=[1,10,'max'].map(q=>'<button type="button" data-qty="'+q+'">'+(q==='max'?'Max':q+' '+plural(q))+' <small data-pack-size="'+q+'"></small></button>').join('');
   byId('arcBody').innerHTML='<div class="pack-shelf" role="group" aria-label="Choose a gacha pack">'+shelf+'</div>'+
    '<div class="shop-display" style="'+colors(pack)+'"><div class="foil-stage" id="foilStage"><div class="pack-scene-caption" id="packSceneCaption" hidden></div><div class="package-float" id="previewPile"></div><div class="turn-handle" role="group" tabindex="0"></div><div class="turn-tools"><span>Drag to rotate</span><button data-reset-view aria-label="Reset pack rotation">Reset view</button></div></div>'+
    '<div class="pack-info"><div class="pack-meta">'+ico('pack')+' COIN PACKS</div><h2>'+pack.name+' Gacha</h2><p class="pack-range" id="packPeak"></p><p class="pack-stock-detail" id="packStockDetail"></p><div class="quantity-label">Packs per pull</div><div class="qty-options" role="group" aria-label="Packs per pull">'+quantityButtons+'</div><button class="purchase" id="buyPack"></button><div class="buy-hint" id="buyHint" role="status"></div><div class="pack-xp">'+ico('spark')+' <b>+'+packPlayerXp(pack.id)+' XP</b> per eligible pack</div><p class="pack-xp-allowance" id="packXpAllowance" title="All pack tiers share this rolling 60-minute allowance."></p><div class="gem-return">'+holoPercent+'% Holo · '+antimatterPercent+'% Antimatter per card</div>'+(pack.id==='godly'?'<a class="vault-shop-link" href="#gacha/vault">??? Secret vault</a>':'')+'</div></div>'+
@@ -435,21 +435,15 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
  }
  function updateStock(force=false){
   const buy=byId('buyPack');if(!buy)return;
-  const now=Date.now()+serverClockOffset,availability=packAvailability(wallet,selected.id,now);
+  const now=Date.now()+serverClockOffset,availability=packAvailability(wallet,now);
   const time=Math.max(0,Math.ceil((availability.nextAt-now)/1000));
-  const stock=packs.map(p=>packAvailability(wallet,p.id,now).quantity);
   const maximum=Math.min(availability.quantity,Math.floor(Math.max(0,displayedCoins)/selected.price));
   const count=quantity==='max'?maximum:quantity,bonus=bonusChance(wallet?.bonus||0)>0;
-  const stamp=[stock.join(','),time,count,quantity,bonus,displayedCoins,busy,wallet?.pending?.id,playerLevel,walletError].join('/');
+  const stamp=[availability.quantity,time,count,quantity,bonus,displayedCoins,busy,wallet?.pending?.id,playerLevel,walletError].join('/');
   if(!force&&stamp===stockStamp)return;
   stockStamp=stamp;
-  for(const [i,p] of packs.entries()){
-   const label=root.querySelector('[data-pack-stock="'+p.id+'"]');
-   label.textContent=stock[i]+' / '+packStockLimit+' in stock';
-   label.closest('button').dataset.stockEmpty=String(stock[i]===0);
-  }
   const countdown=Math.floor(time/60)+':'+String(time%60).padStart(2,'0');
-  byId('packStockDetail').textContent=availability.quantity+' / '+packStockLimit+' packs in stock'+(time?' · Next in '+countdown:' · Restocks 1 pack every '+packRestockMinutes+' minutes');
+  byId('packStockDetail').textContent=wallet?availability.quantity+' / '+packStockLimit+' shared packs · '+(time?'Next pack in '+countdown:'Refills 1 pack per minute'):'';
   for(const label of root.querySelectorAll('[data-pack-size]')){
    const size=label.dataset.packSize==='max'?maximum:Number(label.dataset.packSize);
    label.textContent=5*size+(bonus?'–'+6*size:'')+' cards';
@@ -472,7 +466,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   buy.innerHTML=busy?'Preparing cards…':pending?'Resume opening':lockedPack?ico('lock')+' Unlocks at Level '+requirement:
    'Pull '+count+' '+plural(count)+'<span>'+coin+number(cost)+'</span>';
   byId('buyHint').innerHTML=walletError?enc(walletError):!wallet?'Loading wallet…':pending?'Your purchased cards are saved.':
-   lockedPack?'Reach Level '+requirement+' for '+selected.name+' packs.':count>availability.quantity?'Wait for more stock or choose a smaller pull.':!count||cost>displayedCoins?'You need more coins. '+
+   lockedPack?'Reach Level '+requirement+' for '+selected.name+' packs.':!availability.quantity?'Shared stock is empty. It refills one pack per minute.':count>availability.quantity?'Wait for more stock or choose a smaller pull.':!count||cost>displayedCoins?'You need more coins. '+
     (locked('mine')?'Earn coins in Battle mode.':'<a href="#gacha/mine">Visit the mine</a>'):'';
  }
  async function purchase(){

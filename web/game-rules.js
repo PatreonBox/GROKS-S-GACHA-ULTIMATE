@@ -65,12 +65,14 @@ function awardPack(wallet,records,changes,pack,quantity,pools,now,mintSerial) {
  requireRule(!wallet.pending,'Finish your current opening first.');
  requireLevel(wallet,packLevels[pack.id],pack.name+' packs');
  if(quantity==='max'){
-  quantity=Math.min(packAvailability(wallet,pack.id,now).quantity,Math.floor(wallet.coins/pack.price));
-  requireRule(quantity>0,'You need coins and available stock for this pull.');
+  const stock=packAvailability(wallet,now).quantity;
+  requireRule(stock>0,'Shared pack stock is empty. It refills one pack per minute.');
+  quantity=Math.min(stock,Math.floor(wallet.coins/pack.price));
+  requireRule(quantity>0,'You need more coins for this pull.');
  }
  const price=quantity*pack.price;
  requireRule(wallet.coins>=price,'You need more coins for this pull.');
- spendPackStock(wallet,pack.id,quantity,now);
+ spendPackStock(wallet,quantity,now);
  const pull=rollPacks(pack,quantity,wallet,pools);
  changeCoins(wallet,-price);
  saveOpening(wallet,records,changes,pull,now,mintSerial);
@@ -250,7 +252,7 @@ const rules={
   return prepareDemonPull(args,getPool);
  },run:({w,records,changes,args,prepared,now,mintSerial})=>awardDemonPull(w,records,changes,args,prepared,now,mintSerial)},
  'pack.advance':{run:({w,args,now})=>{
-  requireRule(key(args.id)&&within(args.opened,0,50),'Choose a valid opening step.');
+  requireRule(key(args.id)&&within(args.opened,0,packStockLimit),'Choose a valid opening step.');
   const run=w.pending;
   if(!run||run.id!==args.id)return;
   const previous=run.opened;

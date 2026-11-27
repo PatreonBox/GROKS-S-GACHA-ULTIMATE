@@ -1,5 +1,5 @@
 import {packs} from './pack-engine.js';
-import {packRestockMinutes,packStockLimit} from './pack-stock.js';
+import {packStockLimit} from './pack-stock.js';
 
 export const sectionGuides={
  'level-leaderboard':{title:'Level leaderboard',art:'/assets/faces/demon-extreme.webp',steps:[
@@ -24,7 +24,7 @@ export const sectionGuides={
  ]},
  'pack-shop':{title:'Coin Packs',art:'/assets/packs/common.png',steps:[
   ['Open a Common pack','A Common pack costs '+packs[0].price+' coins and deals at least five cards. Different packs have their own difficulty odds and stock.'],
-  ['Watch the stock','Each pack type stores up to '+packStockLimit+' packs and restores one pack every '+packRestockMinutes+' minutes, even while you’re away.']
+  ['Watch the stock','All coin pack types share up to '+packStockLimit+' packs. Stock refills by one pack per minute, even while you’re away.']
  ]},
  'pack-results':{title:'Pack results',art:'/assets/packs/common.png',steps:[
   ['Check your new cards','Each pull shows its difficulty and rarity. Holo and Antimatter finishes have their own odds.'],

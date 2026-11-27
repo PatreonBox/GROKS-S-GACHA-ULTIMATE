@@ -212,7 +212,7 @@ export function randomBelow(limit){
  return word[0]%limit;
 }
 export function rollPacks(pack,quantity,wallet,pools,random=randomBelow){
- if(!packs.includes(pack)||!Number.isSafeInteger(quantity)||quantity<1||quantity>50)throw Error('Choose a valid pack quantity.');
+ if(!packs.includes(pack)||!Number.isSafeInteger(quantity)||quantity<1||quantity>packStockLimit)throw Error('Choose a valid pack quantity.');
  const playerLevel=playerProgress(wallet.playerXp).level,access=dropAccess(playerLevel);
  const odds=oddsFor(pack,wallet.luck,{playerLevel}),bonus=Math.round(bonusChance(wallet.bonus)*100);
  const extremes=access.rankFloor&&pools[10]?pools[10].filter(row=>dropEligible(row,access)):pools[10];
