@@ -1,3 +1,5 @@
+import {changeCoins} from './coin-economy.js';
+
 export const campaignStages=[
  {name:'RETRY',team:[4454123,26618473,11945914,6508283],captain:'ReTraY',first:60,master:30,turns:10,hp:.62,power:.52,charge:2},
  {name:'Fire in the Hole',team:[11940,215705,28255647,26949498],captain:'Spooky Light',first:150,master:60,turns:10,hp:.82,power:.76,shield:.18},
@@ -69,7 +71,7 @@ export function settleCampaignClear(w,b,survivors){
  if(masteryPrize)record.masteryPrize=masteryPrize;
  else if(prior?.masteryPrize!==undefined)record.masteryPrize=prior.masteryPrize;
  w.campaign[b.campaign]=record;
- const coins=Math.min(Number.MAX_SAFE_INTEGER-w.coins,clearPrize+masteryPrize+bountyBonus);
- w.coins+=coins;b.earned+=coins;
+ const coins=changeCoins(w,clearPrize+masteryPrize+bountyBonus);
+ b.earned+=coins;
  b.campaignReceipt={first,mastered,earnedMedals,coins,clearPrize,masteryPrize,bountyBonus,survivors,tempo:b.seq<=stage.turns,medals:medalCount(record)};
 }

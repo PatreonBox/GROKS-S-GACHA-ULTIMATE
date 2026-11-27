@@ -9,6 +9,7 @@ import {keyTarget} from './remixes.js';
 
 import {skillsFor,technique,hasOpening,signatureCost,remainingCooldown,trainingOf,trainingCapacity,drillTypes,legacyDrillCap,execution,mirroredSkill} from './card-skills.js';
 import {allyEffects,castConditions,effectTargets} from './signature-rules.js';
+import {changeCoins} from './coin-economy.js';
 
 export const arenas=[
  [4,20],[32,64],[120,200],[600,1000],[2000,3600],
@@ -150,7 +151,7 @@ export function playTurn(wallet,id,seq,move,target,now=Date.now(),random=Math.ra
   if(!u.hp){
    if(side==='enemies'){
     const bounty=b.campaign?campaignBounty(u.bounty,false,b.campaignRewardVersion!==2):u.bounty;
-    b.kills++;b.earned+=bounty;wallet.coins=Math.min(Number.MAX_SAFE_INTEGER,wallet.coins+bounty);
+    b.kills++;b.earned+=bounty;changeCoins(wallet,bounty);
     if(source){
      b.takedowns??={};b.takedowns[source.id]=(b.takedowns[source.id]||0)+1;
     }

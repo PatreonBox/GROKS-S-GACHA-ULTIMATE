@@ -26,6 +26,7 @@ import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defence
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
 import {achievements,achievementById,achievementProgress,achievementXp} from '../web/progression-rules.js';
+import {ico} from '../web/icons.js';
 import {bannerOdds,bannerPity,demonCatalogue,demonPity,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
 import {bannerUnlockDelay,demonKeyOffer,demonKeyPrice,starterDemonKeys} from '../web/demon-keys.js';
 import {packAvailability,packRestockMs,packStockLimit} from '../web/pack-stock.js';
@@ -166,9 +167,9 @@ test('server-clock mine earnings and idempotent credits',async()=>{
  const id=crypto.randomUUID();
  for(const response of await Promise.all([f.command(session,'mine.tap',{count:18},id),f.command(session,'mine.tap',{count:18},id)])){
   assert.equal(response.status,200);
-  assert.equal((await response.json()).result.gain,1);
+  assert.equal((await response.json()).result.gain,1.8);
  }
- assert.equal((await f.wallet(session)).coins,151);
+ assert.equal((await f.wallet(session)).coins,151.8);
  for(const count of [0,25,1.5])assert.equal((await f.command(session,'mine.tap',{count})).status,400);
  f.store(session.id,w=>{w.mine={collectedAt:Date.now()-6*60*60*1000,machines:{cursor:1},skills:{},remainder:0};});
  const receipt=await f.command(session,'mine.collect').then(res=>res.json()).then(data=>data.result.receipt);
@@ -180,18 +181,18 @@ test('mine and cube purchases charge the rounded coin prices without changing ea
  const now=Date.now();
  t.mock.timers.enable({apis:['Date'],now});
  const f=fixture(),player=await f.open();
- f.store(player.id,w=>{w.playerXp=playerXpAt(8);w.coins=67;});
+ f.store(player.id,w=>{w.playerXp=playerXpAt(8);w.coins=67.7;});
  const buy=(action,args)=>f.command(player,action,args).then(response=>response.json());
  const machine=await buy('mine.machine',{id:'cursor',mode:1});
  assert.deepEqual(machine.result,{count:1,cost:3});
- assert.equal(machine.wallet.coins,64);
+ assert.equal(machine.wallet.coins,64.7);
  assert.equal(mineWalletRate(machine.wallet),.1);
  const skill=await buy('mine.skill',{id:'pick'});
- assert.equal(skill.wallet.coins,59);
+ assert.equal(skill.wallet.coins,59.7);
  assert.equal((await f.command(player,'cube.equip',{id:'02'})).status,400);
- f.store(player.id,w=>{w.coins=60;});
- assert.equal((await buy('cube.equip',{id:'02'})).wallet.coins,0);
- assert.equal((await buy('cube.equip',{id:'02'})).wallet.coins,0);
+ f.store(player.id,w=>{w.coins=60.7;});
+ assert.equal((await buy('cube.equip',{id:'02'})).wallet.coins,.7);
+ assert.equal((await buy('cube.equip',{id:'02'})).wallet.coins,.7);
 });
 
 test('legacy coin balances, building costs and current battle payouts rebase once across requests',async t=>{
@@ -232,13 +233,28 @@ test('legacy coin balances, building costs and current battle payouts rebase onc
  assert.deepEqual(persisted.armyReceipt.result,{coins:55,gems:3});
 });
 
-test('fractional coin mining credits whole coins without losing repeated short collections',()=>{
+test('fractional coin mining pays tenths without losing repeated short collections',()=>{
  const now=10_000,wallet={coins:0,mine:{collectedAt:now,machines:{cursor:1},remainder:0}};
  assert.equal(mineWalletRate(wallet),.1);
- for(let second=1;second<10;second++)assert.equal(settleMine(wallet,now+second*1000).coins,0);
- assert.equal(mineEarnings(wallet,now+10_000).coins,1);
- assert.equal(settleMine(wallet,now+10_000).remainder,0);
+ assert.deepEqual(settleMine(wallet,now+500),{coins:0,elapsed:500,remainder:500});
+ assert.equal(settleMine(wallet,now+1000).coins,.1);
+ for(let second=2;second<10;second++)assert.equal(settleMine(wallet,now+second*1000).coins,.1);
+ assert.equal(wallet.coins,.9);
+ assert.equal(mineEarnings(wallet,now+10_000).coins,.1);
+ assert.deepEqual(settleMine(wallet,now+10_000),{coins:.1,elapsed:1000,remainder:0});
  assert.equal(wallet.coins,1);
+});
+
+test('previously accumulated coin tap credit is carried into the balance once',async()=>{
+ const f=fixture(),session=await f.open();
+ f.store(session.id,wallet=>{wallet.coins=150;wallet.coinTapRemainder=7;});
+ for(const wallet of await Promise.all([f.wallet(session),f.wallet(session)])){
+  assert.equal(wallet.coins,150.7);
+  assert.equal(wallet.coinTapRemainder,undefined);
+ }
+ const saved=JSON.parse(f.sqlite.prepare('SELECT wallet FROM game_profiles WHERE player_id=?').get(session.id).wallet);
+ assert.equal(saved.coins,150.7);
+ assert.equal(saved.coinTapRemainder,undefined);
 });
 
 test('mine milestones double at 20 and the extra branches have prerequisites',()=>{
@@ -751,7 +767,43 @@ test('minigame rewards are derived by replaying legal controls',async()=>{
  f.store(player.id,w=>{w.remixRun.start-=frames*STEP*1000+1000;});
  const record=await f.command(player,'remix.finish',{token:attempt.token,proof:{ticks:frames,trace:[],key:null}});
  assert.equal(record.status,200);
- assert((await record.json()).result.percent<100);
+ const {result}=await record.json();
+ assert(result.percent<100);
+ assert.equal(result.demonKeys,0);
+});
+
+test('Meme Arcade rewards a verified Tidal Wave cut once, including an older clear',async()=>{
+ const f=fixture(),player=await f.open();
+ const remix=findRemix(86407629),course=makeCourse(remix),runner=newAttempt(course),trace=[];
+ f.store(player.id,w=>{w.playerXp=playerXpAt(4);w.remixBest={[remix.id]:100};});
+ let ticks=0,outcome;
+ do{
+  const {top,bottom}=tunnelAt(course,runner.x+9),held=runner.y>(top+bottom)/2;
+  if(held!==runner.held){runner.held=held;trace.push([ticks,'held',held]);}
+  outcome=advanceRunner(runner,course,remix,STEP);ticks++;
+ }while(outcome==='running');
+ assert.equal(outcome,'clear');
+ assert.equal(remix.finish,94);
+ async function start(){
+  const {result}=await f.command(player,'remix.begin',{id:remix.id}).then(r=>r.json());
+  f.store(player.id,w=>{w.remixRun.start-=ticks*STEP*1000+1000;});
+  return {token:result.token,proof:{ticks,trace}};
+ }
+ const args=await start(),before=await f.wallet(player),requestId=crypto.randomUUID();
+ const receipts=await Promise.all([f.command(player,'remix.finish',args,requestId),f.command(player,'remix.finish',args,requestId)]);
+ for(const receipt of receipts){
+  assert.equal(receipt.status,200);
+  const {wallet,result}=await receipt.json();
+  assert.deepEqual(result,{percent:100,playerXpEarned:0,cleared:true,demonKeys:5});
+  assert.equal(wallet.demonKeys,before.demonKeys+5);
+  assert.equal(wallet.coins,before.coins);
+  assert.equal(wallet.remixKeyRewards[remix.id],5);
+ }
+ const replay=await f.command(player,'remix.finish',await start());
+ assert.equal(replay.status,200);
+ const {wallet,result}=await replay.json();
+ assert.equal(result.demonKeys,0);
+ assert.equal(wallet.demonKeys,before.demonKeys+5);
 });
 
 test('Army rewards are replayed from a server-issued deployment and paid once',async()=>{
@@ -1195,7 +1247,7 @@ test('A Gem Mine unlocks at Tower Level 2, banks offline production, and caps an
  assert.equal((await command('gem-mine.collect',{id})).status,400);
 });
 
-test('LIMBO unlocks a verified eight-key shuffle and pays 100 XP exactly once per clear',async t=>{
+test('LIMBO verifies the eight-key shuffle and pays XP and first-clear Demon Keys',async t=>{
  const start=Date.now();
  t.mock.timers.enable({apis:['Date'],now:start});
  const f=fixture(),player=await f.open();
@@ -1223,15 +1275,18 @@ test('LIMBO unlocks a verified eight-key shuffle and pays 100 XP exactly once pe
  for(const win of wins){
   const {wallet,result}=await win.json();
   assert.equal(result.playerXpEarned,100);
+  assert.equal(result.cleared,true);
+  assert.equal(result.demonKeys,10);
+  assert.equal(wallet.remixKeyRewards[remix.id],10);
   assert.equal(nonAchievementXp(wallet),playerXpAt(4)+100);
   assert.ok(wallet.achievements.limbo);
  }
  assert.equal((await f.command(player,'remix.finish',args)).status,400);
 });
 
-test('All 55 achievements use staged server progress including legacy collections, training and trilogies',async()=>{
- assert.equal(achievements.length,55);
- assert.equal(new Set(achievements.map(item=>item.id)).size,55);
+test('All 65 achievements use staged server progress including legacy collections, training and trilogies',async()=>{
+ assert.equal(achievements.length,65);
+ assert.equal(new Set(achievements.map(item=>item.id)).size,65);
  const stages=achievements.flatMap(item=>item.stages);
  assert(stages.length>150);
  assert.equal(new Set(stages.map(stage=>stage.id)).size,stages.length);
@@ -1258,6 +1313,47 @@ test('All 55 achievements use staged server progress including legacy collection
  assert.ok(wallet.achievements['training-100']&&wallet.achievements['army-three']&&wallet.achievements['battle-20']);
  assert.equal(achievementProgress(wallet).training,100);
  assert.equal(featureLevel('progression'),1);
+});
+
+test('New badge tracks have distinct art and count only actual multi-mode progress',()=>{
+ assert.equal(new Set(achievements.map(item=>item.icon||item.symbol)).size,65);
+ for(const badge of achievements.filter(item=>!item.icon))assert.match(ico(badge.symbol),/<(?:path|ellipse|circle|rect) /);
+ const cards={a:{spike:42,saw:11,endurance:5},b:{spike:1,saw:44,endurance:42}};
+ const wallet={luck:21,bonus:11,remixBest:{6508283:100,86407629:100,86084399:100},training:cards,
+  mine:{machines:{cursor:8,press:6,mint:4}},kingdom:{houses:[{}],gemMines:[{}],storage:[{kind:'forge'}]}};
+ const progress=achievementProgress(wallet);
+ assert.equal(progress.upgradePair,11);
+ assert.equal(progress.tripleDrill,5);
+ assert.equal(progress.arcadeModes,2);
+ assert.equal(achievementProgress({...wallet,limboKeysCleared:true}).arcadeModes,3);
+ assert.equal(progress.machineVariety,3);
+ assert.equal(progress.buildingVariety,2);
+});
+
+test('Legacy revealed Banner draws backfill once and only newly opened guarantees count',async()=>{
+ const f=fixture(),player=await f.open();
+ f.store(player.id,w=>{
+  w.achievementProgress={version:2};
+  w.lastPull={id:'old-banner',banner:'standard',opened:1,guarantees:[{draw:0,tier:'legendary'}]};
+  w.pending={id:'active-banner',banner:'special',packId:'mythic',quantity:3,opened:1,
+   guarantees:[{draw:0,tier:'mythic'},{draw:2,tier:'legendary'}]};
+ });
+ const seeded=await f.wallet(player);
+ assert.equal(seeded.demonKeys,starterDemonKeys);
+ assert.equal(seeded.achievementProgress.bannerGuarantees,2);
+ assert.equal(achievementProgress(seeded).bannerVariety,2);
+ assert.ok(seeded.achievements['pity-insurance:1']);
+ assert.ok(seeded.achievements['banner-passport:1']);
+ const request=crypto.randomUUID(),args={id:'active-banner',opened:3};
+ const completions=await Promise.all([f.command(player,'pack.advance',args,request),f.command(player,'pack.advance',args,request)]);
+ for(const response of completions){
+  assert.equal(response.status,200);
+  const {wallet}=await response.json();
+  assert.equal(wallet.achievementProgress.specialChests,3);
+  assert.equal(wallet.achievementProgress.bannerGuarantees,3);
+  assert.equal(wallet.demonKeys,starterDemonKeys);
+ }
+ assert.equal((await f.wallet(player)).achievementProgress.bannerGuarantees,3);
 });
 
 test('Achievement rewards backfill once across concurrent reads and reject client-supplied progress',async()=>{
@@ -1392,7 +1488,9 @@ test('Coin pack stock is per pack, capped, and regenerated by server time',async
  f.store(player.id,w=>{w.coins=10_000_000;});
  const buy=(packId,quantity)=>f.command(player,'pack.buy',{packId,quantity});
  const open=async wallet=>{assert.equal((await f.command(player,'pack.advance',{id:wallet.pending.id,opened:wallet.pending.quantity})).status,200);};
- assert.equal((await buy('common',21)).status,400);
+ assert.equal(packStockLimit,30);
+ assert.equal(packRestockMs,180_000);
+ assert.equal((await buy('common',31)).status,400);
  const first=(await (await buy('common','max')).json()).wallet;
  assert.equal(first.pending.quantity,packStockLimit);
  assert.deepEqual(packAvailability(first,'common',start),{quantity:0,nextAt:start+packRestockMs});
@@ -1407,6 +1505,15 @@ test('Coin pack stock is per pack, capped, and regenerated by server time',async
  await open(refill);
  t.mock.timers.setTime(start+300*packRestockMs);
  assert.equal(packAvailability(await f.wallet(player),'common').quantity,packStockLimit);
+});
+
+test('Legacy coin pack stock keeps its quantity and accrued refill time',()=>{
+ const start=3_600_000,wallet={packStock:{common:{quantity:13,nextAt:start+10_000}}};
+ const nextAt=start+130_000;
+ assert.deepEqual(packAvailability(wallet,'common',start),{quantity:13,nextAt});
+ assert.deepEqual(packAvailability(wallet,'common',nextAt-1),{quantity:13,nextAt});
+ assert.deepEqual(packAvailability(wallet,'common',nextAt),{quantity:14,nextAt:nextAt+packRestockMs});
+ assert.deepEqual(packAvailability(wallet,'common',nextAt+16*packRestockMs),{quantity:30,nextAt:0});
 });
 
 test('Special banner picker browses every eligible level without exposing hidden levels',async()=>{
@@ -1451,4 +1558,41 @@ test('Owner-only chest test can select all ten Impossible cards and leaves the s
  assert(pull.drawPercents[0]<.021);
  assert.deepEqual(f.sqlite.prepare('SELECT wallet,revision,last_request FROM game_profiles WHERE player_id=?').get(owner.id),before);
  assert.equal(f.sqlite.prepare('SELECT COUNT(*) AS n FROM game_cards WHERE player_id=?').get(owner.id).n,0);
+});
+
+test('Exotic and higher editions mint unique serials across simultaneous pulls, merges and retries',async t=>{
+ const f=fixture(),a=await f.open('serial-player-a'),b=await f.open('serial-player-b');
+ const godly=packs.find(pack=>pack.id==='godly');
+ for(const {id} of [a,b])f.store(id,w=>{w.playerXp=playerXpAt(30);w.coins=godly.price;});
+ t.mock.method(crypto,'getRandomValues',array=>{array.fill(0);return array});
+ const action={packId:godly.id,quantity:1},requestId=crypto.randomUUID();
+ const responses=await Promise.all([f.command(a,'pack.buy',action,requestId),f.command(b,'pack.buy',action)]);
+ assert(responses.every(r=>r.status===200));
+ const [first,second]=await Promise.all(responses.map(r=>r.json()));
+ const {pending}=first.wallet,levelId=pending.rows[0][0];
+ assert.equal(cardRarity(pending.rows[0]).id,'apex');
+ assert(pending.rows.every(row=>row[0]===levelId)&&second.wallet.pending.rows.every(row=>row[0]===levelId));
+ const all=[...Object.values(pending.serials),...Object.values(second.wallet.pending.serials)].sort((x,y)=>x-y);
+ assert.deepEqual(all,[1,2,3,4,5,6,7,8,9,10]);
+ const retry=await (await f.command(a,'pack.buy',action,requestId)).json();
+ assert.deepEqual(retry.wallet.pending.serials,pending.serials);
+ const {cards}=await (await f.call('/api/game?view=cards',a)).json();
+ assert.deepEqual(cards[0].serials.holo,Object.values(pending.serials));
+ assert.equal(f.sqlite.prepare('SELECT last_number FROM game_card_editions WHERE level_id=? AND finish=?').get(levelId,'holo').last_number,10);
+
+ await f.command(a,'pack.advance',{id:pending.id,opened:1});
+ const next=(await pool('Extreme Demon')).find(row=>row[10]===2);
+ f.addCards(a.id,[next]);
+ const merged=await f.command(a,'card.merge',{id:next[0],expectedCopies:2,pairs:1});
+ assert.equal(merged.status,200);
+ assert.equal((await merged.json()).wallet.lastMerge.serial,1);
+ const after=await (await f.call('/api/game?view=cards',a)).json();
+ assert.deepEqual(after.cards.find(card=>card.id===levelId).serials.standard,[1]);
+
+ const discord='123456789012345678',admin=fixture({discordUser:discord,adminDiscordId:discord}),owner=await admin.open();
+ admin.store(owner.id,w=>{w.playerXp=playerXpAt(30);w.coins=godly.price;});
+ const ownerPull=await admin.command(owner,'pack.buy',action);
+ assert.equal(ownerPull.status,200);
+ assert.equal((await ownerPull.json()).wallet.pending.serials,undefined);
+ assert.equal(admin.sqlite.prepare('SELECT COUNT(*) AS n FROM game_card_editions').get().n,0);
 });

@@ -42,9 +42,8 @@
  .tab .nav-short,.arc-nav .nav-short{display:block}
 
  .arc-heading{display:block;position:relative;margin-bottom:12px;padding-top:4px}
- .arc-heading h1{padding-inline-end:48px;margin-bottom:8px}
+ .arc-heading h1{margin-bottom:8px}
  .arc-nav-tools{width:100%;display:block}
- .arc-nav-tools #packSound{position:absolute;top:1px;right:0;width:42px;height:42px}
  .arc-nav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin:0;gap:2px;padding:3px;width:100%}
  .arc-nav a{min-width:0;display:grid;place-items:center;align-content:center;gap:4px;min-height:52px;padding:3px 0;font-size:clamp(11px,2.7vw,14px);white-space:nowrap}
  .arc-nav a svg{display:block;width:17px;height:17px}

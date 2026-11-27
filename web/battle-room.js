@@ -11,7 +11,7 @@ import {createArenaViewport} from './arena-world-view.js';
 import {ico,ratingLabel} from './icons.js';
 import {consoleView,intentView,lockCommands,ordersView,techniqueView} from './arena-console.js';
 
-import {remixes,findRemix,keyTarget} from './remixes.js';
+import {remixes,findRemix,keyTarget,remixKeyReward} from './remixes.js';
 import {openRunner} from './remix-runner.js';
 import {griefPoster,watchGrief} from './remix-media.js';
 import {playCardTurn} from './card-combat.js';
@@ -225,7 +225,11 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
  }
  function remixPicker(r){
   const saved=wallet.remixBest?.[r.id]||0,win=wallet.remixWins?.[r.id]||0;
-  return '<section class="remix-browser" style="--remix:'+r.color+'"><div class="remix-preview"><img src="'+(r.art||'/assets/shots/'+r.id+'.webp')+'" alt=""><div class="remix-poster-copy"><small>MEME ARCADE · '+r.mode.toUpperCase()+'</small><h2>'+r.name+'</h2><p>'+r.hint+'</p><button class="bt-primary remix-play" data-runner>Play mini level'+newBadge(remixGuideId(r))+'</button> <button class="remix-sound" data-preview-cue>Hear card sound</button></div></div><div class="remix-switchboard"><label for="remixLevel">Choose a meme level</label><select id="remixLevel">'+remixes.map(v=>'<option value="'+v.id+'" '+(v.id===r.id?'selected':'')+'>'+v.name+'</option>').join('')+'</select><p>Remix of <b>'+r.level+'</b> by '+r.creator+'</p><div class="remix-record">Arcade best <b>'+saved+'%</b> · Arena wins <b>'+win+'</b></div><strong>'+nameplate(r.tier)+' battle rule</strong><p>'+r.rule+'</p><small>'+(saved===100?'Arcade clear · +1 starting charge':'Clear the mini level for +1 starting charge in this arena.')+'</small></div></section>'+
+  const earned=wallet.remixKeyRewards?.[r.id]||0,keys=remixKeyReward(r);
+  const clearReward=earned?earned+' Demon '+(earned===1?'Key':'Keys')+' earned':
+   saved===100?'Clear again to earn '+keys+' Demon Keys':'+'+keys+' Demon Keys on a first clear';
+  return '<section class="remix-browser" style="--remix:'+r.color+'"><div class="remix-preview"><img src="'+(r.art||'/assets/shots/'+r.id+'.webp')+'" alt=""><div class="remix-poster-copy"><small>MEME ARCADE · '+r.mode.toUpperCase()+'</small><h2>'+r.name+'</h2><p>'+r.hint+'</p><button class="bt-primary remix-play" data-runner>Play mini level'+newBadge(remixGuideId(r))+'</button> <button class="remix-sound" data-preview-cue>Hear card sound</button></div></div><div class="remix-switchboard"><label for="remixLevel">Choose a meme level</label><select id="remixLevel">'+remixes.map(v=>'<option value="'+v.id+'" '+(v.id===r.id?'selected':'')+'>'+v.name+'</option>').join('')+'</select><p>Remix of <b>'+r.level+'</b> by '+r.creator+'</p><div class="remix-record">Arcade best <b>'+saved+'%</b> · Arena wins <b>'+win+'</b></div>'+
+   '<p class="remix-key-reward">'+ico('demonKey')+clearReward+'</p><strong>'+nameplate(r.tier)+' battle rule</strong><p>'+r.rule+'</p><small>'+(saved===100?'Arcade clear · +1 starting charge':'Clear the mini level for +1 starting charge in this arena.')+'</small></div></section>'+
    (arcadePage?'<button type="button" class="grief-clip" data-watch-grief><img src="'+griefPoster+'" alt="" loading="lazy"><span><strong>Grief</strong><small>Doggie’s verification finish</small></span><b>▶ <span>Watch clip</span></b></button>':'');
  }
  function lobby(){

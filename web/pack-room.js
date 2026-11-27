@@ -6,6 +6,7 @@ import {ico,ratingLabel} from './icons.js';
 import {playRareReveal,prepareRareReveal,revealTier} from './rare-reveal.js';
 import {impossibleCategory,impossibleCover} from './impossible-cards.js';
 import {antimatterPercent,holoPercent,bestFinish,finishClass,finishLabels} from './card-finishes.js';
+import {serialBadge} from './card-serials.js';
 import {findRemix} from './remixes.js';
 import {createArmyRoom} from './army-room.js';
 import {createBattleRoom} from './battle-room.js';
@@ -29,7 +30,8 @@ import {gameCommand,gameRead} from './game-client.js';
 import {createDemonBannerRoom,demonKeyIcon} from './demon-banner-room.js';
 import {openChestReveal,prepareChestReveal} from './chest-reveal.js';
 import {bannerLuckBonus,demonBanners} from './demon-banner.js';
-import {packAvailability,packStockLimit} from './pack-stock.js';
+import {packAvailability,packRestockMinutes,packStockLimit} from './pack-stock.js';
+import {formatCoins,roundCoins} from './coin-economy.js';
 import {cardRarity,rarityBadge} from './card-rarity.js';
 
 const byId=id=>document.getElementById(id);
@@ -60,7 +62,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  const rewards=createRewardFlight(sound,headerAmount);
  const root=byId('arcade'),reveal=byId('packReveal'),code=byId('coinCode');
  let view=null,wallet=null,selected=packs[0],quantity=1,busy=false,version=0,upgrading=false;
- let playerLevel=0,routeLocked=false,routePack;
+ let playerLevel=0,routeLocked=false,routeOptions;
  let cards=[],filter='',category='all',collectionPage=0,collectionSort='recent';
  let rarityPack='all',rankedPool=null,rarityLoading=null,rarityFailure=false;
  let run=null,packIndex=0,stage='closed',timers=[],animationId=0,activeRare=null;
@@ -76,12 +78,12 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  for(const surface of [root,reveal]){
   for(const event of ['pointerdown','keydown','click'])surface.addEventListener(event,sound.unlock,true);
  }
- function speaker(id){
-  return '<button '+(id?'id="packSound"':'data-reveal-sound')+' class="iconbtn" aria-label="Pack audio" aria-pressed="'+sound.enabled+'" title="'+(sound.enabled?'Mute pack audio':'Enable pack audio')+'">'+ico(sound.enabled?'volume':'muted')+'</button>';
+ function speaker(){
+  return '<button data-reveal-sound class="iconbtn" aria-label="Pack audio" aria-pressed="'+sound.enabled+'" title="'+(sound.enabled?'Mute pack audio':'Enable pack audio')+'">'+ico(sound.enabled?'volume':'muted')+'</button>';
  }
  function toggleSound(){
   sound.toggle();
-  for(const el of document.querySelectorAll('#packSound,[data-reveal-sound]')){
+  for(const el of document.querySelectorAll('[data-reveal-sound]')){
    el.setAttribute('aria-pressed',String(sound.enabled));el.title=sound.enabled?'Mute pack audio':'Enable pack audio';
    el.innerHTML=ico(sound.enabled?'volume':'muted');
   }
@@ -130,7 +132,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    markKingdomNav();
    setLevelLock(byId('walletLink'),featureLevel('mine'),playerLevel);
    setLevelLock(byId('gemLink'),featureLevel('upgrades'),playerLevel);
-   if(view&&routeLocked!==locked(view==='achievements'?'progression':view))page(view,routePack);
+   if(view&&routeLocked!==locked(view==='achievements'?'progression':view))page(view,routeOptions);
   }
   progressionRoom.setWallet(w);
   cubes.setWallet(w);
@@ -153,13 +155,13 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  }
  function refreshCoins(force=false,pans=[],credited=0){
   if(!wallet)return;
-  const coins=wallet.coins+mineEarnings(wallet).coins;
+  const coins=roundCoins(wallet.coins+mineEarnings(wallet).coins);
   if(!force&&coins===displayedCoins)return;
   const previous=displayedCoins<0?(credited?coins-credited:coins):displayedCoins;
-  const gain=coins-previous;
+  const gain=roundCoins(coins-previous);
   displayedCoins=coins;
   rewards.balance({coins,gems:wallet.gems,mana:wallet.kingdom?.mana||0});
-  byId('walletLink').title=number(coins)+' coins'+(locked('mine')?' · Coin mine at Level '+featureLevel('mine'):'');
+  byId('walletLink').title=formatCoins(coins)+' coins'+(locked('mine')?' · Coin mine at Level '+featureLevel('mine'):'');
   byId('walletLink').setAttribute('aria-label',byId('walletLink').title+(locked('mine')?'':'. Open the coin mine'));
   coinMine.setCoins(coins,force?0:gain);
   kingdom.setCoins(coins);
@@ -270,9 +272,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   return '<nav class="arc-nav" aria-label="Gacha sections">'+tabLinks.map(([key,name,short,icon])=>'<a data-gacha-tab="'+key+'" '+(view===key||view==='vault'&&key==='index'||['keys','banner-test'].includes(view)&&key==='banners'?'aria-current="page"':'')+' href="#gacha'+(key==='banners'?'':key==='shop'?'/packs':'/'+key)+'">'+ico(icon)+'<span class="nav-label">'+name+'</span><span class="nav-short" aria-hidden="true">'+short+'</span><small class="gacha-tab-alert" aria-hidden="true" hidden></small>'+
    (featureLevel(key)?lockBadge(featureLevel(key),locked(key)):'')+'</a>').join('')+'</nav>';
  }
- function page(next,packId){
+ function page(next,options={}){
   if(view!==next){closeChest();stopTimers();rewards.clear()}
-  banners.leave();stations.leave();coinMine.leave();trade.leave();progressionRoom.leave();version++;view=next;routePack=packId;
+  banners.leave();stations.leave();coinMine.leave();trade.leave();progressionRoom.leave();version++;view=next;routeOptions=options;
   const progression=['progression','achievements'].includes(next),feature=progression?'progression':next;
   routeLocked=locked(feature);
   const classic=['battle','campaign','training','arcade'].includes(next),combat=classic||next==='army',home=next==='kingdom',trading=next==='trading';
@@ -282,7 +284,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   cubes.show(false);kingdom.show(home&&!routeLocked);
   if(home&&!routeLocked){markGuide(newAreas.kingdom);markKingdomNav()}
   if(reveal.open)reveal.close();
-  if(trading){trade.show(routeLocked);return routeLocked;}
+  if(trading){trade.show(routeLocked,options.trade);return routeLocked;}
   if(progression){
    if(routeLocked)root.innerHTML='<div class="arc-heading"><h1>Progression</h1></div>'+lockedPage(features.progression,playerLevel,'#gacha');
    else progressionRoom.show(next==='achievements'?'achievements':'overview');
@@ -290,7 +292,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   }
   if(routeLocked){
    const heading=combat?'Battle mode':home?'Kingdom':'Gacha';
-   root.innerHTML='<div class="arc-heading"><h1>'+heading+'</h1>'+(!combat&&!home?'<div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div>':'')+
+   root.innerHTML='<div class="arc-heading"><h1>'+heading+'</h1>'+(!combat&&!home?'<div class="arc-nav-tools">'+sectionNav()+'</div>':'')+
     '</div>'+lockedPage(features[next],playerLevel,combat?'#battle':'#gacha');
    updateSectionAlerts();
    return true;
@@ -299,7 +301,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   sound.preload();
   const destination=next==='vault'?'index':next;
   if(tabLinks.some(([key])=>key===destination))markGuide(tabVisit(destination));
-  root.innerHTML='<div class="arc-heading"><h1>Gacha</h1><div class="arc-nav-tools">'+sectionNav()+speaker(true)+'</div></div><div id="arcBody"></div>';
+  root.innerHTML='<div class="arc-heading"><h1>Gacha</h1><div class="arc-nav-tools">'+sectionNav()+'</div></div><div id="arcBody"></div>';
   if(['banners','keys','banner-test'].includes(view)){
    const owner=!byId('openAdminTools').hidden;
    banners.show(byId('arcBody'),view,wallet,owner);
@@ -308,7 +310,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(['index','merge','vault'].includes(view))stations.show(view,wallet);
   if(view==='results'){root.innerHTML='<div id="arcBody"></div>';resultsPage();window.scrollTo(0,0);bestSound()}
   if(view==='shop'){
-   if(packId)selected=packs.find(item=>item.id===packId)||selected;
+   if(options.pack)selected=packs.find(item=>item.id===options.pack)||selected;
    shop();
   }
   if(view==='mine'){coinMine.show(byId('arcBody'),wallet);if(wallet)coinMine.setCoins(displayedCoins)}
@@ -447,7 +449,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    label.textContent=stock[i]+' / '+packStockLimit+' in stock';
    label.closest('button').dataset.stockEmpty=String(stock[i]===0);
   }
-  byId('packStockDetail').textContent=availability.quantity+' / '+packStockLimit+' packs in stock'+(time?' · Next in '+time+'s':' · Restocks 1 pack per minute');
+  const countdown=Math.floor(time/60)+':'+String(time%60).padStart(2,'0');
+  byId('packStockDetail').textContent=availability.quantity+' / '+packStockLimit+' packs in stock'+(time?' · Next in '+countdown:' · Restocks 1 pack every '+packRestockMinutes+' minutes');
   for(const label of root.querySelectorAll('[data-pack-size]')){
    const size=label.dataset.packSize==='max'?maximum:Number(label.dataset.packSize);
    label.textContent=5*size+(bonus?'–'+6*size:'')+' cards';
@@ -501,7 +504,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    }catch(error){if(submit.isConnected)setText('codeFeedback',error.message)}finally{submit.disabled=false}
   };
  }
- function card(row,{copies=0,index=0,deal=false,bonus=false,fresh=false,finish='standard',holoCopies=0,antimatterCopies=0,drawChance=null}={}){
+ function card(row,{copies=0,index=0,deal=false,bonus=false,fresh=false,finish='standard',holoCopies=0,antimatterCopies=0,drawChance=null,serial,serials}={}){
   const [id,title,author]=row,diff=row[6],tier=cardCategories.indexOf(diff),secret=diff===impossibleCategory;
   const art=coverSource(id),shownFinish=copies?bestFinish({holoCopies,antimatterCopies}):finish;
   const special=findRemix(id),top=tier===10&&row[10]>0&&row[10]<=25;
@@ -515,10 +518,11 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    (antimatter?'<span class="antimatter-label">◈ Antimatter'+(antimatterCopies?' ×'+antimatterCopies:'')+'</span>':'')+
    (holo?'<span class="holo-label">✧ Holo'+(holoCopies?' ×'+holoCopies:'')+'</span>':'')+'</span>':'';
   const byline=author?'by '+author:secret?'Impossible Levels List':'by Unknown',rarity=cardRarity(row);
+  const editions=serials?Object.entries(finishLabels).map(([key,label])=>serialBadge(serials[key],label)).join(''):serialBadge(serial);
   return '<button class="level-card '+finishClass(shownFinish)+(secret?' impossible-card':'')+(top?' pinnacle-card':'')+(bonus?' bonus-card':'')+(fresh?' new-pull':'')+'" data-card="'+id+'" data-card-rarity="'+rarity.id+'" style="--card-color:'+commonColors[tier]+';--order:'+index+'">'+
    '<span class="card-art"><img class="art-face" src="'+cardFace(diff)+'" alt=""><img class="scene-shot" loading="'+(deal?'eager':'lazy')+'" src="'+enc(art)+'" data-id="'+id+'" alt="">'+
    '<span class="card-stats">'+rank+'</span>'+finishes+(bonus?'<span class="bonus-tag">'+gem+'Bonus</span>':'')+(copies?'<span class="card-copies">×'+copies+'</span>':'')+'</span>'+
-   '<span class="card-type">'+faceIcon(diff)+enc(diff)+'</span><strong>'+enc(title)+'</strong><small>'+enc(byline)+'</small>'+rarityBadge(rarity)+caption+
+   '<span class="card-type">'+faceIcon(diff)+enc(diff)+'</span><strong>'+enc(title)+'</strong><small>'+enc(byline)+'</small>'+rarityBadge(rarity)+editions+caption+
    (drawChance&&drawChance.percent!==null?'<small class="draw-chance">'+(drawChance.percent>0?
     '<span>'+enc(rarityLabel(drawChance))+'</span> <b>'+rarityValue(drawChance)+'</b>':
     drawChance.percent===0?'Unavailable from this pack':'')+'</small>':'')+
@@ -578,7 +582,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   sorted.sort((a,b)=>(rarity?(chances.get(a.id).percent||Infinity)-(chances.get(b.id).percent||Infinity):collectionSort==='copies'?b.copies-a.copies:collectionSort==='difficulty'?compareMergeStrength(a.row,b.row,cardCategories):0)||b.last-a.last||a.id-b.id);
   const max=Math.max(0,Math.ceil(sorted.length/24)-1);collectionPage=Math.min(collectionPage,max);
   setText('ownedTotal',number(cards.length)+' unique · '+number(cards.reduce((n,c)=>n+c.copies,0))+' cards');
-  byId('binderResults').innerHTML=sorted.length?'<div class="card-gallery">'+sorted.slice(collectionPage*24,collectionPage*24+24).map(c=>card(c.row,{copies:c.copies,holoCopies:c.holoCopies||0,antimatterCopies:c.antimatterCopies||0,drawChance:rarity?chances.get(c.id):null})).join('')+'</div>'+(max?'<div class="paging"><button data-binder="-1" '+(collectionPage===0?'disabled':'')+'>Previous</button> Page '+(collectionPage+1)+' of '+(max+1)+' <button data-binder="1" '+(collectionPage===max?'disabled':'')+'>Next</button></div>':''):'<div class="empty"><strong>'+(cards.length?'No matching cards':'Your collection is empty')+'</strong><p>'+(cards.length?'Try another name or difficulty.':'Open a pack to collect your first five level cards.')+'</p>'+(!cards.length?'<a class="primary" href="#gacha">Browse packs</a>':'')+'</div>';
+  byId('binderResults').innerHTML=sorted.length?'<div class="card-gallery">'+sorted.slice(collectionPage*24,collectionPage*24+24).map(c=>card(c.row,{copies:c.copies,holoCopies:c.holoCopies||0,antimatterCopies:c.antimatterCopies||0,serials:c.serials,drawChance:rarity?chances.get(c.id):null})).join('')+'</div>'+(max?'<div class="paging"><button data-binder="-1" '+(collectionPage===0?'disabled':'')+'>Previous</button> Page '+(collectionPage+1)+' of '+(max+1)+' <button data-binder="1" '+(collectionPage===max?'disabled':'')+'>Next</button></div>':''):'<div class="empty"><strong>'+(cards.length?'No matching cards':'Your collection is empty')+'</strong><p>'+(cards.length?'Try another name or difficulty.':'Open a pack to collect your first five level cards.')+'</p>'+(!cards.length?'<a class="primary" href="#gacha">Browse packs</a>':'')+'</div>';
  }
  function begin(pending){
   if(!pending)return;
@@ -606,7 +610,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  function drawChest(opening){
   const {pull,index,test}=opening;
   const hand=pullCards(pull,index);
-  const cards=hand.map(item=>({html:card(item.row,{deal:true,fresh:item.fresh,bonus:item.bonus,finish:item.finish,drawChance:test?null:item}),
+  const cards=hand.map(item=>({html:card(item.row,{deal:true,fresh:item.fresh,bonus:item.bonus,finish:item.finish,serial:item.serial,drawChance:test?null:item}),
    title:item.row[1],difficulty:item.row[6],rarity:cardRarity(item.row)}));
   prepareRareReveal(hand,sound);
   chestScene=openChestReveal({
@@ -617,7 +621,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
     if(view==='shop')updatePurchase();
    },
    onCard:async i=>{
-    const item=hand[i],scene=openRare(item,{hold:true});
+    const item=hand[i],scene=openRare(item);
     if(scene){opening.seenRare.add(item.drawIndex);await scene.done}
     else landPull(item,i,0);
    },
@@ -673,13 +677,13 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    return revealTier(item.percent)&&(!best||item.percent<best.percent)?item:best;
   },null);
  }
- function openRare(item,{hold=false,skipAll}={}){
+ function openRare(item,{skipAll}={}){
   const tier=revealTier(item.percent);
   if(!tier)return null;
   activeRare?.scene.close();sound.stop();
   const scene=playRareReveal({
-   tier,levelId:item.row[0],difficulty:item.row[6],cardHTML:card(item.row,{deal:true,finish:item.finish}),
-   title:item.row[1],odds:oneIn(item.percent),oddsLabel:rarityLabel(item),sound,toggleSound,observeArt,hold,skipAll
+   tier,levelId:item.row[0],difficulty:item.row[6],cardHTML:card(item.row,{deal:true,finish:item.finish,serial:item.serial}),
+   title:item.row[1],odds:oneIn(item.percent),oddsLabel:rarityLabel(item),sound,toggleSound,observeArt,skipAll
   });
   activeRare={scene,drawIndex:item.drawIndex};
   scene.done.then(()=>{if(activeRare?.scene===scene)activeRare=null});
@@ -715,7 +719,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    (last.gemsEarned?'<span>'+gem+' +'+last.gemsEarned+' gems</span>':'')+(last.holos?.length?'<span>✧ '+last.holos.length+' holo</span>':'')+(last.antimatters?.length?'<span class="antimatter-label">◈ '+last.antimatters.length+' Antimatter</span>':'')+(bonuses?'<span>+'+bonuses+' bonus '+(bonuses===1?'card':'cards')+'</span>':'')+'</div>'+
    '<div class="result-counts">'+[...counts].map(([d,n])=>'<span>'+faceIcon(d)+enc(d)+' <b>×'+n+'</b></span>').join('')+'</div>'+
    '<p class="pull-odds-note">'+(banner?'Per card at player Level '+(last.playerLevelAtPurchase??0)+' with +'+(last.luckAtPurchase??0)+'% Luck. '+(last.guarantees?.length?last.guarantees.length+' pity guarantees applied. ':'')+'Foil odds include the finish roll.':
-    'Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.')+'</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,drawChance:item})).join('')+'</div>'+
+    'Per card at +'+(last.luckAtPurchase??0)+'% luck. Regular pulls use difficulty odds. Ranked Extremes and vault cards use individual odds. Holo and Antimatter also include the finish roll.')+'</p><div class="result-card-grid">'+entries.map((item,i)=>card(item.row,{index:i,bonus:item.bonus,fresh:item.fresh,finish:item.finish,serial:item.serial,drawChance:item})).join('')+'</div>'+
    '<div class="result-actions"><a class="outline" href="#gacha/collection">My cards</a><a class="primary" href="'+shopLink+'">Continue</a></div></section>';
  }
  function lastHandShown(){return stage==='shown'&&packIndex+1===run.quantity}
@@ -737,10 +741,10 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    const pile=Array.from({length:visible},(_,i)=>'<span class="pile-item" style="--offset:'+(i-(visible-1)/2)+';--i:'+i+';z-index:'+(visible-i)+'">'+wrapper(p,run.sizes?.[packIndex+i]??5,category)+'</span>').reverse().join('');
    content='<div class="opening-arena"><div class="tear-scene"><button class="tear-target" data-tear aria-label="Peel open pack '+(packIndex+1)+'">'+pile+'</button><span class="tear-caption">Tap the pack to peel it open</span></div></div>';
   }else{
-   content='<div class="opening-arena"><div class="reveal-grid hand-grid" style="--hand:'+hand.length+'">'+hand.map((x,i)=>card(x.row,{index:i,deal:stage==='dealing',bonus:x.bonus,fresh:x.fresh,finish:x.finish,drawChance:x})).join('')+'</div></div>';
+   content='<div class="opening-arena"><div class="reveal-grid hand-grid" style="--hand:'+hand.length+'">'+hand.map((x,i)=>card(x.row,{index:i,deal:stage==='dealing',bonus:x.bonus,fresh:x.fresh,finish:x.finish,serial:x.serial,drawChance:x})).join('')+'</div></div>';
   }
   const sub='Pack '+(packIndex+1)+' of '+run.quantity+(!showPack?' · Rarest first':'');
-  reveal.innerHTML='<div class="opening-theater"><div class="reveal-bar"><span>PACK OPENING</span><div class="reveal-tools">'+speaker(false)+'<button class="iconbtn" data-close-reveal aria-label="Close pack opening">'+ico('x')+'</button></div></div><h2 id="revealTitle">'+p.name+' Gacha</h2><p class="run-info">'+sub+'</p>'+content+'<div class="reveal-actions">'+revealActions()+'</div></div>';
+  reveal.innerHTML='<div class="opening-theater"><div class="reveal-bar"><span>PACK OPENING</span><div class="reveal-tools">'+speaker()+'<button class="iconbtn" data-close-reveal aria-label="Close pack opening">'+ico('x')+'</button></div></div><h2 id="revealTitle">'+p.name+' Gacha</h2><p class="run-info">'+sub+'</p>'+content+'<div class="reveal-actions">'+revealActions()+'</div></div>';
   reveal.scrollTop=0;
   if(stage==='sealed')reveal.querySelector('[data-tear]')?.focus({preventScroll:true});
   if(stage==='shown'){
@@ -868,7 +872,6 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  };
  root.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
-  if(b.id==='packSound'){toggleSound();return}
   if(b.hasAttribute('data-encore')){sound.stop();bestSound();return}
   if(b.dataset.upgrade){upgrade(b.dataset.upgrade,b.dataset.upgradeMode==='max'?'max':Number(b.dataset.upgradeMode));return}
   if(b.dataset.choose){if(selected.id!==b.dataset.choose){selected=packs.find(p=>p.id===b.dataset.choose);shop();}return}
@@ -879,7 +882,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
   if(b.id==='buyPack'){purchase();return}
   if('rareReplay'in b.dataset&&view==='results'&&wallet?.lastPull){
    const item=pullCards(wallet.lastPull)[Number(byId('rareReplayPick')?.value||0)];
-   if(item)openRare(item,{hold:true});
+   if(item)openRare(item);
    return;
   }
   if(b.dataset.binder){sound.play('select');collectionPage+=Number(b.dataset.binder);binder();return}

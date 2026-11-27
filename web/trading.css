@@ -46,6 +46,10 @@
 .trade-send{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:13px;padding:12px 14px;border:1px solid var(--trade-line);border-radius:10px;background:#191b2d}
 .trade-send .primary{flex:none}
 .trade-send p{margin:0;color:var(--trade-muted);font-size:.83rem;line-height:1.4}
+.trade-balance{font-weight:750}
+.trade-balance[data-balanced=true]{color:#b9f0d4}
+.trade-balance[data-balanced=false]{color:#ffca9e}
+.trade-receipt-balance{margin:12px 0 0;font-size:.86rem}
 .trade-action-status{color:#f7d2a7;font-size:.88rem;overflow-wrap:anywhere}
 .trade-action-status:empty{display:none}
 .trade-send .trade-action-status:not(:empty){margin-top:5px;color:#f7d2a7}

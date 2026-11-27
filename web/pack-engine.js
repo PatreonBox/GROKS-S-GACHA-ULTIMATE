@@ -2,8 +2,10 @@ import {addCardXP,cardGrowth,cardLevelCap,xpAt,feedXP,spareCopies} from './card-
 import {pickExtreme,extremeOdds,compareMergeStrength,mergeGems,extremeTable,gemTenths,rankOddsVersion} from './card-economy.js';
 import {impossibleCategory,impossibleCount,impossibleTier,impossiblePercent} from './impossible-cards.js';
 import {finishVersion,finishPercent,rollFinish,bestFinish,finishAt,finishOrder} from './card-finishes.js';
+import {spendCardSerials} from './card-serials.js';
 import {gameRead,gameCommand} from './game-client.js';
-import {coinPrice,normalizeCoinWallet} from './coin-economy.js';
+import {changeCoins,coinLimit,coinPrice,normalizeCoinWallet} from './coin-economy.js';
+import {packStockLimit} from './pack-stock.js';
 export {onOtherTab} from './game-client.js';
 
 export const difficulties=['Auto','Easy','Normal','Hard','Harder','Insane','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'];
@@ -44,7 +46,7 @@ const legacyPackBases={
 };
 
 const TICKETS=1000000;
-export const packQuantities=[1,10,50];
+export const packQuantities=[1,10,packStockLimit];
 export const upgrades={
  luck:{name:'Gacha Luck',max:500},
  bonus:{name:'Extra Gacha Card',max:90},
@@ -242,11 +244,10 @@ export const mergeDuplicates = (options={}) => resultFrom('card.merge',options);
 export function grantCoinCode(wallet,code){
  if(code.trim().toLowerCase()!=='john')throw Error('Unknown code.');
  if(wallet.redeemedCodes?.john)throw Error('You’ve already redeemed john.');
- const amount=Math.min(4_999_999,Math.max(1_000,Math.floor(wallet.coins/10)),Number.MAX_SAFE_INTEGER-wallet.coins);
+ const amount=Math.min(4_999_999,Math.max(1_000,Math.floor(wallet.coins/10)),coinLimit-wallet.coins);
  if(!amount)throw Error('Your coin balance is full.');
  wallet.redeemedCodes??={};wallet.redeemedCodes.john=true;
- wallet.coins+=amount;
- return amount;
+ return changeCoins(wallet,amount);
 }
 // Keep the original draw index so sorting never moves a bonus or new badge onto another card.
 export function orderedPull(run,packIndex=null,legacyExtremes){
@@ -274,7 +275,7 @@ export function orderedPull(run,packIndex=null,legacyExtremes){
   })):null;
   const drop=rarityOdds(row,difficultyPercent,finish,exact,finishOddsVersion);
   if(run.banner&&!usesRank&&Number.isFinite(run.drawRarityPercents?.[i]))drop.percent=run.drawRarityPercents[i]*(finish==='standard'?1:finishPercent(finish,finishOddsVersion)/100);
-  entries.push({row,tier,drawIndex:i,bonus:bonuses.has(i),holo,fresh,...drop});
+  entries.push({row,tier,drawIndex:i,bonus:bonuses.has(i),holo,fresh,...drop,serial:run.serials?.[i]});
  });
  return entries.sort((a,b)=>{
   const rarity=(a.percent||Infinity)-(b.percent||Infinity);
@@ -296,6 +297,7 @@ export function applyFeeding(w,records,{targetId,sourceId,count}){
  const consumed=Math.min(count,Math.ceil((xpAt(cardLevelCap)-growth.xp)/perCopy));
  const xp=addCardXP(progress,consumed*perCopy);
  w.training[targetId]=progress;w.trainingRevision=(w.trainingRevision||0)+1;
+ spendCardSerials(source,'standard',consumed);
  source.copies-=consumed;
  return {source,consumed,...xp};
 }
@@ -307,8 +309,13 @@ export function mergeBlocked(card,w,now=Date.now()){
 }
 export const strongestMergeFirst=(a,b)=>compareMergeStrength(a.row,b.row,cardCategories);
 
-function fusePair(w,source,dest,promoted,tier,now){
+function fusePair(w,source,dest,promoted,tier,now,mintSerial){
  const first=finishAt(source,0),finish=finishAt(source,1);
+ if(first===finish)spendCardSerials(source,finish,2);
+ else{
+  spendCardSerials(source,first,1);
+  spendCardSerials(source,finish,1);
+ }
  source.copies-=2;
  source.holoCopies=(source.holoCopies||0)-Number(first==='holo')-Number(finish==='holo');
  source.antimatterCopies=(source.antimatterCopies||0)-Number(first==='antimatter')-Number(finish==='antimatter');
@@ -329,11 +336,11 @@ function fusePair(w,source,dest,promoted,tier,now){
   for(const k of ['spike','saw','endurance','xp'])progress[k]=Math.max(progress[k]||0,w.training[source.id][k]||0);
   w.training[dest.id]=progress;delete w.training[source.id];w.trainingRevision=(w.trainingRevision||0)+1;
  }
- return {from:source.row[1],source:source.row,row:dest.row,finish,holo:finish==='holo',promoted,
+ return {from:source.row[1],source:source.row,row:dest.row,finish,holo:finish==='holo',promoted,serial:mintSerial?.(dest,finish),
   gems:mergeGems(tier)+(promoted?mergeGems(tier+1):0)};
 }
 
-export function fuseCollection(w,records,plan,{id,expectedCopies,pairs}={},random=randomBelow,now=Date.now()){
+export function fuseCollection(w,records,plan,{id,expectedCopies,pairs}={},random=randomBelow,now=Date.now(),mintSerial){
  const collection=new Map(records.map(c=>[c.id,c])),changed=new Map(),outcomes=new Map();
  const selected=id==null?null:collection.get(id);
  if(id!=null&&(!selected||selected.copies!==expectedCopies||!Number.isInteger(pairs)||pairs<1||pairs*2>selected.copies)){
@@ -361,7 +368,7 @@ export function fuseCollection(w,records,plan,{id,expectedCopies,pairs}={},rando
   const row=choices[random(choices.length)],dest=collection.get(row[0])||{id:row[0],row,copies:0,holoCopies:0};
   collection.set(dest.id,dest);
   const input={row:source.row,copies:source.copies,holoCopies:source.holoCopies,antimatterCopies:source.antimatterCopies};
-  const result=fusePair(w,source,dest,promoted,tier,now);
+  const result=fusePair(w,source,dest,promoted,tier,now,mintSerial);
   changed.set(source.id,source);changed.set(dest.id,dest);
   count++;gems+=result.gems;promotions+=Number(promoted);
   const key=row[0]+':'+result.finish,receipt=outcomes.get(key);
@@ -375,8 +382,10 @@ export function fuseCollection(w,records,plan,{id,expectedCopies,pairs}={},rando
   if(!selected)enqueue(dest);
  }
  if(!count)throw Error('There are no eligible duplicate pairs.');
- const highlights=[...outcomes.values()].sort((a,b)=>strongestMergeFirst(a,b)||finishOrder[b.finish]-finishOrder[a.finish]).slice(0,12);
+ const produced=[...outcomes.values()];
+ const foilCount=produced.reduce((sum,item)=>sum+(item.finish!=='standard'?item.count:0),0);
+ const highlights=produced.sort((a,b)=>strongestMergeFirst(a,b)||finishOrder[b.finish]-finishOrder[a.finish]).slice(0,12);
  w.gems=(gemTenths(w.gems)+gemTenths(gems))/10;
- w.lastMerge={...best,gems,count,promotions,highlights};
+ w.lastMerge={...best,gems,count,promotions,foilCount,highlights};
  return {changed,preview};
 }

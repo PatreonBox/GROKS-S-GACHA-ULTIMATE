@@ -1,4 +1,4 @@
-import {coinDivisor,coinPrice} from './coin-economy.js';
+import {changeCoins,coinDivisor,coinPrice} from './coin-economy.js';
 
 export const cubeRarities={
  Common:'#b6c9dc',Uncommon:'#6ff4ae',Rare:'#71c2ff',Epic:'#c19aff',Legendary:'#ffcd6a',Mythic:'#ff7bc9'
@@ -46,7 +46,7 @@ export function claimCube(wallet,id){
  if(!cube)throw Error('Choose a cube in the catalog.');
  if(!ownsCube(wallet,id)){
   if(wallet.coins<cube.price)throw Error('You need more coins for '+cube.name+'.');
-  wallet.coins-=cube.price;
+ changeCoins(wallet,-cube.price);
   wallet.ownedCubes=[...(wallet.ownedCubes||[]),id];
  }
  wallet.equippedCube=id;

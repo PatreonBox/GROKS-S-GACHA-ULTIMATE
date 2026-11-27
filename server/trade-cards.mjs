@@ -1,6 +1,7 @@
 import {statsFor} from '../web/battle-engine.js';
 import {skillsFor} from '../web/card-skills.js';
 import {finishOrder} from '../web/card-finishes.js';
+import {addCardSerials,cardSerials,removeCardSerials,serialsToSpend} from '../web/card-serials.js';
 import {impossibleTier} from '../web/impossible-cards.js';
 import {cardCategories} from '../web/pack-engine.js';
 import {copiesByFinish,tradeCardLimit,tradeKey} from '../web/trade-rules.js';
@@ -52,8 +53,17 @@ export function snapshotBundle(bundle,cards,wallet,minimum,now){
   const card=tradeCard(record.row,finish,wallet);
   if(card.tier<minimum)reject('Every card received must be '+cardCategories[minimum]+(minimum===cardCategories.length-1?'':'+')+'.',409);
   if(lockedForTrade(wallet,id,now))reject(card.title+' is in battle or recovering. Try again when it is available.',409);
-  return {...card,count};
+  const serials=serialsToSpend(record,finish,count);
+  return {...card,count,...(serials.length?{serials}:{} )};
  });
+}
+
+export function verifyTradeSerials(saved,current){
+ for(const [i,item] of current.entries()){
+  if((saved[i].serials||[]).join(',')!==(item.serials||[]).join(',')){
+   reject('The numbered copies in this offer changed. Create a new offer.',409);
+  }
+ }
 }
 
 export async function browseCollection(db,playerId,wallet,{term,minimum,difficulty,finish,page,now,secretIds}){
@@ -74,8 +84,10 @@ export async function browseCollection(db,playerId,wallet,{term,minimum,difficul
   .bind(playerId,minimum,difficulty,difficulty,impossibleTier,JSON.stringify(secretIds),term,term,term,tradePageSize+1,page*tradePageSize).all();
  const cards=results.slice(0,tradePageSize).flatMap(({card:saved})=>{
   const card=JSON.parse(saved),locked=lockedForTrade(wallet,card.id,now);
-  return Object.entries(copiesByFinish(card)).filter(([type,count])=>count>0&&(!finish||type===finish)).map(([type,owned])=>
-   ({...tradeCard(card.row,type,wallet),owned,locked}));
+  return Object.entries(copiesByFinish(card)).filter(([type,count])=>count>0&&(!finish||type===finish)).map(([type,owned])=>{
+   const serials=cardSerials(card,type);
+   return {...tradeCard(card.row,type,wallet),owned,locked,...(serials.length?{serials}:{})};
+  });
  });
  return {cards,more:results.length>tradePageSize};
 }
@@ -89,6 +101,8 @@ export function exchangeCards(wallet,collection,give,receive,now){
   counts[item.finish]+=offset;
   const copies=counts.standard+counts.holo+counts.antimatter;
   if(!Number.isSafeInteger(copies))reject('One collection is at its copy limit.',409);
+  if(offset<0)removeCardSerials(card,item.finish,item.serials||[]);
+  else addCardSerials(card,item.finish,item.serials||[]);
   Object.assign(card,{copies,holoCopies:counts.holo,antimatterCopies:counts.antimatter});
   if(offset>0){
    card.last=now;

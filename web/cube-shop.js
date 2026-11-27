@@ -1,6 +1,7 @@
 import {cubeCatalog,cubeRarities,equippedCube,ownsCube} from './cube-catalog.js';
 import {gameCommand} from './game-client.js';
 import {stat} from './card-economy.js';
+import {formatCoins} from './coin-economy.js';
 
 const coin='<img src="/assets/packs/coin.png" alt="">';
 const cubeById=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
@@ -64,7 +65,7 @@ export function createCubeShop({root,applyWallet,sound,announce}){
   const focused=root.contains(document.activeElement)?document.activeElement.dataset:null;
   root.innerHTML='<section class="cube-shop-hero" style="--cube:'+equipped.color+'">'+
    '<div><h2>Cube shop</h2><p>Pick your cube for your Kingdom, training, and the Meme Arcade.</p><div class="cube-shop-count">'+
-   '<span>'+owned.length+' / '+cubeCatalog.length+' owned</span><span>'+coin+stat(wallet.coins)+' coins</span></div></div>'+
+   '<span>'+owned.length+' / '+cubeCatalog.length+' owned</span><span>'+coin+formatCoins(wallet.coins)+' coins</span></div></div>'+
    '<div class="cube-equipped">'+preview(equipped)+'<div><small>Equipped</small><strong>'+equipped.name+'</strong></div></div></section>'+
    '<div class="cube-catalog-head"><h2>Cube catalog</h2><div class="cube-filters" role="group" aria-label="Filter cubes"><button type="button" data-cube-filter="all" aria-pressed="'+!ownedOnly+'">All cubes</button><button type="button" data-cube-filter="owned" aria-pressed="'+ownedOnly+'">Owned</button></div></div>'+
    '<div class="cube-cards">'+list.map(cube=>{

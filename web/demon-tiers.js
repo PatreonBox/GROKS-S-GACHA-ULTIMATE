@@ -16,12 +16,15 @@ const catalogues = new Map();
 const orderByName = new Intl.Collator('en', {sensitivity: 'base', numeric: true});
 
 export function readRoute(hash) {
-  const [page, slug] = hash.replace(/^#/, '').toLowerCase().split('/');
+  const [page, slug, detail] = hash.replace(/^#/, '').toLowerCase().split('/');
   if ((page==='leaderboard'||page==='battle')&&slug==='players')return {section:'leaderboard',tier:'players'};
   if (page === 'battle') return {section:'battle',tier:['campaign','training','army','arcade'].includes(slug)?slug:'easy'};
   if (page === 'kingdom') return {section:'kingdom',tier:'kingdom'};
   if (page === 'progression') return {section:'progression',tier:slug==='achievements'?'achievements':'progression'};
-  if (page === 'trading') return {section:'trading',tier:'trading'};
+  if (page === 'trading') {
+    const trade=slug==='trade'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(detail)?detail:undefined;
+    return {section:'trading',tier:'trading',...(trade?{trade}:{})};
+  }
   if (page === 'cubes') return {section:'gacha',tier:'cubes'};
   if (page==='gacha'&&Object.hasOwn(packLevels,slug))return {section:'gacha',tier:'shop',pack:slug};
   if (page === 'gacha'){

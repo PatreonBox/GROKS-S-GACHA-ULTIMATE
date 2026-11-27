@@ -69,11 +69,11 @@
 .achievement-badge{position:relative;display:grid;place-items:center;flex:none;width:50px;height:56px;color:var(--medal,#f2ce85);isolation:isolate}
 .achievement-badge::before,.achievement-badge::after{content:"";position:absolute;inset:0;clip-path:polygon(50% 0,94% 22%,94% 73%,50% 100%,6% 73%,6% 22%);z-index:-1}
 .achievement-badge::before{background:linear-gradient(142deg,#fff0bd,var(--medal),#73568f)}
-.achievement-badge::after{inset:3px;background:radial-gradient(circle at 33% 17%,#46486a,#141b34 72%)}
-.achievement-badge>svg,.achievement-badge>img{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 2px 3px #0009)}
-.achievement-badge[data-badge-earned=false]{color:#c0b9cf}
-.achievement-badge[data-badge-earned=false]::before{background:linear-gradient(143deg,#b6accb,#6d688a,#494865)}
-.achievement-badge[data-badge-earned=false]>img{filter:saturate(.73) drop-shadow(0 2px 3px #0009)}
+.achievement-badge::after{inset:3px;background:radial-gradient(circle at 33% 17%,color-mix(in srgb,var(--medal) 24%,#303650),#141b34 74%)}
+.achievement-badge>svg,.achievement-badge>img{width:30px;height:30px;object-fit:contain;filter:drop-shadow(0 2px 3px #0009)}
+.achievement-badge[data-badge-earned=false]{color:color-mix(in srgb,var(--medal) 72%,#d2d2e7)}
+.achievement-badge[data-badge-earned=false]::before{background:linear-gradient(143deg,color-mix(in srgb,var(--medal) 66%,#d7d1e9),#635d7d,#414360)}
+.achievement-badge[data-badge-earned=false]>img{filter:saturate(.87) drop-shadow(0 2px 3px #0009)}
 .achievement-information{flex:1;min-width:0}
 .achievement-information h4{margin:6px 0 4px;color:#f7f4ff;font:800 1.28rem/1.06 Cond,sans-serif;overflow-wrap:anywhere}
 .achievement-information p,.achievement-stages p{margin:0 0 7px;color:#cfcde5;font-size:.85rem;line-height:1.32}

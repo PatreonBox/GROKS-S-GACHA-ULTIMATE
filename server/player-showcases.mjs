@@ -1,5 +1,6 @@
 import {statsFor} from '../web/battle-engine.js';
 import {bestFinish} from '../web/card-finishes.js';
+import {cardSerials} from '../web/card-serials.js';
 import {schools,skillsFor} from '../web/card-skills.js';
 import {equippedCube} from '../web/cube-catalog.js';
 import {forgePlan,housePlan,kingdomStats} from '../web/kingdom-rules.js';
@@ -30,9 +31,10 @@ export function bestCardShowcase(records,wallet){
  }
  if(!best)return null;
  const {card,power,stats:{attack,maxHp,level,stage,role}}=best;
- const [id,title,creator]=card.row,kit=skillsFor(card.row);
+ const [id,title,creator]=card.row,kit=skillsFor(card.row),finish=bestFinish(card);
+ const serials=cardSerials(card,finish);
  return {
-  id,title,creator,difficulty:card.row[6],rank:card.row[10]||0,finish:bestFinish(card),power,attack,maxHp,level,stage,role,
+  id,title,creator,difficulty:card.row[6],rank:card.row[10]||0,finish,power,attack,maxHp,level,stage,role,...(serials.length?{serials}:{}),
   basic:{name:kit.basicName,art:kit.basicArt,detail:schools[kit.basic].text},
   signature:{name:kit.signatureName,art:kit.signatureArt,detail:kit.detail,charge:kit.cost,cooldown:kit.cooldown}
  };

@@ -7,6 +7,7 @@ import {ico} from './icons.js';
 import {buildingSpecs,forgePlan,gemMine,houseStars,kingdomDaylight} from './kingdom-rules.js';
 import {spikeKind,spikePlan} from './kingdom-defences.js';
 import {cardRarity,displayCardRank,rarityBadge} from './card-rarity.js';
+import {serialBadge} from './card-serials.js';
 
 const number=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const skins=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
@@ -30,7 +31,7 @@ export function showBestCard(root,card,localCover){
   '<div class="profile-card-back gd-card-back">'+cardBackMark(card.difficulty)+'</div></div>'+
   '<div class="turn-handle" tabindex="0" role="group"></div><div class="turn-tools"><span>Drag to rotate</span>'+
   '<button type="button" data-reset-view>Reset view</button></div></div>'+
-  '<div class="profile-card-details">'+rarityBadge(rarity)+'<h3>'+escape(card.title)+'</h3><p>'+escape(card.creator?card.creator+' · ':'')+
+  '<div class="profile-card-details">'+rarityBadge(rarity)+'<h3>'+escape(card.title)+'</h3>'+serialBadge(card.serials)+'<p>'+escape(card.creator?card.creator+' · ':'')+
   escape(card.stage||card.difficulty)+' · '+escape(finish)+'</p><p>Level '+card.level+' · '+escape(card.role)+'</p>'+
   '<dl class="profile-card-stats">'+stats.map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+number.format(value)+'</dd></div>').join('')+'</dl>'+
   '<div class="profile-card-moves">'+move(card.basic,'Basic attack')+move(card.signature,'Signature move')+'</div></div></section>';

@@ -61,7 +61,7 @@ function turnCard(deck,tier){
  ],{duration:tier.ms,fill:'forwards'});
 }
 
-export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,hold=false,skipAll}){
+export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,skipAll}){
  const effect=rareTiers.indexOf(tier),reduce=reducedMotion()||!Element.prototype.animate;
  const track=rareLevelTrack(levelId),src=track?.src,bed=bedSource(tier);
  const dialog=document.createElement('dialog'),prior=document.activeElement;
@@ -82,7 +82,7 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
   '<div class="rare-controls">'+
   (skipAll?'<button type="button" class="outline" data-rare-all>Skip opening</button>':'')+
   '<button type="button" class="outline" data-rare-mute></button>'+
-  '<button type="button" class="primary" data-rare-close>'+(reduce?'Continue':'Skip reveal')+'</button></div></div>';
+  '<button type="button" class="primary" data-rare-close>'+(reduce?'Next':'Reveal now')+'</button></div></div>';
  const deck=dialog.querySelector('.rare-deck'),button=dialog.querySelector('[data-rare-close]'),announce=dialog.querySelector('.rare-live');
  const mute=dialog.querySelector('[data-rare-mute]'),credit=dialog.querySelector('.rare-track'),canvas=dialog.querySelector('canvas');
  if(credit){
@@ -97,28 +97,30 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
  hero.addEventListener('load',()=>hero.classList.add('ready'),{once:true});
  if(art?.complete&&art.naturalWidth)setBackdrop();
  else art?.addEventListener('load',setBackdrop,{once:true});
- let frame=0,impact=0,end=0,endAt=0,shownAt,closed=false,resolve;
- let world,watchSize,animation,musicRequest=0,bedRequest=0,motionMs=tier.ms;
+ let frame=0,impact=0,shownAt,closed=false,resolve;
+ let world,watchSize,animation,musicRequest=0,bedRequest=0,lastFrame=-Infinity,sceneOffset=0;
  const done=new Promise(r=>{resolve=r});
- const clipTime=hold?10.5:4.2;
+ function pauseWorld(){cancelAnimationFrame(frame);frame=0}
+ function resumeWorld(){if(!closed&&!document.hidden&&world&&!frame)frame=requestAnimationFrame(draw)}
  function disposeWorld(){
-  cancelAnimationFrame(frame);watchSize?.disconnect();
+  pauseWorld();watchSize?.disconnect();
   world?.dispose();world=null;delete dialog.dataset.worldReady;
  }
  function close(){
   if(closed)return;closed=true;musicRequest++;bedRequest++;
-  clearTimeout(impact);clearTimeout(end);animation?.cancel();sound.stopScore();
+  clearTimeout(impact);animation?.cancel();sound.stopScore();
   canvas.removeEventListener('webglcontextlost',disposeWorld);disposeWorld();
-  document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',close);
+  document.removeEventListener('visibilitychange',visibilityChanged);window.removeEventListener('pagehide',close);
   if(dialog.open)dialog.close();
   dialog.remove();
   if(prior?.isConnected)prior.focus({preventScroll:true});
   resolve();
  }
- function hidden(){if(document.hidden)close()}
- function setEnd(at){
-  if(hold||at<=endAt)return;
-  endAt=at;clearTimeout(end);end=setTimeout(close,Math.max(0,at-performance.now()));
+ function visibilityChanged(){
+  if(document.hidden){pauseWorld();return}
+  resumeWorld();
+  if(shownAt!==undefined&&src)playTrack();
+  else if(shownAt===undefined)playBed();
  }
  function syncMute(){
   mute.setAttribute('aria-label','Pack audio');
@@ -130,15 +132,9 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
   const request=++musicRequest;
   if(!src||!sound.enabled)return;
   const tryPlay=()=>{
-   if(closed||musicRequest!==request)return;
+   if(closed||musicRequest!==request||document.hidden)return;
    const elapsed=Math.max(0,(performance.now()-shownAt)/1000);
-   if(!hold&&elapsed>1.1)return;
-   if(sound.playRevealTrack(src,elapsed,clipTime-elapsed)){
-    const finish=shownAt+clipTime*1000;
-    setEnd(finish);
-    motionMs=Math.max(motionMs,finish-start);
-    if(world&&!frame)frame=requestAnimationFrame(draw);
-   }
+   sound.playRevealTrack(src,elapsed,10.5,{loop:true});
   };
   const loading=sound.prepareRevealTrack(src);
   if(loading)loading.then(tryPlay);else tryPlay();
@@ -158,7 +154,7 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
  function reveal(){
   if(closed||shownAt!==undefined)return;
   shownAt=performance.now();
-  dialog.dataset.revealed='true';button.textContent='Continue';announce.textContent=tier.name+' · '+title+' · '+odds;
+  dialog.dataset.revealed='true';button.textContent='Next';announce.textContent=tier.name+' · '+title+' · '+odds;
   playTrack();
  }
  dialog.addEventListener('cancel',e=>{e.preventDefault();close()});
@@ -172,16 +168,21 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
    if(src&&sound.enabled)sound.prepareRevealTrack(src);
   }
  };
- button.onclick=close;
+ button.onclick=()=>{
+  if(shownAt!==undefined){close();return}
+  clearTimeout(impact);
+  sceneOffset=Math.max(0,tier.hit-(performance.now()-start));
+  animation?.finish();
+  reveal();
+ };
  const all=dialog.querySelector('[data-rare-all]');
  if(all)all.onclick=()=>{all.hidden=true;button.focus({preventScroll:true});skipAll()};
  syncMute();observeArt?.(dialog);
- document.addEventListener('visibilitychange',hidden);
+ document.addEventListener('visibilitychange',visibilityChanged);
  window.addEventListener('pagehide',close);
  document.body.append(dialog);dialog.showModal();button.focus({preventScroll:true});
  if(src&&sound.enabled)sound.prepareRevealTrack(src);
  const start=performance.now();
- setEnd(start+(reduce?1750:tier.ms));
  if(reduce){
   dialog.dataset.still='true';
   deck.style.transform='none';
@@ -195,12 +196,14 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
  impact=setTimeout(reveal,tier.hit);
  function draw(now){
   frame=0;
-  if(closed||!world)return;
-  const age=Math.min(motionMs,Math.max(0,now-start));
+  if(closed||document.hidden||!world)return;
+  const age=Math.max(0,now-start+sceneOffset);
+  if(age>=tier.ms&&now-lastFrame<32){resumeWorld();return}
+  lastFrame=now;
   try{
    if(world.draw(age))dialog.dataset.worldReady='true';
   }catch{disposeWorld();return}
-  if(age<motionMs)frame=requestAnimationFrame(draw);
+  resumeWorld();
  }
  loadWorld().then(module=>{
   if(closed||!module)return;
@@ -208,9 +211,9 @@ export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,odds
    world=module.createRareRevealWorld(canvas,tier);
    if(!world)return;
    canvas.addEventListener('webglcontextlost',disposeWorld,{once:true});
-   watchSize=new ResizeObserver(()=>{if(!frame)draw(performance.now())});
+   watchSize=new ResizeObserver(resumeWorld);
    watchSize.observe(canvas);
-   frame=requestAnimationFrame(draw);
+   resumeWorld();
   }catch{disposeWorld()}
  });
  return {done,close};

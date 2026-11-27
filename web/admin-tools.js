@@ -2,10 +2,13 @@ import {housePlan,kingdomStats,maxTowerLevel} from './kingdom-rules.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from './kingdom-suggestions.js';
 import {maxPlayerLevel,playerProgress} from './player-progression.js';
 import {mineEarnings} from './mine-economy.js';
+import {coinLimit,formatCoins,roundCoins} from './coin-economy.js';
+import {keyLimit} from './demon-keys.js';
 
 const shortcut='9090889';
 const format=new Intl.NumberFormat(undefined,{maximumFractionDigits:2});
-const amountRules={luck:{min:0,max:Number.MAX_SAFE_INTEGER,step:1},coins:{min:0,max:Number.MAX_SAFE_INTEGER,step:1},
+const amountRules={luck:{min:0,max:Number.MAX_SAFE_INTEGER,step:1},coins:{min:0,max:coinLimit,step:.1},
+ demonKeys:{min:1,max:keyLimit,step:1},
  level:{min:0,max:maxPlayerLevel,step:1},
  gems:{min:0,max:Math.floor(Number.MAX_SAFE_INTEGER/10),step:.1}};
 
@@ -34,7 +37,8 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
    mana:format.format(plot.mana),stars:format.format(plot.stars)+' / 5'};
   for(const entry of kingdomStatsFields)entry.textContent=values[entry.dataset.adminKingdom];
   const level=playerProgress(currentWallet.playerXp).level;
-  const next=recommendedKingdomUpgrade(kingdomSuggestions(plot,currentWallet.coins+mineEarnings(currentWallet,now).coins,level,now));
+  const coins=roundCoins(currentWallet.coins+mineEarnings(currentWallet,now).coins);
+  const next=recommendedKingdomUpgrade(kingdomSuggestions(plot,coins,level,now));
   kingdomProgress.hidden=!next;
   if(next){
    kingdomProgress.querySelector('strong').textContent=next.title;
@@ -63,9 +67,14 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
   selected=player;target.hidden=!player;confirm.hidden=true;
   if(!player)return;
   target.querySelector('[data-admin-target-name]').textContent=player.name+(player.username?' · @'+player.username:'');
-  target.querySelector('[data-admin-target-meta]').textContent='Level '+format.format(player.level)+' · '+format.format(player.coins)+' coins'+(player.bannedAt?' · Banned':'');
+  target.querySelector('[data-admin-target-meta]').textContent='Level '+format.format(player.level)+' · '+formatCoins(player.coins)+' coins'+(player.bannedAt?' · Banned':'');
   ban.textContent=player.bannedAt?'Unban player':'Ban player';
-  edit.elements.amount.value=player[edit.elements.field.value];
+  playerAmountLimits();
+ }
+ function playerAmountLimits(){
+  const field=edit.elements.field.value,input=edit.elements.amount;
+  Object.assign(input,amountRules[field],{inputMode:field==='coins'?'decimal':'numeric'});
+  if(selected)input.value=selected[field];
  }
  function showResults(){
   results.replaceChildren(...players.map(player=>{
@@ -94,8 +103,8 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
  }
  function amountLimits(){
   const [field,mode]=action.value.split(':'),rules={...amountRules[field]};
-  if(field==='coins'&&mode==='add')rules.min=1;
-  Object.assign(amount,rules,{inputMode:field==='gems'?'decimal':'numeric'});
+  if(field==='coins'&&mode==='add')rules.min=.1;
+  Object.assign(amount,rules,{inputMode:rules.step===.1?'decimal':'numeric'});
   amount.value='';
  }
  action.addEventListener('change',amountLimits);
@@ -160,7 +169,7 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
   }catch(error){showStatus(error.message,true);}
   finally{setBusy(false);}
  });
- edit.elements.field.addEventListener('change',()=>{if(selected)edit.elements.amount.value=selected[edit.elements.field.value];});
+ edit.elements.field.addEventListener('change',playerAmountLimits);
  edit.addEventListener('submit',event=>{
   event.preventDefault();
   changePlayer(edit.elements.field.value,edit.elements.amount.valueAsNumber);

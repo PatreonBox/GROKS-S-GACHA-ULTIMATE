@@ -8,12 +8,14 @@ import net from 'node:net';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {createDiscordAuth} from '../server/discord.mjs';
+import {createDiscordAuth,officialGuildId} from '../server/discord.mjs';
 import {createBugReports} from '../server/bug-reports.mjs';
 import {openGameDatabase} from '../server/sqlite.mjs';
 import {cardCategories,createCardPool} from '../web/pack-engine.js';
 import {newWallet} from '../web/game-rules.js';
 import {playerXpAtLevel} from '../web/player-progression.js';
+import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
+import {readRoute} from '../web/demon-tiers.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
@@ -156,6 +158,100 @@ test('legacy Discord profiles refresh without signing the game session out or sw
  }finally{sqlite.close();}
 });
 
+test('the official Discord membership grants 15 keys once and adds an unread notice',async()=>{
+ const {DB,sqlite}=openGameDatabase(':memory:');
+ const clientId='1570000000000000000',userId='1580000000000000000';
+ let member=false,memberChecks=0;
+ const auth=createDiscordAuth(sqlite,{origin:publicOrigin,clientId,guildId:officialGuildId},async(url,options)=>{
+  if(url.endsWith('/oauth2/token'))return Response.json({access_token:'fixture-token'});
+  assert.equal(options.headers.Authorization,'Bearer fixture-token');
+  if(url==='https://discord.com/api/v10/users/@me')return Response.json({id:userId,username:'fixture'});
+  assert.equal(url,'https://discord.com/api/v10/users/@me/guilds/'+officialGuildId+'/member');
+  memberChecks++;
+  return member?Response.json({joined_at:'2026-11-27T12:00:00Z',pending:false,user:{id:userId}}):new Response(null,{status:404});
+ });
+ const request=(path,cookie,method='GET',origin=publicOrigin)=>new Request(new URL(path,publicOrigin),{
+  method,headers:{...(cookie?{Cookie:cookie}:{}),...(method==='POST'?{Origin:origin}:{})}
+ });
+ const run=(req)=>auth.handle(req,new URL(req.url));
+ async function finish(opened,session){
+  const authorization=new URL(opened.headers.get('location'));
+  assert.equal(authorization.searchParams.get('scope'),'identify guilds.members.read');
+  const callback=new URL('/api/auth/discord/callback',publicOrigin);
+  callback.search=new URLSearchParams({state:authorization.searchParams.get('state'),code:'fixture-code',iss:'https://discord.com'});
+  const flow=opened.headers.get('set-cookie').split(';')[0];
+  return run(request(callback,session?session+'; '+flow:flow));
+ }
+ const read=async(path,session)=>{
+  const req=request(path,session),account=auth.account(req);
+  const result=await worker.fetch(req,{DB,guestOnly:true,discordEnabled:true,discordUser:account?.id,discordProfile:account?.profile});
+  assert.equal(result.status,200);
+  return result.json();
+ };
+ try{
+  const initial=await finish(run(request('/signin-with-discord')));
+  const session=initial.headers.getSetCookie()[1].split(';')[0];
+  const start=await read('/api/game',session);
+  assert.equal(start.wallet.demonKeys,30);
+  assert.equal(start.discordKeyBonusClaimed,false);
+  assert.equal(start.keyBonus,undefined);
+  assert.equal(run(request('/api/auth/discord/membership',session,'POST','https://other.example')).status,403);
+  member=true;
+  const checked=await finish(run(request('/api/auth/discord/membership',session,'POST')),session);
+  assert.equal(new URL(checked.headers.get('location')).searchParams.get('discord_membership'),'verified');
+  assert.equal(checked.headers.getSetCookie().length,1);
+  const credited=await Promise.all([read('/api/game',session),read('/api/game',session)]);
+  assert.ok(credited.every(data=>data.wallet.demonKeys===45&&data.discordKeyBonusClaimed));
+  assert.deepEqual(credited.flatMap(data=>data.keyBonus?[data.keyBonus]:[]),[{keys:15}]);
+  const notices=await read('/api/game?view=notifications',session);
+  assert.equal(notices.unread,1);
+  assert.deepEqual(notices.list.map(notice=>notice.kind),['discord-key-bonus']);
+  const loginAgain=await finish(run(request('/signin-with-discord')));
+  const next=loginAgain.headers.getSetCookie()[1].split(';')[0];
+  assert.equal((await read('/api/game',next)).wallet.demonKeys,45);
+  assert.equal((await read('/api/game?view=notifications',next)).unread,1);
+  assert.equal(memberChecks,2);
+ }finally{sqlite.close();}
+});
+
+test('trade notifications persist, stay private, and count new events after marking read',async()=>{
+ const {DB,sqlite}=openGameDatabase(':memory:');
+ const buyer='1580000000000000001',seller='1580000000000000002';
+ const call=(id,path,body,origin=publicOrigin)=>worker.fetch(new Request(new URL(path,publicOrigin),{
+  method:body?'POST':'GET',...(body?{headers:{'Content-Type':'application/json',Origin:origin},body:JSON.stringify(body)}:{})
+ }),{DB,guestOnly:true,discordEnabled:true,discordUser:id});
+ const notices='/api/game?view=notifications';
+ const read=id=>call(id,notices).then(response=>response.json());
+ try{
+  await Promise.all([call(buyer,'/api/game'),call(seller,'/api/game')]);
+  const find=id=>sqlite.prepare('SELECT player_id FROM game_profiles WHERE owner=?').get('discord:'+id).player_id;
+  const insert=sqlite.prepare(`INSERT INTO game_trades(trade_id,sender_id,recipient_id,offered,requested,created_at,expires_at,market_eligible)
+   VALUES(?,?,?,'[]','[]',?,?,0)`);
+  const now=Date.now(),first=crypto.randomUUID(),second=crypto.randomUUID();
+  insert.run(first,find(buyer),find(seller),now,now+60_000);
+  const received=await read(seller),id=received.list[0].id;
+  assert.equal(received.unread,1);
+  assert.equal(received.list[0].kind,'trade-request');
+  assert.equal(received.list[0].tradeId,first);
+  assert.equal((await call(seller,notices,{id},'https://other.example')).status,403);
+  assert.deepEqual(await (await call(buyer,notices,{id})).json(),{unread:0,list:[]});
+  assert.equal((await read(seller)).unread,1);
+  insert.run(second,find(buyer),find(seller),now+1,now+60_000);
+  const marked=await (await call(seller,notices,{through:id})).json();
+  assert.equal(marked.unread,1);
+  assert.deepEqual(marked.list.map(notice=>notice.read),[false,true]);
+  const update=sqlite.prepare('UPDATE game_trades SET status=?,resolved_at=? WHERE trade_id=?');
+  update.run('completed',now+2,first);
+  update.run('completed',now+2,first);
+  update.run('declined',now+3,second);
+  const sent=await read(buyer);
+  assert.equal(sent.unread,2);
+  assert.deepEqual(sent.list.map(notice=>notice.kind),['trade-declined','trade-accepted']);
+  assert.equal((await (await call(buyer,notices,{through:sent.list[0].id})).json()).unread,0);
+  assert.equal((await call(null,notices)).status,401);
+ }finally{sqlite.close();}
+});
+
 test('bug reports require sign-in and valid details and deliver once to the configured inbox',async()=>{
  const {DB,sqlite}=openGameDatabase(':memory:');
  const userId='1580000000000000001';
@@ -227,15 +323,25 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
   assert.equal(adminStats.privateRank,true);
   assert.equal((await call(adminId,'/api/players',{alias:'Owner'})).status,403);
   assert.equal((await command(memberId,'admin.adjust',{field:'coins',mode:'add',amount:70})).status,403);
+  assert.equal((await command(memberId,'admin.adjust',{field:'demonKeys',mode:'add',amount:8})).status,403);
   assert.equal((await command(memberId,'admin.reset',{confirmation:'RESET'})).status,403);
   assert.equal((await command(memberId,'admin.adjust',{field:'level',mode:'set',amount:15})).status,403);
   assert.equal((await command(memberId,'admin.kingdom.finish',{})).status,403);
   assert.equal((await command(adminId,'admin.adjust',{field:'luck',mode:'set',amount:Number.MAX_SAFE_INTEGER+1})).status,400);
   assert.equal((await command(adminId,'admin.adjust',{field:'gems',mode:'set',amount:12.55})).status,400);
-  const requestId=crypto.randomUUID(),args={field:'coins',mode:'add',amount:700};
+  assert.equal((await command(adminId,'admin.adjust',{field:'coins',mode:'set',amount:12.55})).status,400);
+  assert.equal((await command(adminId,'admin.adjust',{field:'demonKeys',mode:'add',amount:1.5})).status,400);
+  assert.equal((await command(adminId,'admin.adjust',{field:'demonKeys',mode:'set',amount:15})).status,400);
+  const requestId=crypto.randomUUID(),args={field:'coins',mode:'add',amount:700.7};
   for(const result of await Promise.all([command(adminId,'admin.adjust',args,requestId),command(adminId,'admin.adjust',args,requestId)])){
    assert.equal(result.status,200);
-   assert.equal((await result.json()).wallet.coins,850);
+   assert.equal((await result.json()).wallet.coins,850.7);
+  }
+  const {wallet:{demonKeys:priorKeys}}=await (await call(adminId)).json();
+  const grantId=crypto.randomUUID(),grant={field:'demonKeys',mode:'add',amount:8};
+  for(const response of await Promise.all([command(adminId,'admin.adjust',grant,grantId),command(adminId,'admin.adjust',grant,grantId)])){
+   assert.equal(response.status,200);
+   assert.equal((await response.json()).wallet.demonKeys,priorKeys+8);
   }
   for(const [field,mode,amount,value] of [['luck','set',120,120],['luck','add',35,155],['gems','set',20.5,20.5]]){
    const response=await command(adminId,'admin.adjust',{field,mode,amount});
@@ -418,8 +524,8 @@ const tradeLine=(row,finish='standard',count=1)=>({id:row[0],finish,count});
 
 test('Trading matches usernames, honors receive floors, and exchanges exact finishes once',async t=>{
  const f=tradeFixture(t),a=f.player('merchant'),b=f.player('dash_mina',16),c=f.player('lowlevel',14);
- const [easy]=await tradePool('Easy'),[extreme]=await tradePool('Extreme Demon');
- f.card(a,easy,2,1);f.card(b,extreme,1,0,1);
+ const [easy,elsewhere]=await tradePool('Easy');
+ f.card(a,easy,4,3);f.card(b,elsewhere,1,0,1);
  assert.deepEqual((await f.read(a,'overview')).settings,{enabled:true,minimum:0});
  assert.equal((await f.read(c,'find',{q:'mina'},403)).error,'Only level 15+ people can trade.');
  assert.deepEqual((await f.read(a,'find',{q:'@DASH_MINA'})).players.map(p=>p.id),[b.id]);
@@ -431,21 +537,21 @@ test('Trading matches usernames, honors receive floors, and exchanges exact fini
  await f.command(b,'trade.settings',{enabled:true,minimum:10});
  assert.deepEqual((await f.read(a,'partner',{id:b.id})).minimum,{give:10,get:0});
  assert.deepEqual((await f.read(a,'collection',{id:b.id,side:'give'})).cards,[]);
- const args={player:b.id,offered:[tradeLine(easy,'holo')],requested:[tradeLine(extreme,'antimatter')]};
+ const args={player:b.id,offered:[tradeLine(easy,'holo',3)],requested:[tradeLine(elsewhere,'antimatter')]};
  await f.send(a,'propose',args,409);
  await f.command(b,'trade.settings',{enabled:true,minimum:0});
- const collection=await f.read(a,'collection',{id:b.id,side:'get',q:String(extreme[0]),finish:'antimatter'});
+ const collection=await f.read(a,'collection',{id:b.id,side:'get',q:String(elsewhere[0]),finish:'antimatter'});
  assert.equal(collection.cards.length,1);
  assert.equal(collection.cards[0].finish,'antimatter');
  assert.ok(collection.cards[0].hp>0&&collection.cards[0].attack>0&&collection.cards[0].signature);
  assert.deepEqual(collection.cards[0].market,{value:null,demand:0,samples:0});
- await f.send(a,'propose',{...args,offered:[tradeLine(easy,'holo',2)]},409);
+ await f.send(a,'propose',{...args,offered:[tradeLine(easy,'holo',4)]},409);
  const requestId=crypto.randomUUID(),created=await f.send(a,'propose',args,200,requestId);
  assert.equal((await f.send(a,'propose',args,200,requestId)).trade.id,created.trade.id);
  const {id}=created.trade;
  assert.equal((await f.read(a,'outgoing')).trades.length,1);
  assert.equal((await f.read(b,'incoming')).trades[0].giveCount,1);
- assert.equal((await f.read(a,'quotes',{id:extreme[0]})).quotes.antimatter.demand,1);
+ assert.equal((await f.read(a,'quotes',{id:elsewhere[0]})).quotes.antimatter.demand,1);
  await f.read(f.player('stranger'),'detail',{id},404);
  await f.send(a,'accept',{id},403);
  await f.command(b,'trade.settings',{enabled:false,minimum:0});
@@ -458,17 +564,48 @@ test('Trading matches usernames, honors receive floors, and exchanges exact fini
  assert.equal(receipts[0].trade.get[0].finish,'holo');
  assert.equal(f.owned(a,easy[0]).copies,1);
  assert.equal(f.owned(a,easy[0]).holoCopies,0);
- assert.equal(f.owned(a,extreme[0]).antimatterCopies,1);
- assert.equal(f.owned(b,extreme[0]).copies,0);
- assert.equal(f.owned(b,easy[0]).holoCopies,1);
+ assert.equal(f.owned(a,elsewhere[0]).antimatterCopies,1);
+ assert.equal(f.owned(b,elsewhere[0]).copies,0);
+ assert.equal(f.owned(b,easy[0]).holoCopies,3);
  assert.equal((await f.json(a)).wallet.cardsRevision,1);
  assert.equal((await f.read(a,'history')).trades[0].id,id);
  assert.equal((await f.read(a,'detail',{id})).trade.give[0].finish,'holo');
  assert.equal((await f.read(a,'outgoing')).trades.length,0);
 });
 
+test('Trade values block lopsided requests and recheck saved offers before any transfer',async t=>{
+ const f=tradeFixture(t),a=f.player('balance_a'),b=f.player('balance_b');
+ const [give,get]=await tradePool('Easy'),[rare]=await tradePool('Extreme Demon');
+ f.card(a,give,2);f.card(b,get,1);f.card(b,rare,1,0,1);
+ assert.equal(tradeBalance(85,100).allowed,true);
+ assert.equal(tradeBalance(1000,849).allowed,false);
+ assert.equal(tradeSearchTerm(' balance_b '),'@balance_b');
+ assert.equal(tradeSearchTerm(b.discord),b.discord);
+ assert.equal(tradeSearchTerm('<@!'+b.discord+'>'),b.discord);
+ assert.equal(tradeSearchTerm('Some Display Name'),'Some Display Name');
+ assert.deepEqual((await f.read(a,'find',{q:'balance_b'})).players.map(player=>player.id),[b.id]);
+ const args={player:b.id,offered:[tradeLine(give)],requested:[tradeLine(get)]};
+ const attempted=await f.send(a,'propose',{...args,requested:[{...tradeLine(rare,'antimatter'),basePower:0,market:{value:0}}]},409);
+ assert.match(attempted.error,/within 15% in trade value/);
+ const {trade}=await f.send(a,'propose',args);
+ assert.equal(trade.expiresAt-trade.createdAt,48*86_400_000);
+ assert.deepEqual(readRoute('#trading/trade/'+trade.id),{section:'trading',tier:'trading',trade:trade.id});
+ const stale=[{...trade.get[0],id:rare[0],finish:'antimatter'}];
+ f.sqlite.prepare('UPDATE game_trades SET requested=? WHERE trade_id=?').run(JSON.stringify(stale),trade.id);
+ const rejected=await f.send(b,'accept',{id:trade.id},409);
+ assert.match(rejected.error,/within 15% in trade value/);
+ assert.equal(f.owned(a,give[0]).copies,2);
+ assert.equal(f.owned(b,rare[0]).antimatterCopies,1);
+ assert.equal((await f.read(b,'detail',{id:trade.id})).trade.status,'pending');
+ f.sqlite.prepare('UPDATE game_trades SET expires_at=? WHERE trade_id=?').run(Date.now()-1,trade.id);
+ assert.deepEqual((await f.read(b,'incoming')).trades,[]);
+ assert.deepEqual((await f.read(a,'outgoing')).trades,[]);
+ assert.equal((await f.read(b,'history')).trades[0].status,'expired');
+ assert.match((await f.send(b,'accept',{id:trade.id},409)).error,/already expired/);
+});
+
 test('Competing offers cannot exchange the same copy twice and unresolved offers can close',async t=>{
- const f=tradeFixture(t),[give,get]=await tradePool('Normal');
+ const f=tradeFixture(t),[give,get,newCard]=await tradePool('Normal');
  const sender=f.player('sender',15,{wallet:{squad:[give[0]],training:{[give[0]]:{xp:500}}}}),a=f.player('first'),b=f.player('second');
  f.card(sender,give,1);f.card(a,get,1);f.card(b,get,1);
  const proposal=async target=>(await f.send(sender,'propose',{player:target.id,offered:[tradeLine(give)],requested:[tradeLine(get)]})).trade;
@@ -486,7 +623,7 @@ test('Competing offers cannot exchange the same copy twice and unresolved offers
  assert.equal((await f.send(loser,'decline',{id:open.id})).trade.status,'declined');
  const returned=await f.send(sender,'propose',{player:loser.id,offered:[tradeLine(get)],requested:[tradeLine(get,'holo')]},409);
  assert.match(returned.error,/no longer available/);
- const [newCard]=await tradePool('Hard');f.card(loser,newCard,1);
+ f.card(loser,newCard,1);
  const fresh=(await f.send(sender,'propose',{player:loser.id,offered:[tradeLine(get)],requested:[tradeLine(newCard)]})).trade;
  assert.equal((await f.send(sender,'cancel',{id:fresh.id})).trade.status,'cancelled');
  const expired=(await f.send(sender,'propose',{player:loser.id,offered:[tradeLine(get)],requested:[tradeLine(newCard)]})).trade;
@@ -497,9 +634,9 @@ test('Competing offers cannot exchange the same copy twice and unresolved offers
 
 test('Market prices need five trading pairs, respond to overpayment, and stay separate by finish',async t=>{
  const f=tradeFixture(t),sender=f.player('market_seller'),buyers=['alex','blair','casey','dara','elliot','frank'].map(name=>f.player(name));
- const card=(await tradePool('Extreme Demon')).at(-1),[offers]=await tradePool('Insane Demon');
+ const card=(await tradePool('Extreme Demon')).at(-1),[offers]=await tradePool('Medium Demon');
  f.card(sender,card,7);for(const buyer of buyers)f.card(buyer,offers,20);
- const exchange=async(buyer,count=1)=>{
+ const exchange=async(buyer,count=9)=>{
   const {trade}=await f.send(buyer,'propose',{player:sender.id,offered:[tradeLine(offers,'standard',count)],requested:[tradeLine(card)]});
   return (await f.send(sender,'accept',{id:trade.id})).trade;
  };
@@ -517,7 +654,7 @@ test('Market prices need five trading pairs, respond to overpayment, and stay se
  assert.deepEqual(holo,{value:null,demand:0,samples:0});
  const search=await f.read(sender,'market',{q:card[0],finish:'standard'});
  assert.equal(search.cards[0].market.value,standard.value);
- await exchange(buyers[5],12);
+ await exchange(buyers[5],10);
  assert.ok((await quote()).standard.value>standard.value);
  assert.ok((await f.json(sender)).wallet.achievements['trade-first']);
  f.sqlite.prepare("UPDATE game_trades SET resolved_at=? WHERE status='completed'").run(Date.now()-31*86_400_000);

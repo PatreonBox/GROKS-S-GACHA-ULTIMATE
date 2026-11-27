@@ -5,6 +5,7 @@ import {payout} from './battle-engine.js';
 import {difficulties} from './pack-engine.js';
 import {gemTenths} from './card-economy.js';
 import {seriesData} from './army-series-data.js';
+import {changeCoins} from './coin-economy.js';
 
 export const armySignatureVersion=2;
 export const armyChapters=[
@@ -90,8 +91,7 @@ export function grantArmyLoot(wallet,battle){
  const first=status==='won'&&!(seriesKey?seriesCleared(wallet,seriesKey,chapter):chapterCleared(wallet,tier,chapter));
  const seriesComplete=Boolean(first&&series&&chapter===2);
  const prize=seriesComplete?seriesFinaleReward(series):{coins:0,gems:0};
- const coins=Math.min(Number.MAX_SAFE_INTEGER-wallet.coins,earned+prize.coins),gems=first?chapterGems(tier,chapter)+prize.gems:0;
- wallet.coins+=coins;
+ const coins=changeCoins(wallet,earned+prize.coins),gems=first?chapterGems(tier,chapter)+prize.gems:0;
  wallet.gems=(gemTenths(wallet.gems)+gemTenths(gems))/10;
  if(first&&series){
   wallet.armySeries??={};

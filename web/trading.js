@@ -2,16 +2,16 @@ import {cardCategories} from './pack-engine.js';
 import {finishLabels} from './card-finishes.js';
 import {gameCommand,tradeCommand,tradeRead} from './game-client.js';
 import {ico} from './icons.js';
-import {marketDays,marketMinPairs,tradeCardLimit,tradeKey,tradeLevelNotice,tradePreferences} from './trade-rules.js';
-import {escapeTrade as esc,tradeCardHTML,tradeNumber,tradeValue} from './trade-card-view.js';
+import {marketDays,marketMinPairs,tradeBalance,tradeBundleTotal,tradeCardLimit,tradeKey,tradeLevelNotice,tradeMaxGap,tradePreferences,tradeSearchTerm} from './trade-rules.js';
+import {escapeTrade as esc,tradeCardHTML,tradeNumber,tradePoints} from './trade-card-view.js';
 
 const tabs=[['find','Find player'],['incoming','Incoming'],['outgoing','Outgoing'],['history','History'],['market','Market']];
 const statuses={pending:'Pending',completed:'Completed',declined:'Declined',cancelled:'Cancelled',expired:'Expired'};
 const directions=['give','get'];
 const date=new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'});
 const total=cards=>cards.reduce((sum,card)=>sum+card.count,0);
-const bundleValue=cards=>cards.length&&cards.every(card=>Number.isFinite(card.market?.value))
- ?tradeValue(cards.reduce((sum,card)=>sum+card.count*card.market.value,0)):'--';
+const balanceLabel='Both sides must be within '+tradeMaxGap+'% in trade value.';
+const balancePercent=gap=>tradeNumber(Math.ceil(gap*10)/10)+'%';
 const time=ms=>'<time datetime="'+new Date(ms).toISOString()+'">'+esc(date.format(ms))+'</time>';
 const textStatus=message=>'<p class="trade-empty">'+esc(message)+'</p>';
 const avatar=person=>'<span class="trade-player-initial" aria-hidden="true">'+(person.avatar?'<img src="'+esc(person.avatar)+'" alt="" referrerpolicy="no-referrer">':'')+
@@ -27,7 +27,7 @@ const pagination=(page,more)=>page||more?'<div class="trade-pagination"><button 
 
 export function createTrading(root,{coverSource,syncWallet}){
  let active;
- return {show(locked){
+ return {show(locked,tradeId){
   active?.dispose();
   if(locked){
    active=null;
@@ -42,30 +42,30 @@ export function createTrading(root,{coverSource,syncWallet}){
     (key==='incoming'||key==='outgoing'?'<span data-trade-count="'+key+'" hidden></span>':'')+'</button>').join('')+'</nav>'+
     '<div class="trade-content" data-trade-content></div><dialog class="player-dialog trade-dialog" aria-labelledby="tradeDialogTitle">'+
     '<div class="player-dialog-head"><h2 id="tradeDialogTitle"></h2><button class="iconbtn" data-close-trade type="button" aria-label="Close">'+ico('x')+'</button></div><div class="player-dialog-body" data-trade-dialog></div></dialog></section>';
-  active=createRoom(root.querySelector('.trade-room'),coverSource,syncWallet);
+  active=createRoom(root.querySelector('.trade-room'),coverSource,syncWallet,tradeId);
  },leave(){active?.dispose();active=null;},refresh(){active?.refresh();}};
 }
 
-function createRoom(room,cover,syncWallet){
+function createRoom(room,cover,syncWallet,tradeId){
  const content=room.querySelector('[data-trade-content]'),dialog=room.querySelector('dialog');
  const title=dialog.querySelector('h2'),body=dialog.querySelector('[data-trade-dialog]');
  const counts=Object.fromEntries(['incoming','outgoing'].map(key=>[key,room.querySelector('[data-trade-count="'+key+'"]')]));
  let section='find',isOpen=true,readVersion=0,modalVersion=0,refreshing=false;
- let settings=tradePreferences(),settingsVersion=0,recentCounts='',busy=false,viewPage=0,dialogState;
+ let settings=tradePreferences(),settingsVersion=0,recentCounts='',busy=false,viewPage=0,dialogState,nextExpiry=Infinity;
  let query='',found=null,marketTerm='',marketTier='',marketFinish='standard';
  let partner,draft,available=[],hasSecrets=false;
  let filterTimer=0;
  const current=request=>isOpen&&request===readVersion;
  const modalCurrent=request=>isOpen&&dialog.open&&request===modalVersion;
- const drawCards=(cards,controls=()=>'',moves=true)=>'<div class="trade-card-grid">'+cards.map(card=>tradeCardHTML(card,cover,controls(card),moves)).join('')+'</div>';
+ const drawCards=(cards,controls=()=>'',moves=true,marketView=false)=>'<div class="trade-card-grid">'+cards.map(card=>tradeCardHTML(card,cover,controls(card),moves,marketView)).join('')+'</div>';
  const nav=()=>{
   for(const button of room.querySelectorAll('[data-trade-tab]'))button.setAttribute('aria-pressed',String(button.dataset.tradeTab===section));
  };
  function drawFind(){
   content.innerHTML='<section class="trade-panel trade-find"><h2>Find player</h2>'+
    (!settings.enabled?'<p class="trade-empty">Trading is disabled for your account. <button type="button" class="outline" data-trade-settings>Open Trade settings</button></p>':'<form class="trade-search" data-find-player><label>Discord username or ID'+
-    '<input type="search" name="query" value="'+esc(query)+'" placeholder="Username, display name, or Discord ID" autocomplete="off" autocapitalize="off" maxlength="80" required></label>'+
-    '<button type="submit" class="primary">Find player</button></form><div data-trade-results></div>')+'</section>';
+    '<input type="search" name="query" value="'+esc(query)+'" placeholder="Username, display name, or Discord ID" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" required></label>'+
+    '<button type="submit" class="primary">Find player</button></form><div data-trade-results aria-live="polite"></div>')+'</section>';
   if(settings.enabled)drawPlayers();
  }
  function drawPlayers(){
@@ -76,9 +76,10 @@ function createRoom(room,cover,syncWallet){
    '</span><span class="trade-list-meta">Level '+player.level+'</span>'+ico('right')+'</button></li>').join('')+'</ul>':textStatus('No available players found.');
  }
  async function findPlayers(form){
-  const term=form.elements.query.value.trim();
-  if(!term)return;
-  query=term;
+  const input=form.elements.query;
+  query=tradeSearchTerm(input.value);
+  if(!query)return;
+  input.value=query;
   const request=++readVersion,output=content.querySelector('[data-trade-results]');
   output.innerHTML=textStatus('Searching…');
   try{
@@ -101,30 +102,36 @@ function createRoom(room,cover,syncWallet){
  function composeSide(side,label,button){
   return '<section class="trade-side trade-panel" data-trade-side="'+side+'"><div class="trade-side-heading"><div><h3>'+label+'</h3><small>'+esc(threshold(partner.minimum[side]))+'</small></div>'+
    '<button type="button" class="outline" data-add-from="'+side+'">'+button+'</button></div><div data-draft-cards></div><div class="trade-side-total">'+
-   '<span data-side-count></span><span>Total <strong data-side-value></strong></span></div></section>';
+   '<span data-side-count></span><span>Trade value <strong data-side-value></strong></span></div></section>';
  }
  function drawComposer(){
   const {player}=partner;
   content.innerHTML='<section class="trade-composer"><div class="trade-composer-head"><div><button class="outline trade-back" type="button" data-trade-back>'+ico('left')+' Find player</button>'+
    '<div class="trade-partner">'+avatar(player)+'<div><h2>Trade with '+esc(player.name)+'</h2><p>'+esc(accountName(player))+(player.username?' · ':'')+'Level '+player.level+'</p></div></div></div></div>'+
-   '<div class="trade-columns">'+composeSide('give','Your offer','Add your cards')+composeSide('get','Your request','Browse their cards')+'</div>'+
-   '<div class="trade-send"><div><p>Training stays on each player’s account. Card availability is checked when the offer is accepted.</p><p class="trade-action-status" data-trade-status role="status"></p></div>'+
-   '<button class="primary" type="button" data-propose>Propose trade</button></div></section>';
+   '<div class="trade-columns">'+composeSide('give','You offer','Add your cards')+composeSide('get','You receive','Browse their cards')+'</div>'+
+   '<div class="trade-send"><div><p class="trade-balance" data-trade-balance aria-live="polite"></p><p>Training stays with each player.</p><p class="trade-action-status" data-trade-status role="status"></p></div>'+
+   '<button class="primary" type="button" data-propose>Send offer</button></div></section>';
   paintDraft();
  }
  function paintDraft(){
   if(!draft||!content.querySelector('[data-propose]'))return;
-  for(const side of directions){
+  const [give,get]=directions.map(side=>tradeBundleTotal([...draft[side].values()]));
+  for(const [i,side] of directions.entries()){
    const panel=content.querySelector('[data-trade-side="'+side+'"]'),cards=[...draft[side].values()],count=total(cards);
    panel.querySelector('[data-side-count]').textContent=count+' / '+tradeCardLimit+' cards';
-   panel.querySelector('[data-side-value]').textContent=bundleValue(cards);
+   panel.querySelector('[data-side-value]').textContent=tradePoints(i===0?give:get);
    panel.querySelector('[data-draft-cards]').innerHTML=cards.length?drawCards(cards,card=>{
     const key=tradeKey(card);
     return '<div class="trade-adjust"><button type="button" data-card-amount="-1" data-side="'+side+'" data-card-key="'+key+'" aria-label="Remove one '+esc(card.title)+'">−</button><b>'+card.count+'</b>'+
      '<button type="button" data-card-amount="1" data-side="'+side+'" data-card-key="'+key+'" aria-label="Add one '+esc(card.title)+'" '+(card.count>=card.owned||count>=tradeCardLimit?'disabled':'')+'>+</button></div>';
    },false):textStatus(side==='give'?'Choose the cards you’ll offer.':'Choose the cards you want in return.');
   }
-  content.querySelector('[data-propose]').disabled=busy||!draft.give.size||!draft.get.size;
+  const hasBoth=draft.give.size>0&&draft.get.size>0,balance=tradeBalance(give,get);
+  const label=content.querySelector('[data-trade-balance]');
+  label.dataset.balanced=hasBoth?String(balance.allowed):'';
+  label.textContent=!hasBoth?balanceLabel:balance.allowed?'Balanced · '+balancePercent(balance.gap)+' apart':
+   'Add at least '+tradePoints(balance.shortfall)+' to '+(give<get?'your offer':'your request')+' to reach the '+tradeMaxGap+'% limit.';
+  content.querySelector('[data-propose]').disabled=busy||!hasBoth||!balance.allowed;
  }
  function changeDraft(side,key,amount,card=draft[side].get(key)){
   if(!card)return;
@@ -135,7 +142,7 @@ function createRoom(room,cover,syncWallet){
   paintDraft();
  }
  async function propose(){
-  if(busy||!partner||!draft?.give.size||!draft.get.size)return;
+  if(busy||!partner||!content.querySelector('[data-propose]:enabled'))return;
   busy=true;paintDraft();
   const status=content.querySelector('[data-trade-status]');
   status.textContent='Sending offer…';
@@ -199,19 +206,21 @@ function createRoom(room,cover,syncWallet){
   try{
    const {trades,more}=await tradeRead(view,{page:viewPage});
    if(!current(request))return;
+   nextExpiry=Math.min(...trades.filter(trade=>trade.status==='pending').map(trade=>trade.expiresAt),Infinity);
    if(!trades.length&&viewPage>0){viewPage--;loadList();return;}
    const empty={incoming:'You have no incoming trades.',outgoing:'You have no outgoing trades.',history:'Your trade history is empty.'};
    const markup=(trades.length?'<ul class="trade-list">'+trades.map(trade=>'<li><button class="trade-list-row" type="button" data-trade-open="'+trade.id+'">'+
     avatar(trade.player)+'<span class="trade-player-name"><strong>'+esc(trade.player.name)+'</strong>'+
     '<small>'+trade.giveCount+(trade.status==='completed'?' given · ':' offered · ')+trade.getCount+(trade.status==='completed'?' received':' requested')+
-    '</small></span><span class="trade-state" data-state="'+trade.status+'">'+statuses[trade.status]+'</span><span class="trade-list-meta">'+time(trade.resolvedAt||trade.createdAt)+'</span>'+ico('right')+'</button></li>').join('')+'</ul>':textStatus(empty[view]))+pagination(viewPage,more);
+    '</small></span><span class="trade-state" data-state="'+trade.status+'">'+statuses[trade.status]+'</span><span class="trade-list-meta">'+
+    (trade.status==='pending'?'Expires '+time(trade.expiresAt):time(trade.resolvedAt||trade.createdAt))+'</span>'+ico('right')+'</button></li>').join('')+'</ul>':textStatus(empty[view]))+pagination(viewPage,more);
    const focused=output.contains(document.activeElement)&&document.activeElement.dataset.tradeOpen;
    output.innerHTML=markup;
    if(focused)output.querySelector('[data-trade-open="'+focused+'"]')?.focus({preventScroll:true});
   }catch(error){if(current(request)&&!quiet)output.innerHTML=textStatus(error.message);}
  }
  function receiptSide(label,cards){
-  return '<section class="trade-panel trade-receipt-side"><div class="trade-side-heading"><div><h3>'+label+' <span>('+total(cards)+')</span></h3><small>Total '+bundleValue(cards)+'</small></div></div>'+
+  return '<section class="trade-panel trade-receipt-side"><div class="trade-side-heading"><div><h3>'+label+' <span>('+total(cards)+')</span></h3><small>Trade value '+tradePoints(tradeBundleTotal(cards))+'</small></div></div>'+
    drawCards(cards)+'</section>';
  }
  function drawTrade(trade){
@@ -221,26 +230,32 @@ function createRoom(room,cover,syncWallet){
   const message=status==='pending'?(direction==='incoming'?'Offer received':'Offer sent'):'Trade '+status;
   const meta=status==='pending'?'Expires '+time(expiresAt):time(resolvedAt||createdAt);
   const labels=done?['You gave','You got']:status==='pending'?['You offer','You receive']:['You offered','You requested'];
+  const balance=tradeBalance(tradeBundleTotal(trade.give),tradeBundleTotal(trade.get));
+  const outsideLimit=Number.isFinite(balance.gap)&&!balance.allowed;
   body.innerHTML='<div class="trade-receipt-banner" data-state="'+status+'"><span>'+ico(done?'check':'exchange')+'</span><div><strong>'+message+'</strong><small>'+meta+'</small></div></div>'+
    '<div class="trade-receipt-reference">'+avatar(player)+'<div><b>'+esc(player.name)+'</b>'+playerHandle(player)+'</div><span>#'+trade.id.slice(0,8).toUpperCase()+'</span></div>'+
    '<div class="trade-columns">'+receiptSide(labels[0],trade.give)+receiptSide(labels[1],trade.get)+'</div>'+
-   (status==='pending'?'<div class="trade-dialog-foot"><p class="trade-action-status" data-resolve-status role="status"></p>'+(direction==='incoming'?'<button type="button" class="outline" data-resolve="decline">Decline</button>'+
-    '<button type="button" class="primary" data-resolve="accept" '+(settings.enabled?'':'disabled')+'>Accept trade</button>':'<button type="button" class="outline" data-resolve="cancel">Cancel offer</button>')+'</div>':'');
+   (status==='pending'?(outsideLimit?'<p class="trade-balance trade-receipt-balance" data-balanced="false">This offer is outside the '+tradeMaxGap+'% value limit.</p>':'')+
+    '<div class="trade-dialog-foot"><p class="trade-action-status" data-resolve-status role="status"></p>'+(direction==='incoming'?'<button type="button" class="outline" data-resolve="decline">Decline</button>'+
+    '<button type="button" class="primary" data-resolve="accept" '+(settings.enabled&&!outsideLimit?'':'disabled')+'>Accept trade</button>':'<button type="button" class="outline" data-resolve="cancel">Cancel offer</button>')+'</div>':'');
  }
- async function openTrade(id,cached){
+ async function openTrade(id,cached,linked=false){
   const request=openDialog('Trade details');
   if(cached){drawTrade(cached);return;}
   dialogState=null;body.innerHTML=textStatus('Loading trade…');
   try{
    const {trade}=await tradeRead('detail',{id});
-   if(modalCurrent(request))drawTrade(trade);
+   if(modalCurrent(request)){
+    if(linked)activate(trade.status==='pending'?trade.direction:'history');
+    drawTrade(trade);
+   }
   }catch(error){if(modalCurrent(request))body.innerHTML=textStatus(error.message);}
  }
  async function resolve(action){
   if(busy||dialogState?.type!=='detail')return;
   const {trade}=dialogState,request=modalVersion;
   busy=true;
-  const buttons=[...body.querySelectorAll('[data-resolve]')];
+  const buttons=[...body.querySelectorAll('[data-resolve]:enabled')];
   for(const button of buttons)button.disabled=true;
   const status=body.querySelector('[data-resolve-status]');
   status.textContent=action==='accept'?'Exchanging cards…':'Saving…';
@@ -261,7 +276,7 @@ function createRoom(room,cover,syncWallet){
  }
  function drawMarket(){
   content.innerHTML='<section class="trade-panel"><div class="trade-panel-heading"><h2>Card market</h2></div>'+
-   '<p class="trade-market-note">Values use completed exchanges in the last '+marketDays+' days. A value appears after '+marketMinPairs+' different trading pairs. Demand counts players requesting that finish.</p>'+
+   '<p class="trade-market-note">Market values use completed exchanges in the last '+marketDays+' days and appear after '+marketMinPairs+' different trading pairs. Trade offers use each card’s base strength and finish.</p>'+
    '<form class="trade-search trade-market-search" data-market-filter><label>Find a card<input type="search" name="query" placeholder="Name or level ID" maxlength="80" value="'+esc(marketTerm)+'"></label>'+
    '<label>Difficulty<select name="tier">'+difficultyOptions('market',hasSecrets)+'</select></label><label>Finish<select name="finish">'+finishOptions()+'</select></label><button type="submit" class="primary">Search</button></form>'+
    '<div data-trade-results></div></section>';
@@ -276,7 +291,7 @@ function createRoom(room,cover,syncWallet){
    const data=await tradeRead('market',{q:marketTerm,finish:marketFinish,page:viewPage,...(marketTier?{tier:marketTier}:{})});
    if(current(request)){
     setSecretAccess(data.hasSecrets);
-    output.innerHTML=(data.cards.length?drawCards(data.cards,()=>'',false):textStatus('No matching cards.'))+pagination(viewPage,data.more);
+    output.innerHTML=(data.cards.length?drawCards(data.cards,()=>'',false,true):textStatus('No matching cards.'))+pagination(viewPage,data.more);
    }
   }catch(error){if(current(request))output.innerHTML=textStatus(error.message);}
  }
@@ -304,7 +319,7 @@ function createRoom(room,cover,syncWallet){
   finally{busy=false;form.querySelector('button[type="submit"]').disabled=false;}
  }
  function activate(view){
-  clearTimeout(filterTimer);readVersion++;section=view;viewPage=0;partner=null;draft=null;nav();
+  clearTimeout(filterTimer);readVersion++;section=view;viewPage=0;nextExpiry=Infinity;partner=null;draft=null;nav();
   if(view==='find')drawFind();
   else if(view==='market')drawMarket();
   else drawList();
@@ -345,8 +360,10 @@ function createRoom(room,cover,syncWallet){
    for(const [key,node] of Object.entries(counts)){
     node.textContent=tradeNumber(latest[key]);node.hidden=!latest[key];
    }
-   const next=[latest.incoming,latest.outgoing].join(':');
-   if(recentCounts&&next!==recentCounts&&['incoming','outgoing','history'].includes(section)&&!busy)loadList(true);
+   const next=[latest.incoming,latest.outgoing].join(':'),now=Date.now();
+   if((recentCounts&&next!==recentCounts||now>=nextExpiry)&&['incoming','outgoing','history'].includes(section)&&!busy)loadList(true);
+   const open=dialogState?.trade;
+   if(!busy&&open?.status==='pending'&&open.expiresAt<=now)openTrade(open.id);
    recentCounts=next;
   }catch{
    // The next refresh or a direct action can recover from a transient connection error.
@@ -410,8 +427,13 @@ function createRoom(room,cover,syncWallet){
     content.querySelector('[data-add-from="'+side+'"]')).focus({preventScroll:true});
   }
  });
- dialog.addEventListener('close',()=>{if(!dialog.open){clearTimeout(filterTimer);modalVersion++;dialogState=null;}});
+ dialog.addEventListener('close',()=>{
+  if(dialog.open)return;
+  clearTimeout(filterTimer);modalVersion++;dialogState=null;
+  if(isOpen&&tradeId&&location.hash.toLowerCase()==='#trading/trade/'+tradeId)history.replaceState(history.state,'','#trading');
+ });
  activate('find');refresh();
+ if(tradeId)openTrade(tradeId,null,true);
  const timer=setInterval(refresh,12000);
  document.addEventListener('visibilitychange',refresh);
  return {dispose(){isOpen=false;clearInterval(timer);clearTimeout(filterTimer);document.removeEventListener('visibilitychange',refresh);if(dialog.open)dialog.close();},refresh};

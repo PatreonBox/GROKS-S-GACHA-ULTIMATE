@@ -290,6 +290,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   try{
    const {wallet:next,result}=await gameCommand(action,args,action);
    applyWallet(next);
+   if(action==='demon.keys.buy'||action==='demon.pull')sound.play('buy',{level:.70});
    if(requestHost===body){
     if(action==='demon.pull')begin(next.pending);
     else if(action==='demon.keys.claim')status=format(result.keys)+(result.keys===1?' key claimed.':' keys claimed.');

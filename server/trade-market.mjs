@@ -1,11 +1,10 @@
 import {impossibleTier} from '../web/impossible-cards.js';
 import {cardCategories} from '../web/pack-engine.js';
-import {marketDays,marketMinPairs,tradeKey} from '../web/trade-rules.js';
+import {marketDays,marketMinPairs,tradeKey,tradeUnits} from '../web/trade-rules.js';
 import {tradeCard,tradePageSize} from './trade-cards.mjs';
 
 const day=86_400_000;
-const finishPremium={standard:1,holo:3,antimatter:9};
-const valueAnchor=card=>card.basePower/1000*finishPremium[card.finish];
+const valueAnchor=card=>tradeUnits(card)/1000;
 const marketRows=`FROM game_trade_items i JOIN game_trades t ON t.trade_id=i.trade_id`;
 const matches=`JOIN wanted w ON i.level_id=w.level_id AND i.finish=w.finish`;
 const demandActivity=`t.market_eligible=1 AND (t.status='completed' AND t.resolved_at>=?

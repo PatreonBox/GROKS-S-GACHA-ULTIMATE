@@ -57,7 +57,11 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,avatar=starter
   highWater=value;
   const attemptToken=token;
   return Promise.resolve(onResult(token,key==null?{ticks,trace:trace.slice()}:{key})).then(result=>{
-   if(!closed&&attemptToken===token&&remix.mark==='KEY'&&result?.percent===100)message.textContent=remix.quote+' · +'+result.playerXpEarned+' XP';
+   if(closed||attemptToken!==token||phase!=='won'||!result?.cleared)return;
+   const {demonKeys,playerXpEarned}=result,rewards=[remix.quote];
+   if(playerXpEarned)rewards.push('+'+playerXpEarned+' XP');
+   if(demonKeys)rewards.push('+'+demonKeys+' Demon '+(demonKeys===1?'Key':'Keys'));
+   message.textContent=rewards.join(' · ');
   }).catch(()=>{
    if(attemptToken!==token)return;
    highWater=0;if(!closed)message.textContent='Your record could not be saved.';

@@ -1,5 +1,5 @@
 import {achievementBoost} from './achievement-boosts.js';
-import {coinDivisor,coinPrice} from './coin-economy.js';
+import {changeCoins,coinDivisor,coinLimit,coinPrice,roundCoins} from './coin-economy.js';
 
 export const mineRateCap=1_000_000_000;
 export const mineAwayLimit=5*60*60*1000;
@@ -63,11 +63,7 @@ const boughtSkills=mine=>mineSkills.filter(skill=>skillOwned(mine,skill.id));
 const tapTenths=mine=>1+boughtSkills(mine).reduce((sum,skill)=>sum+Math.round((skill.tap||0)*coinDivisor),0);
 export const mineTapPower=mine=>tapTenths(mine)/coinDivisor;
 export function creditMineTaps(wallet,count){
- const tenths=count*tapTenths(wallet.mine)+(wallet.coinTapRemainder||0);
- const coins=Math.min(Number.MAX_SAFE_INTEGER-wallet.coins,Math.floor(tenths/coinDivisor));
- wallet.coinTapRemainder=tenths%coinDivisor;
- wallet.coins+=coins;
- return coins;
+ return changeCoins(wallet,count*tapTenths(wallet.mine)/coinDivisor);
 }
 const ownRequirement=(machine,count)=>'Own '+count+' '+(count===1?machine.name:machine.plural||machine.name+'s');
 
@@ -105,16 +101,15 @@ export function mineEarnings(wallet,now=Date.now()){
  if(!mine?.collectedAt)return {coins:0,elapsed:0,remainder:0};
  const elapsed=Math.min(mineAwayLimit,Math.max(0,now-mine.collectedAt));
  const rate=Math.round(mineWalletRate(wallet)*coinDivisor),seconds=Math.floor(elapsed/1000);
- const denominator=1000*coinDivisor;
- const partial=rate*(elapsed%1000)+(rate%coinDivisor)*seconds*1000+(mine.remainder||0);
- const whole=Math.floor(rate/coinDivisor)*seconds+Math.floor(partial/denominator);
- const coins=Math.min(Number.MAX_SAFE_INTEGER-wallet.coins,whole);
- return {coins,elapsed,remainder:partial%denominator};
+ const partial=rate*(elapsed%1000)+(mine.remainder||0);
+ const tenths=rate*seconds+Math.floor(partial/1000);
+ const coins=roundCoins(Math.min(coinLimit-wallet.coins,tenths/coinDivisor));
+ return {coins,elapsed,remainder:partial%1000};
 }
 export function settleMine(wallet,now=Date.now()){
  const receipt=mineEarnings(wallet,now);
  if(wallet.mine&&now>=(wallet.mine.collectedAt||0)){
-  wallet.coins+=receipt.coins;
+  changeCoins(wallet,receipt.coins);
   wallet.mine.collectedAt=now;
   wallet.mine.remainder=receipt.remainder;
  }
@@ -143,7 +138,7 @@ export function buyMineMachine(wallet,id,mode,now=Date.now()){
  if(!affordable)throw Error(machineOwned(wallet.mine,id)>=mineLevelCap?'This machine is at its limit.':'You need more coins.');
  const mine=mineState(wallet,now);
  mine.machines[id]=machineOwned(mine,id)+count;
- wallet.coins-=cost;
+ changeCoins(wallet,-cost);
  return {count,cost};
 }
 
@@ -155,6 +150,6 @@ export function buyMineSkill(wallet,id,now=Date.now()){
  if(lock)throw Error(lock+' first.');
  if(wallet.coins<skill.price)throw Error('You need more coins.');
  const mine=mineState(wallet,now);
- mine.skills[id]=true;wallet.coins-=skill.price;
+ mine.skills[id]=true;changeCoins(wallet,-skill.price);
  return skill;
 }

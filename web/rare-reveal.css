@@ -41,6 +41,8 @@ dialog.rare-reveal[open]{
 [data-effect="eclipse"] .rare-environment::before{inset:24% auto auto 61%;width:min(36vw,39dvh);aspect-ratio:1;background:#120817}
 [data-effect="horizon"] .rare-environment::before{transform:rotate(19deg) scaleY(.45)}
 .rare-reveal[data-world-ready] .rare-environment{opacity:.10}
+.rare-reveal[data-revealed]:not([data-world-ready],[data-still]) .rare-environment{animation:rare-environment-drift 14s ease-in-out infinite alternate}
+@keyframes rare-environment-drift{from{transform:scale(1) translateX(-1%)}to{transform:scale(1.13) translateX(2%)}}
 .rare-reveal>canvas{display:block;width:100%;height:100%;z-index:-2;opacity:0;transition:opacity .32s ease}
 .rare-reveal[data-world-ready]>canvas{opacity:1}
 .rare-impact{z-index:-1;opacity:0;background:

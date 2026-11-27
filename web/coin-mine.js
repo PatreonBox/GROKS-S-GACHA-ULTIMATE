@@ -2,6 +2,7 @@ import {ico} from './icons.js';
 import {stat} from './card-economy.js';
 import {mineCoin,purchaseMineMachine,purchaseMineSkill} from './pack-engine.js';
 import {rewardOrigin} from './reward-flight.js';
+import {formatCoins} from './coin-economy.js';
 import {
  mineMachines,mineSkills,mineMilestone,mineLevelCap,mineRateCap,mineTapBatch,mineWalletRate,mineTapPower,machineOwned,skillOwned,
  mineMachineRate,mineMachineLock,mineSkillRequirements,mineSkill,quoteMachine
@@ -96,7 +97,7 @@ export function createCoinMine({sound,rewards,applyWallet,announce,onCode}){
   }
   const skill=mineSkill(selected);
   const owned=skillOwned(mine,skill.id),missing=owned?[]:mineSkillRequirements(mine,skill.id);
-  if(!owned&&coins<skill.price)missing.push('Need '+number(skill.price-coins)+' more coins');
+  if(!owned&&coins<skill.price)missing.push('Need '+formatCoins(skill.price-coins)+' more coins');
   const locked=missing.length>0,key=owned?'owned':missing.join('|');
   if(view.requirement.dataset.key!==key){
    view.requirement.dataset.key=key;
@@ -154,7 +155,7 @@ export function createCoinMine({sound,rewards,applyWallet,announce,onCode}){
   const gained=value>coins;
   coins=value;
   if(!active())return;
-  text(view.balance,number(coins));
+  text(view.balance,formatCoins(coins));
   if(gained&&!reducedMotion()){
    balancePulse?.cancel();
    balancePulse=view.balance.animate([{color:'#fff3ba',scale:'1.045'},{color:'#eff3ff',scale:'1'}],{duration:235,easing:'ease-out'});

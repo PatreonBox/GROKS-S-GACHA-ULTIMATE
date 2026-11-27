@@ -42,6 +42,26 @@ const archiveRefresh=rankingRefresh(180_000,()=>gameVisible()&&isArchiveBoard(),
 const demonRefresh=rankingRefresh(180_000,()=>gameVisible()&&isExtremeList(),refreshDemons);
 const sound=createPackSound();
 sound.listenForUiTaps();
+let keyBalance=null,keyRevision=-1;
+document.addEventListener('gdlb-key-balance',({detail:{keys,revision}})=>{
+ if(keys===null){keyBalance=null;keyRevision=-1;return}
+ if(revision<keyRevision)return;
+ if(keyBalance!==null&&keys>keyBalance)sound.keyReward();
+ keyBalance=keys;keyRevision=revision;
+});
+document.addEventListener('gdlb-discord-key-bonus',()=>sound.keyReward());
+function paintSoundControl(){
+ const button=$('gameSound');if(!button)return;
+ button.innerHTML=ico(sound.enabled?'volume':'muted');
+ button.title=sound.enabled?'Mute game audio':'Enable game audio';
+ button.setAttribute('aria-label','Game audio');
+ button.setAttribute('aria-pressed',String(sound.enabled));
+}
+document.addEventListener('gdlb-game-sound',paintSoundControl);
+document.addEventListener('click',event=>{
+ if(event.target.closest?.('#gameSound'))sound.toggle();
+});
+paintSoundControl();
 setupLevelUps($('levelUp'),sound);
 setupAchievementBanners(sound);
 document.querySelectorAll('[data-icon]').forEach(i=>i.innerHTML=ico(i.dataset.icon));
@@ -107,7 +127,7 @@ function setSection(route){
  archiveRefresh.schedule();demonRefresh.schedule();
  const inArcade=['gacha','battle','kingdom','trading','progression'].includes(section);
  document.querySelector('.board').hidden=inArcade||playerRanks();
- const blocked=arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null,selected.pack);
+ const blocked=arcade.page(section==='battle'?(activeTier==='easy'?'battle':activeTier):inArcade?activeTier:null,selected);
  guides.select(blocked||['trading','progression'].includes(section)?false:sectionGuideId(section,activeTier));
  if(inArcade||playerRanks()){serial++;queryAbort?.abort();return}
  $('sectiontag').textContent=isStarList()?'STAR LEVELS':section==='demons'?'DEMON LISTS':section==='saved'?'YOUR COLLECTION':'GEOMETRY DASH';

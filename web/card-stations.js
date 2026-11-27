@@ -7,6 +7,7 @@ import {levelRewardTenths,extremeTable,mergeRoutes,mergeGems} from './card-econo
 import {rewardOrigin} from './reward-flight.js';
 import {fusionPairHTML,playFusion} from './fusion-show.js';
 import {cardRarity,displayCardRank,rarityBadge} from './card-rarity.js';
+import {serialBadge} from './card-serials.js';
 
 export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,openLevel,announce}){
  let current=null,all=[],pools=[],wallet=null,revision=0,category=0,filter='',status='all',page=0,selected=0,busy=false;
@@ -85,7 +86,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
      if(stamp===visit)ticket=rewards.reserve('gems',result.gems);
      applyWallet(w);
      if(ticket){
-      const scene=playFusion({leftHTML,rightHTML,resultHTML:card(result.row,{deal:true,finish:savedFinish(result)}),resultName:result.row[1],
+      const scene=playFusion({leftHTML,rightHTML,resultHTML:card(result.row,{deal:true,finish:savedFinish(result),serial:result.serial}),resultName:result.row[1],
        promoted:result.promoted,finish:savedFinish(result),gems:result.gems,count:result.count,sound,
        onReward:anchor=>{if(visit===stamp)rewards.launch(ticket,anchor,{front:true});else rewards.settle(ticket)}
       });
@@ -134,7 +135,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
     const slot=i+1,c=slots.get(slot);
     if(!c)return '<article class="vault-shell" aria-label="Undiscovered card '+slot+'"><span class="vault-ordinal" aria-hidden="true">'+String(slot).padStart(2,'0')+'</span><span class="vault-mark" aria-hidden="true">?</span>'+
      '<span class="vault-caption" aria-hidden="true">???</span></article>';
-    return '<article class="vault-unlocked">'+card(c.row,{copies:c.copies,holoCopies:c.holoCopies,antimatterCopies:c.antimatterCopies})+
+    return '<article class="vault-unlocked">'+card(c.row,{copies:c.copies,holoCopies:c.holoCopies,antimatterCopies:c.antimatterCopies,serials:c.serials})+
      (c.indexReward===undefined?'<button class="level-claim" data-claim="'+c.id+'" aria-label="Claim '+impossibleGems+' gems for '+enc(c.row[1])+'">'+gem+'Claim '+impossibleGems+'</button>':'<div class="vault-paid">'+gem+impossibleGems+' claimed</div>')+'</article>';
    }).join('')+'</div></section>';
  }
@@ -145,7 +146,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
   return '<section class="merge-result '+finishClass(finish)+'" data-card-rarity="'+rarity.id+'"><small>'+
    (count>1?count.toLocaleString('en-US')+' PAIRS MERGED':'LAST MERGE')+'</small><h3>'+enc(previous.row[1])+'</h3>'+
    '<p>'+enc(previous.from)+' → '+enc(previous.row[1])+' · '+enc(previous.row[6])+
-   (rank?' #'+rank:'')+(finish==='standard'?'':' · '+finishLabels[finish])+'</p>'+rarityBadge(rarity)+
+   (rank?' #'+rank:'')+(finish==='standard'?'':' · '+finishLabels[finish])+'</p>'+rarityBadge(rarity)+serialBadge(previous.serial)+
    '<strong class="merge-gems">'+gem+'+'+previous.gems.toLocaleString('en-US')+' '+(previous.gems===1?'gem':'gems')+'</strong>'+
    (count>1?'<details><summary>Best results'+(previous.promotions?' · '+previous.promotions+' promoted':'')+'</summary><ul>'+
     highlight.map(item=>'<li>'+faceIcon(item.row[6])+'<span>'+enc(item.row[1])+(savedFinish(item)==='standard'?'':' · '+finishLabels[savedFinish(item)])+'</span>'+rarityBadge(cardRarity(item.row))+'<b>×'+item.count+'</b></li>').join('')+'</ul></details>':'')+'</section>';

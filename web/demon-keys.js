@@ -7,6 +7,7 @@ export const demonKeyPrice=10;
 export const demonKeyOffer={keys:50,gems:20};
 export const keyLimit=Number.MAX_SAFE_INTEGER;
 export const campaignKeyReward=10;
+export const demonKeyDiscordBonus=15;
 
 export function initDemonKeys(wallet,now=Date.now()){
  if(wallet.demonBanner)return false;

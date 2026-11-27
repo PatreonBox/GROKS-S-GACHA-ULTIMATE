@@ -1,6 +1,6 @@
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
 import {achievementBoost} from './achievement-boosts.js';
-import {coinPrice,previousCoinPrice} from './coin-economy.js';
+import {changeCoins,coinPrice,previousCoinPrice} from './coin-economy.js';
 
 import {gemTenths} from './card-economy.js';
 import {awardPlayerXp} from './player-progression.js';
@@ -135,7 +135,7 @@ export function expandLand(wallet,expectedLevel){
  if(level!==expectedLevel)throw Error('Your land changed. Check the next expansion.');
  if(nextPrice===null)throw Error('Your land is fully expanded.');
  if(wallet.coins<nextPrice)throw Error('You need '+nextPrice.toLocaleString('en-US')+' coins to expand.');
- wallet.coins-=nextPrice;
+ changeCoins(wallet,-nextPrice);
  wallet.kingdom={...wallet.kingdom,landLevel:level+1,landInvestment:landInvestment(wallet.kingdom,level)+nextPrice};
  return {level:level+1,price:nextPrice};
 }
@@ -200,7 +200,7 @@ function payUpgrade(wallet,mana,coins=0){
  if(wallet.coins<coins)throw Error('You need '+coins.toLocaleString('en-US')+' coins to upgrade.');
  const balance=wallet.kingdom?.mana||0;
  if(balance<mana)throw Error('You need '+mana.toLocaleString('en-US')+' Mana to upgrade.');
- wallet.coins-=coins;
+ changeCoins(wallet,-coins);
  wallet.kingdom={...wallet.kingdom,mana:balance-mana};
 }
 
@@ -292,7 +292,7 @@ function buildAt(wallet,plot,args,kind,price){
  const problem=buildingPlacementError(plot.buildings,spot,plot.land.bounds,plot.trees);
  if(problem)throw Error(problem);
  if(wallet.coins<price)throw Error('You need '+price.toLocaleString('en-US')+' coins to build.');
- wallet.coins-=price;
+ changeCoins(wallet,-price);
  return {id:crypto.randomUUID(),...spot,price};
 }
 export function buildHouse(wallet,args,now=Date.now()){

@@ -1,6 +1,7 @@
 import {createHash,randomBytes} from 'node:crypto';
 
 const issuer='https://discord.com';
+export const officialGuildId='1575128305231859732';
 const callback='/api/auth/discord/callback';
 const flowCookie='__Host-gdlb-discord-flow';
 const sessionCookie='__Host-gdlb-discord-session';
@@ -25,9 +26,10 @@ function redirect(location,cookies=[]){
  return new Response(null,{status:303,headers});
 }
 
-export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
+export function createDiscordAuth(sqlite,{origin,clientId,guildId},send=fetch){
  if(!clientId)return null;
  if(!snowflake(clientId))throw Error('DISCORD_CLIENT_ID must be a Discord application ID.');
+ if(guildId&&!snowflake(guildId))throw Error('The official Discord server must have a valid ID.');
  const redirectUri=origin+callback;
  const clearFlow=()=>cookie(flowCookie,'',0);
  const accountToken=request=>cookieValue(request,sessionCookie);
@@ -35,16 +37,16 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
   if(token)sqlite.prepare('DELETE FROM game_discord_sessions WHERE token_hash=?').run(hash(token));
  };
 
- function begin(request,url,profileSessionHash=null,automatic=false){
+ function begin(request,url,profileSessionHash=null,automatic=false,membershipCheck=false){
   const token=secret(),state=secret(),verifier=secret(),now=Date.now();
   const prior=cookieValue(request,flowCookie);
   sqlite.prepare('DELETE FROM game_discord_flows WHERE expires_at<=? OR token_hash=?').run(now,prior?hash(prior):'');
-  sqlite.prepare(`INSERT INTO game_discord_flows(token_hash,state_hash,verifier,return_to,expires_at,profile_session_hash)
-   VALUES(?,?,?,?,?,?)`).run(hash(token),hash(state),verifier,destination(url.searchParams.get('return_to')),
-   now+flowSeconds*1000,profileSessionHash);
+  sqlite.prepare(`INSERT INTO game_discord_flows(token_hash,state_hash,verifier,return_to,expires_at,profile_session_hash,membership_check)
+   VALUES(?,?,?,?,?,?,?)`).run(hash(token),hash(state),verifier,destination(url.searchParams.get('return_to')),
+   now+flowSeconds*1000,profileSessionHash,Number(membershipCheck));
   const target=new URL(issuer+'/oauth2/authorize');
   target.search=new URLSearchParams({client_id:clientId,redirect_uri:redirectUri,response_type:'code',
-   scope:'identify',state,code_challenge:hash(verifier,'base64url'),code_challenge_method:'S256'});
+   scope:membershipCheck?'identify guilds.members.read':'identify',state,code_challenge:hash(verifier,'base64url'),code_challenge_method:'S256'});
   if(automatic)target.searchParams.set('prompt','none');
   return redirect(target.toString(),[cookie(flowCookie,token,flowSeconds)]);
  }
@@ -61,15 +63,39 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
   return begin(request,url,sessionHash,automatic);
  }
 
+ function beginMembershipCheck(request,url){
+  if(request.headers.get('origin')!==origin)return new Response('Open the game to check Discord membership.',{status:403});
+  const active=account(request);
+  if(!active)return redirect(origin+destination(url.searchParams.get('return_to')));
+  return begin(request,url,hash(accountToken(request)),false,true);
+ }
+
+ async function checkMembership(id,accessToken){
+  if(sqlite.prepare('SELECT 1 FROM game_discord_key_bonus WHERE discord_id=?').get(id))return 'verified';
+  try{
+   const response=await send(issuer+'/api/v10/users/@me/guilds/'+guildId+'/member',{
+    headers:{Authorization:'Bearer '+accessToken},redirect:'error',signal:AbortSignal.timeout(3500)
+   });
+   if(response.status===404)return 'not-member';
+   if(!response.ok)return 'unavailable';
+   const member=await response.json();
+   if(typeof member.joined_at!=='string'||(member.user&&member.user.id!==id))return 'unavailable';
+   if(member.pending)return 'pending';
+   sqlite.prepare('INSERT OR IGNORE INTO game_discord_key_bonus(discord_id,verified_at) VALUES(?,?)').run(id,Date.now());
+   return 'verified';
+  }catch{return 'unavailable';}
+ }
+
  async function finish(request,url){
   const token=cookieValue(request,flowCookie),state=url.searchParams.get('state')||'';
   const flow=token&&/^[a-f0-9]{64}$/.test(state)&&sqlite.prepare(
-   'DELETE FROM game_discord_flows WHERE token_hash=? AND state_hash=? AND expires_at>? RETURNING verifier,return_to,profile_session_hash'
+   'DELETE FROM game_discord_flows WHERE token_hash=? AND state_hash=? AND expires_at>? RETURNING verifier,return_to,profile_session_hash,membership_check'
   ).get(hash(token),hash(state),Date.now());
   const next=new URL(flow?.return_to||'/#gacha',origin);
   const profileSession=flow?.profile_session_hash;
+  const membershipOnly=Boolean(profileSession&&flow.membership_check);
   function failed(reason){
-   next.searchParams.set(profileSession?'discord_profile':'discord',reason);
+   next.searchParams.set(membershipOnly?'discord_membership':profileSession?'discord_profile':'discord',reason);
    return redirect(next.href,[clearFlow()]);
   }
   if(!flow||url.searchParams.get('iss')!==issuer)return failed('failed');
@@ -94,13 +120,17 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
    const handle=displayText(username);
    if(!snowflake(id)||!handle)return failed('failed');
    if(boundAccount&&boundAccount.id!==id)return failed('mismatch');
+   const membership=guildId&&flow.membership_check?await checkMembership(id,access_token):null;
    if(profileSession&&!account(request))return failed('failed');
    const avatarHash=typeof avatar==='string'&&/^(?:a_)?[a-f0-9]{32}$/.test(avatar)?avatar:null;
    sqlite.prepare(`INSERT INTO game_discord_profiles(discord_id,username,display_name,avatar_hash,default_avatar_index)
     VALUES(?,?,?,?,?) ON CONFLICT(discord_id) DO UPDATE SET username=excluded.username,
     display_name=excluded.display_name,avatar_hash=excluded.avatar_hash,default_avatar_index=excluded.default_avatar_index`)
     .run(id,handle,displayText(global_name)||handle,avatarHash,defaultAvatar(id,discriminator));
-   if(profileSession)return redirect(next.href,[clearFlow()]);
+   if(profileSession){
+    if(membershipOnly)next.searchParams.set('discord_membership',membership||'unavailable');
+    return redirect(next.href,[clearFlow()]);
+   }
    const session=secret(),now=Date.now();
    sqlite.prepare('DELETE FROM game_discord_sessions WHERE expires_at<=?').run(now);
    sqlite.prepare('INSERT INTO game_discord_sessions(token_hash,discord_id,expires_at) VALUES(?,?,?)').run(hash(session),id,now+sessionSeconds*1000);
@@ -129,9 +159,10 @@ export function createDiscordAuth(sqlite,{origin,clientId},send=fetch){
   account,
   user:request=>account(request)?.id??null,
   handle(request,url){
-   if(url.pathname==='/signin-with-discord'&&request.method==='GET')return begin(request,url);
+   if(url.pathname==='/signin-with-discord'&&request.method==='GET')return begin(request,url,null,false,Boolean(guildId));
    if(url.pathname===callback&&request.method==='GET')return finish(request,url);
    if(url.pathname==='/api/auth/discord/profile'&&request.method==='POST')return beginProfileRefresh(request,url);
+   if(url.pathname==='/api/auth/discord/membership'&&request.method==='POST'&&guildId)return beginMembershipCheck(request,url);
    if(url.pathname==='/api/auth/discord/logout'&&request.method==='POST'){
     if(request.headers.get('origin')!==origin)return new Response('Open the game to sign out.',{status:403});
     removeSession(accountToken(request));

@@ -6,9 +6,10 @@ import {campaignStages,medalCount,stageCleared} from './campaign.js';
 import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {awardPlayerXp} from './player-progression.js';
 import {keyLimit,rewardDemonKeys} from './demon-keys.js';
+import {remixes} from './remixes.js';
 
 export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js';
-export const achievementVersion=2;
+export const achievementVersion=3;
 export const achievementXp={Easy:20,Normal:45,Hard:70,Harder:85,Insane:100,Demon:150};
 const difficultyNames=Object.keys(achievementXp);
 const boostPercents=[.1,.15,.2,.25,.35,.5];
@@ -63,43 +64,45 @@ const trilogies=goal=>goal===1?'Complete your first Army trilogy.':'Complete '+n
 const training=goal=>'Gain '+n(goal)+' training levels across your cards.';
 const forgeGoals=goal=>goal===1?'Build a Mana Forge.':'Upgrade a Mana Forge to Level 2.';
 const land=goal=>'Purchase '+n(goal)+' Kingdom '+plural(goal,'land expansion')+'.';
+const drills=['spike','saw','endurance'];
+export const bannerAchievementStat={standard:'standardChests',special:'specialChests',pro:'proChests'};
 
 export const achievements=[
  ...achievementsForCards,
- track('Coin mine','mine-100','Pocket Change','mine',[[2,'Easy'],[5,'Easy'],[10,'Normal']],mineRateGoal),
- track('Coin mine','mine-10k','Clockwork Fortune','mine',[[50,'Normal'],[250,'Normal'],[1_000,'Hard']],mineRateGoal),
- track('Coin mine','mine-1m','Six-Figure Mint','mine',[[5_000,'Hard'],[25_000,'Harder'],[100_000,'Insane']],mineRateGoal),
+ track('Coin mine','mine-100','Pocket Change','mine',[[2,'Easy'],[5,'Easy'],[10,'Normal']],mineRateGoal,{icon:'/assets/packs/coin.png'}),
+ track('Coin mine','mine-10k','Clockwork Fortune','mine',[[50,'Normal'],[250,'Normal'],[1_000,'Hard']],mineRateGoal,{symbol:'badgeClock'}),
+ track('Coin mine','mine-1m','Six-Figure Mint','mine',[[5_000,'Hard'],[25_000,'Harder'],[100_000,'Insane']],mineRateGoal,{symbol:'badgeCoinStack'}),
  track('Battle','battle-first','First Victory','battle',[[1,'Easy'],[5,'Normal'],[10,'Normal']],battles,{legacyStage:1}),
- track('Battle','battle-20','Arena Regular','battle',[[15,'Hard'],[18,'Hard'],[20,'Harder']],battles),
- track('Battle','army-one','Three Acts','army',[[1,'Normal'],[2,'Hard']],trilogies,{legacyStage:1,href:'#battle/army',symbol:'guard'}),
- track('Battle','army-three','Commander of Three','army',[[3,'Harder'],[4,'Insane'],[5,'Insane']],trilogies,{legacyStage:1,href:'#battle/army',symbol:'crown'}),
- track('Training','training-25','Practice Pays','training',[[5,'Easy'],[15,'Normal'],[25,'Hard']],training),
- track('Training','training-100','Century of Practice','training',[[45,'Hard'],[75,'Harder'],[100,'Insane']],training),
+ track('Battle','battle-20','Arena Regular','battle',[[15,'Hard'],[18,'Hard'],[20,'Harder']],battles,{symbol:'badgeCalendar'}),
+ track('Battle','army-one','Three Acts','army',[[1,'Normal'],[2,'Hard']],trilogies,{legacyStage:1,href:'#battle/army',symbol:'badgeFlags'}),
+ track('Battle','army-three','Commander of Three','army',[[3,'Harder'],[4,'Insane'],[5,'Insane']],trilogies,{legacyStage:1,href:'#battle/army',symbol:'badgeMarshal'}),
+ track('Training','training-25','Practice Pays','training',[[5,'Easy'],[15,'Normal'],[25,'Hard']],training,{symbol:'badgeDumbbell'}),
+ track('Training','training-100','Century of Practice','training',[[45,'Hard'],[75,'Harder'],[100,'Insane']],training,{symbol:'badgeTrophy'}),
  track('Kingdom','house-first','A Place to Call Home','houses',[[1,'Easy'],[2,'Normal'],[4,'Harder']],
-  goal=>'Build '+n(goal)+' '+plural(goal,'house')+' in your Kingdom.',{legacyStage:1,symbol:'box'}),
+  goal=>'Build '+n(goal)+' '+plural(goal,'house')+' in your Kingdom.',{legacyStage:1,symbol:'badgeHouse'}),
  track('Kingdom','tower-3','Above the Treeline','tower',[[2,'Hard'],[3,'Insane']],goal=>'Finish upgrading your tower to Level '+goal+'.'),
- track('Kingdom','land-first','Room to Grow','land',[[1,'Normal'],[3,'Harder'],[5,'Demon']],land,{legacyStage:1,symbol:'grid'}),
+ track('Kingdom','land-first','Room to Grow','land',[[1,'Normal'],[3,'Harder'],[5,'Demon']],land,{legacyStage:1,symbol:'badgePlot'}),
  track('Battle','limbo','Green Means Go','limbo',[[50,'Normal'],[90,'Harder'],[100,'Demon']],
-  goal=>goal===100?'Pick the green key after the LIMBO shuffle.':'Reach '+goal+'% in the LIMBO remix.',{href:'#battle/arcade',symbol:'aim'}),
+  goal=>goal===100?'Pick the green key after the LIMBO shuffle.':'Reach '+goal+'% in the LIMBO remix.',{href:'#battle/arcade',icon:'/assets/remix/key.webp'}),
  track('Cards','trade-first','A Fair Exchange','trades',[[1,'Normal'],[5,'Hard'],[15,'Harder']],
   goal=>'Complete '+n(goal)+' player '+plural(goal,'trade')+'.',{legacyStage:1,href:'#trading',symbol:'exchange'}),
 
  track('Cards','binder-milestones','Room in the Binder','unique',[[25,'Normal'],[125,'Hard'],[500,'Demon']],
-  goal=>'Discover '+n(goal)+' different cards.',{symbol:'grid'}),
+  goal=>'Discover '+n(goal)+' different cards.',{symbol:'badgeBinder'}),
  track('Cards','demon-binder','Demon Index','demons',[[5,'Hard'],[30,'Harder'],[120,'Demon']],
-  goal=>'Discover '+n(goal)+' different Demon cards.',{boost:'battle',symbol:'spark'}),
+  goal=>'Discover '+n(goal)+' different Demon cards.',{boost:'battle',icon:'/assets/faces/demon.webp'}),
  track('Cards','holo-binder','Through the Foil','holos',[[1,'Normal'],[15,'Harder'],[60,'Insane']],
-  goal=>'Find the Holo finish on '+n(goal)+' different '+plural(goal,'card')+'.',{symbol:'spark'}),
+  goal=>'Find the Holo finish on '+n(goal)+' different '+plural(goal,'card')+'.',{symbol:'badgePrism',color:'#82e9e0'}),
  track('Cards','antimatter-binder','Matter of Taste','antimatter',[[1,'Hard'],[5,'Insane'],[25,'Demon']],
-  goal=>'Find the Antimatter finish on '+n(goal)+' different '+plural(goal,'card')+'.',{boost:'battle',symbol:'spark'}),
+  goal=>'Find the Antimatter finish on '+n(goal)+' different '+plural(goal,'card')+'.',{boost:'battle',symbol:'badgeOrbit',color:'#d6a4fa'}),
  track('Cards','index-claimed','A Gem of a Find','index',[[10,'Normal'],[100,'Harder'],[500,'Demon']],
   goal=>'Claim gem rewards from '+n(goal)+' different cards in the Card index.',{icon:'/assets/packs/gem.png'}),
  track('Cards','opened-packs','Seal Breaker','packs',[[10,'Normal'],[50,'Hard'],[250,'Insane']],
   goal=>'Open '+n(goal)+' packs.',{href:'#gacha'}),
  track('Cards','merged-pairs','Better Together','merges',[[3,'Normal'],[15,'Harder'],[60,'Demon']],
-  goal=>'Merge '+n(goal)+' pairs of duplicate cards.',{href:'#gacha/merge',symbol:'grid'}),
+  goal=>'Merge '+n(goal)+' pairs of duplicate cards.',{href:'#gacha/merge',symbol:'badgeFusion'}),
  track('Cards','cube-wardrobe','A Different Look','cubes',[[3,'Normal'],[8,'Hard'],[16,'Insane']],
-  goal=>'Own '+n(goal)+' different cubes.',{href:'#gacha/cubes',symbol:'box'}),
+  goal=>'Own '+n(goal)+' different cubes.',{href:'#gacha/cubes',icon:'/assets/player-cube.png'}),
 
  track('Battle','campaign-clears','Road to the Crown','campaign',[[2,'Normal'],[6,'Harder'],[10,'Demon']],
   goal=>'Clear '+n(goal)+' of the '+campaignStages.length+' campaign stages.',{symbol:'crown'}),
@@ -108,53 +111,74 @@ export const achievements=[
  track('Battle','arcade-clears','Remix Royalty','remixes',[[1,'Normal'],[5,'Harder'],[12,'Demon']],
   goal=>'Reach 100% in '+n(goal)+' different featured arcade '+plural(goal,'level')+'.',{href:'#battle/arcade',symbol:'aim'}),
  track('Battle','demon-arena','Demon Rounds','demonWins',[[1,'Hard'],[15,'Insane'],[80,'Demon']],
-  goal=>'Win '+n(goal)+' arena '+plural(goal,'battle')+' at Easy Demon difficulty or higher.'),
+  goal=>'Win '+n(goal)+' arena '+plural(goal,'battle')+' at Easy Demon difficulty or higher.',{symbol:'badgeDemonGuard'}),
  track('Battle','arena-knockouts','Last One Standing','knockouts',[[20,'Normal'],[150,'Harder'],[600,'Insane']],
-  goal=>'Knock out '+n(goal)+' enemies in arena battles.'),
+  goal=>'Knock out '+n(goal)+' enemies in arena battles.',{symbol:'badgeStrike'}),
  track('Battle','army-mastery','Field Marshal','army',[[6,'Harder'],[10,'Insane'],[15,'Demon']],
   trilogies,{href:'#battle/army',symbol:'guard'}),
 
  track('Training','trained-roster','Coaching Bench','trainedCards',[[3,'Normal'],[10,'Harder'],[25,'Insane']],
-  goal=>'Train '+n(goal)+' different cards.'),
+  goal=>'Train '+n(goal)+' different cards.',{symbol:'badgeFormation'}),
  track('Training','spike-focus','Point Taken','spike',[[5,'Normal'],[20,'Harder'],[40,'Demon']],
-  goal=>'Reach Spike training Level '+goal+' on one card.'),
+  goal=>'Reach Spike training Level '+goal+' on one card.',{icon:'/assets/training/spike.webp'}),
  track('Training','saw-focus','Saw It Coming','saw',[[5,'Normal'],[20,'Harder'],[40,'Demon']],
-  goal=>'Reach Saw training Level '+goal+' on one card.'),
+  goal=>'Reach Saw training Level '+goal+' on one card.',{icon:'/assets/training/saw-1-9.webp'}),
  track('Training','endurance-focus','Still Standing','endurance',[[5,'Normal'],[20,'Harder'],[40,'Demon']],
-  goal=>'Reach Endurance training Level '+goal+' on one card.'),
+  goal=>'Reach Endurance training Level '+goal+' on one card.',{symbol:'badgePulse'}),
 
  track('Coin mine','machine-count','Production Line','machines',[[12,'Easy'],[60,'Normal'],[175,'Harder']],
-  goal=>'Own '+n(goal)+' coin mine machines.'),
+  goal=>'Own '+n(goal)+' coin mine machines.',{symbol:'badgeConveyor'}),
  track('Coin mine','mine-skills','A Mind for Mining','skills',[[3,'Normal'],[12,'Hard'],[24,'Insane']],
-  goal=>'Unlock '+n(goal)+' coin mine skills.'),
+  goal=>'Unlock '+n(goal)+' coin mine skills.',{symbol:'badgeBranches'}),
  track('Coin mine','mine-megaforge','Mint Condition','mine',[[1_000_000,'Insane'],[25_000_000,'Demon'],[100_000_000,'Demon']],
-  mineRateGoal),
+  mineRateGoal,{icon:'/assets/mine/crystal-reactor.webp'}),
  track('Coin mine','mine-tap-count','Hands on the Job','taps',[[200,'Easy'],[1250,'Hard'],[6000,'Harder']],
-  goal=>'Register '+n(goal)+' coin mine taps.'),
+  goal=>'Register '+n(goal)+' coin mine taps.',{icon:'/assets/mine/pointer.png'}),
 
- track('Kingdom','forge-upgrade','Blue Flame','forgeLevel',[[1,'Normal'],[2,'Harder']],forgeGoals,{symbol:'spark'}),
+ track('Kingdom','forge-upgrade','Blue Flame','forgeLevel',[[1,'Normal'],[2,'Harder']],forgeGoals,{symbol:'flame',color:'#85c5ff'}),
  track('Kingdom','mana-collection','Reservoir Keeper','mana',[[250,'Normal'],[2500,'Harder'],[15000,'Insane']],
-  goal=>'Collect '+n(goal)+' Mana from forges.',{symbol:'spark'}),
+  goal=>'Collect '+n(goal)+' Mana from forges.',{icon:'/assets/kingdom/mana-orbs.webp'}),
  track('Kingdom','tree-removal','Clear the Way','trees',[[3,'Normal'],[8,'Hard'],[16,'Harder']],
-  goal=>'Clear '+n(goal)+' '+plural(goal,'tree')+' from your Kingdom.'),
+  goal=>'Clear '+n(goal)+' '+plural(goal,'tree')+' from your Kingdom.',{symbol:'badgeTree'}),
  track('Kingdom','gem-prospecting','Buried Bright','gemMines',[[1,'Harder'],[2,'Insane'],[3,'Demon']],
-  goal=>goal===1?'Build a Gem Mine.':goal===2?'Build a Gem Mine and collect your first gem.':'Collect 20 gems from your Gem Mine.',{icon:'/assets/packs/gem.png'}),
+  goal=>goal===1?'Build a Gem Mine.':goal===2?'Build a Gem Mine and collect your first gem.':'Collect 20 gems from your Gem Mine.',{symbol:'badgePickCrystal'}),
  track('Kingdom','gems-produced','Crystal Shift','minedGems',[[50,'Harder'],[175,'Insane'],[500,'Demon']],
-  goal=>'Collect '+n(goal)+' gems from your Gem Mine.',{icon:'/assets/packs/gem.png'}),
+  goal=>'Collect '+n(goal)+' gems from your Gem Mine.',{symbol:'badgeCrystalShift',color:'#a0dafd'}),
  track('Kingdom','spike-upgrades','Keep off the Lawn','defenceLevel',[[2,'Normal'],[3,'Hard'],[4,'Insane']],
-  goal=>'Upgrade a Spike Shooter to Level '+goal+'.',{symbol:'guard'}),
+  goal=>'Upgrade a Spike Shooter to Level '+goal+'.',{symbol:'badgeTurret'}),
  track('Kingdom','house-upgrades','From Cottage to Manor','upgradedHomes',[[1,'Normal'],[3,'Hard'],[6,'Insane']],
-  goal=>'Finish '+n(goal)+' '+plural(goal,'house upgrade')+'.',{symbol:'box'}),
+  goal=>'Finish '+n(goal)+' '+plural(goal,'house upgrade')+'.',{symbol:'badgeManor'}),
  track('Kingdom','kingdom-visits','The Welcome Party','visitors',[[1,'Normal'],[2,'Harder'],[4,'Insane']],
-  goal=>'Attract '+n(goal)+' different '+plural(goal,'visitor')+' to your Kingdom.')
+  goal=>'Attract '+n(goal)+' different '+plural(goal,'visitor')+' to your Kingdom.',{symbol:'badgeHandshake'}),
+
+ track('Cards','banner-passport','Banner Passport','bannerVariety',[[2,'Hard'],[3,'Insane']],
+  goal=>'Finish opening chests from '+n(goal)+' different Demon Banners.',{href:'#gacha/banners',symbol:'badgePassport',color:'#9bbdff'}),
+ track('Cards','pity-insurance','Pity Insurance','bannerGuarantees',[[1,'Harder'],[4,'Insane'],[10,'Demon']],
+  goal=>'Reveal '+n(goal)+' Demon Banner '+plural(goal,'draw')+' with a Legendary+ or Mythic+ pity guarantee.',{href:'#gacha/banners',symbol:'badgeGuarantee',color:'#e0a8ff'}),
+ track('Cards','foil-fusion','Refraction Lab','foilMerges',[[2,'Hard'],[10,'Insane'],[30,'Demon']],
+  goal=>'Produce '+n(goal)+' Holo or Antimatter '+plural(goal,'card')+' by merging duplicates.',{href:'#gacha/merge',symbol:'badgeRefraction',color:'#80ece7'}),
+ track('Cards','gem-upgrade-pair','Reroute the Odds','upgradePair',[[4,'Hard'],[16,'Harder'],[40,'Demon']],
+  goal=>'Raise both Gacha Luck and Extra Gacha Card to Level '+n(goal)+'.',{href:'#gacha/upgrades',symbol:'badgeDice',color:'#caf1ae'}),
+ track('Cards','foil-trades','Collector’s Post','foilTrades',[[1,'Hard'],[5,'Insane'],[15,'Demon']],
+  goal=>'Complete '+n(goal)+' '+plural(goal,'trade')+' with a Holo or Antimatter card on both sides.',{href:'#trading',symbol:'badgeParcel',color:'#ffc9a1'}),
+ track('Battle','full-squad-wins','Everyone Comes Home','fullSquadWins',[[3,'Normal'],[12,'Harder'],[35,'Demon']],
+  goal=>'Win '+n(goal)+' Arena battles with all four squad members still standing.',{symbol:'badgePartyShield',color:'#ffc283'}),
+ track('Battle','arcade-modes','Portal Hopper','arcadeModes',[[2,'Hard'],[3,'Demon']],
+  goal=>goal===3?'Clear a Meme level in each mode: Cube, Ship and Wave.':'Clear Meme levels in '+n(goal)+' different movement modes.',{href:'#battle/arcade',symbol:'badgePortals',color:'#aff1c9'}),
+ track('Training','three-drill-levels','Triple Threat','tripleDrill',[[3,'Hard'],[12,'Insane'],[24,'Demon']],
+  goal=>'Reach Level '+n(goal)+' in Spike, Saw and Endurance training on the same card.',{symbol:'badgeThreeDrills',color:'#f1affa'}),
+ track('Coin mine','machine-variety','Clockwork Orchestra','machineVariety',[[2,'Normal'],[4,'Harder'],[5,'Insane']],
+  goal=>'Own '+n(goal)+' different Coin Mine machine types.',{symbol:'badgeOrchestra',color:'#ffe09e'}),
+ track('Kingdom','building-variety','Market Square','buildingVariety',[[2,'Normal'],[3,'Harder'],[4,'Insane']],
+  goal=>'Place '+n(goal)+' different building types in your Kingdom at once.',{symbol:'badgeSquare',color:'#c9f2a7'})
 ];
 const stagesById=new Map(achievements.flatMap(item=>item.stages.map(stage=>[stage.id,{...item,...stage,stageCount:item.stages.length}])));
 export const achievementById=id=>stagesById.get(id);
 
 export function trainingLevels(wallet){
  return Object.values(wallet.training||{}).reduce((count,card)=>{
-  const drills=['spike','saw','endurance'].reduce((total,key)=>total+Math.max(0,Math.trunc(card[key]||0)),0);
-  return count+cardGrowth(card).level-1+drills;
+  const levels=drills.reduce((total,key)=>total+Math.max(0,Math.trunc(card[key]||0)),0);
+  return count+cardGrowth(card).level-1+levels;
  },0);
 }
 
@@ -170,6 +194,8 @@ export function achievementProgress(wallet,now=Date.now()){
  const training=Object.values(wallet.training||{});
  const campaign=campaignStages.map((_,i)=>wallet.campaign?.[i+1]);
  const gemMines=Boolean(kingdom?.gemMines?.length||storage.some(building=>building.kind==='gem-mine'));
+ const arcadeModes=new Set(remixes.filter(remix=>wallet.remixBest?.[remix.id]===100&&
+  (remix.id!==86084399||wallet.limboKeysCleared)).map(remix=>remix.mode));
  return {...progress,cardMask:progress.cardMask||0,mine:Math.max(progress.mine||0,mineRate(wallet.mine)),
   battle:progress.battle||0,army:armyClears(wallet),training:progress.training||0,
   houses:homes.length,tower:towerPlan(wallet,now).level,land:landPlan(wallet).level,
@@ -178,7 +204,7 @@ export function achievementProgress(wallet,now=Date.now()){
   campaign:campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length,
   masteries:campaign.filter(record=>medalCount(record)===3).length,
   remixes:Object.values(wallet.remixBest||{}).filter(score=>score===100).length,
-  trainedCards:training.filter(card=>cardGrowth(card).level>1||['spike','saw','endurance'].some(key=>card[key]>0)).length,
+  trainedCards:training.filter(card=>cardGrowth(card).level>1||drills.some(key=>card[key]>0)).length,
   spike:Math.max(0,...training.map(card=>card.spike||0)),saw:Math.max(0,...training.map(card=>card.saw||0)),
   endurance:Math.max(0,...training.map(card=>card.endurance||0)),
   machines:mineMachines.reduce((total,machine)=>total+machineOwned(wallet.mine,machine.id),0),
@@ -188,6 +214,11 @@ export function achievementProgress(wallet,now=Date.now()){
   trees:kingdom?.removedTrees?.length||0,
   gemMines:progress.minedGems>=20?3:progress.minedGems>0?2:Number(gemMines),
   upgradedHomes:homes.reduce((total,house)=>total+housePlan(house,now).level-1,0),
+  bannerVariety:Object.values(bannerAchievementStat).filter(key=>progress[key]>0).length,
+  upgradePair:Math.min(wallet.luck||0,wallet.bonus||0),arcadeModes:arcadeModes.size,
+  tripleDrill:Math.max(0,...training.map(card=>Math.min(...drills.map(drill=>card[drill]||0)))),
+  machineVariety:mineMachines.filter(machine=>machineOwned(wallet.mine,machine.id)>0).length,
+  buildingVariety:[kingdomHouses(wallet),kingdomForges(wallet),kingdomDefences(wallet),kingdom?.gemMines].filter(list=>list?.length).length,
   visitors:Math.max(progress.visitors||0,wallet.discoveredVisitors?.length||0)};
 }
 

@@ -6,6 +6,7 @@ import {isUuid,one,reject} from './game-http.mjs';
 import {seedAchievements} from './progression.mjs';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {updateAchievements} from '../web/progression-rules.js';
+import {validCoinAmount} from '../web/coin-economy.js';
 
 function managePlayer(record){
  const {coins}=normalizeWallet(JSON.parse(record.wallet));
@@ -18,7 +19,8 @@ async function moderate(db,actor,body){
  const {id,action,amount,requestId}=body;
  if(!isUuid(id)||!isUuid(requestId)||id===actor.player_id)reject('Choose another player.');
  if(!['level','coins','ban','unban'].includes(action))reject('Choose a valid player action.');
- if(['level','coins'].includes(action)&&(!Number.isSafeInteger(amount)||amount<0))reject('Enter a valid whole number.');
+ if(action==='coins'&&!validCoinAmount(amount))reject('Enter a coin amount with at most one decimal place.');
+ if(action==='level'&&(!Number.isSafeInteger(amount)||amount<0))reject('Enter a valid whole number.');
  if(action==='level'&&(amount>maxPlayerLevel||!Number.isSafeInteger(playerXpAtLevel(amount))))reject('Enter a level within the game limit.');
  for(let attempt=0;attempt<4;attempt++){
   const record=await findPlayer(db,id);

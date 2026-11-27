@@ -2,21 +2,22 @@ import {playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {cardCategories,normalizeWallet} from '../web/pack-engine.js';
 import {impossibleCategory,impossibleCover,impossibleTier} from '../web/impossible-cards.js';
 import {finishLabels} from '../web/card-finishes.js';
-import {tradeKey,tradeLevel,tradeLevelNotice,tradePreferences,validTradeMinimum} from '../web/trade-rules.js';
+import {tradeBalance,tradeBundleTotal,tradeKey,tradeLevel,tradeLevelNotice,tradeMaxGap,tradePreferences,tradeSearchTerm,validTradeMinimum} from '../web/trade-rules.js';
 import {isUuid,one,reject} from './game-http.mjs';
 import {directoryPlayer,findPlayer,searchPlayers} from './player-directory.mjs';
 import {collectionPower,discordAvatar,rankingVersion} from './player-rankings.mjs';
-import {browseCollection,exchangeCards,readBundle,snapshotBundle,validCardId,validFinish} from './trade-cards.mjs';
+import {browseCollection,exchangeCards,readBundle,snapshotBundle,validCardId,validFinish,verifyTradeSerials} from './trade-cards.mjs';
 import {updateAchievements} from '../web/progression-rules.js';
 import {seedAchievements} from './progression.mjs';
 import {addMarketQuotes,browseMarket,marketQuotes,tradeSamples} from './trade-market.mjs';
 
-const week=7*86_400_000;
+const offerLifetime=48*86_400_000;
 const offerLimit=25;
 const listSize=16;
 const getTrade=(db,id)=>one(db,'SELECT * FROM game_trades WHERE trade_id=?',id);
 const currentProfile='EXISTS(SELECT 1 FROM game_profiles WHERE player_id=? AND revision=? AND banned_at IS NULL)';
 const resolvedTrade='EXISTS(SELECT 1 FROM game_trades WHERE trade_id=? AND resolution_id=?)';
+const openOffer="status='pending' AND expires_at>? AND expires_at>unixepoch('now','subsec')*1000";
 const payload=cards=>JSON.stringify(cards);
 async function ownedSecrets(db,id){
  const {results}=await db.prepare(`SELECT level_id FROM game_cards WHERE player_id=?
@@ -64,13 +65,14 @@ async function listTrades(db,viewer,view,page,now){
  const filters={incoming:"t.recipient_id=? AND t.status='pending' AND t.expires_at>?",
   outgoing:"t.sender_id=? AND t.status='pending' AND t.expires_at>?",
   history:"(t.sender_id=? OR t.recipient_id=?) AND (t.status<>'pending' OR t.expires_at<=?)"};
+ const sortAt=view==='history'?"CASE WHEN t.status='pending' THEN t.expires_at ELSE COALESCE(t.resolved_at,t.created_at) END":'t.created_at';
  const {results}=await db.prepare(`WITH entries AS (
   SELECT t.*,CASE WHEN t.sender_id=? THEN t.recipient_id ELSE t.sender_id END AS other_id FROM game_trades t
-  WHERE ${filters[view]} ORDER BY COALESCE(t.resolved_at,t.created_at) DESC,t.trade_id DESC LIMIT ? OFFSET ?
+  WHERE ${filters[view]} ORDER BY ${sortAt} DESC,t.trade_id DESC LIMIT ? OFFSET ?
  ) SELECT t.*,COALESCE(NULLIF(d.display_name,''),NULLIF(d.username,''),s.alias,'Player '||substr(t.other_id,-4)) AS name,
   COALESCE(d.username,'') AS username,substr(p.owner,9) AS discord_id,d.avatar_hash,d.default_avatar_index FROM entries t JOIN game_profiles p ON p.player_id=t.other_id
   LEFT JOIN game_discord_profiles d ON p.owner='discord:'||d.discord_id LEFT JOIN game_scores s ON p.player_id=s.player_id
-  ORDER BY COALESCE(t.resolved_at,t.created_at) DESC,t.trade_id DESC`)
+  ORDER BY ${sortAt} DESC,t.trade_id DESC`)
   .bind(viewer,viewer,...(view==='history'?[viewer]:[]),now,listSize+1,page*listSize).all();
  const count=saved=>JSON.parse(saved).reduce((sum,card)=>sum+card.count,0);
  return {trades:results.slice(0,listSize).map(row=>{
@@ -88,11 +90,22 @@ async function overview(db,viewer,now){
  return {incoming,outgoing,settings:tradePreferences(JSON.parse(viewer.wallet)),hasSecrets:(await ownedSecrets(db,viewer.player_id)).length>0};
 }
 
+function tradeBundles(offer,request){
+ const offered=readBundle(offer),requested=readBundle(request),keys=new Set(offered.map(tradeKey));
+ if(requested.some(card=>keys.has(tradeKey(card))))reject('An identical card finish cannot be on both sides.');
+ return [offered,requested];
+}
+
+function requireBalance(give,get){
+ if(!tradeBalance(tradeBundleTotal(give),tradeBundleTotal(get)).allowed){
+  reject('Both sides must be within '+tradeMaxGap+'% in trade value.',409);
+ }
+}
+
 async function proposal(db,viewer,args,requestId,context){
  const {inventory,adminOwner,discordOnly}=context,{player}=args;
  if(!isUuid(player)||player===viewer.player_id)reject('Choose another player to trade with.');
- const offered=readBundle(args.offered),requested=readBundle(args.requested),keys=new Set(offered.map(tradeKey));
- if(requested.some(card=>keys.has(tradeKey(card))))reject('An identical card finish cannot be on both sides.');
+ const [offered,requested]=tradeBundles(args.offered,args.requested);
  for(let attempt=0;attempt<4;attempt++){
   const previous=await getTrade(db,requestId);
   if(previous){
@@ -107,6 +120,7 @@ async function proposal(db,viewer,args,requestId,context){
   if(requested.some(card=>impossibleCover(card.id)&&!known.has(card.id)))reject('That card is unavailable.',404);
   const selections=[snapshotBundle(offered,new Map(left.map(card=>[card.id,card])),a,theirs.minimum,now),
    snapshotBundle(requested,new Map(right.map(card=>[card.id,card])),b,mine.minimum,now)];
+  requireBalance(...selections);
   const quotes=await addMarketQuotes(db,selections.flat(),now),offer=quotes.slice(0,offered.length),want=quotes.slice(offered.length);
   const eligible=Number(marketTrusted(sender,a,adminOwner)&&marketTrusted(recipient,b,adminOwner));
   const items=[...offer.map(card=>({...card,side:'offered'})),...want.map(card=>({...card,side:'requested'}))];
@@ -115,7 +129,7 @@ async function proposal(db,viewer,args,requestId,context){
     SELECT ?,?,?,?,?,?,?,? WHERE ${currentProfile} AND ${currentProfile}
      AND (SELECT COUNT(*) FROM game_trades WHERE sender_id=? AND status='pending' AND expires_at>?)<?
     ON CONFLICT(trade_id) DO NOTHING`)
-    .bind(requestId,sender.player_id,player,payload(offer),payload(want),now,now+week,eligible,
+    .bind(requestId,sender.player_id,player,payload(offer),payload(want),now,now+offerLifetime,eligible,
      sender.player_id,sender.revision,player,recipient.revision,sender.player_id,now,offerLimit),
    db.prepare(`INSERT OR IGNORE INTO game_trade_items(trade_id,side,level_id,tier,finish)
     SELECT ?,json_extract(value,'$.side'),json_extract(value,'$.id'),json_extract(value,'$.tier'),json_extract(value,'$.finish')
@@ -149,18 +163,22 @@ async function acceptTrade(db,trade,context,now){
  const a=normalizeWallet(JSON.parse(sender.wallet)),b=normalizeWallet(JSON.parse(recipient.wallet));
  const [left,right]=await Promise.all([inventory(db,sender.player_id),inventory(db,recipient.player_id)]);
  const leftCards=new Map(left.map(card=>[card.id,card])),rightCards=new Map(right.map(card=>[card.id,card]));
- const offered=JSON.parse(trade.offered),requested=JSON.parse(trade.requested);
+ const savedOffer=JSON.parse(trade.offered),savedRequest=JSON.parse(trade.requested);
+ const [offered,requested]=tradeBundles(savedOffer,savedRequest);
  const gave=snapshotBundle(offered,leftCards,a,theirs.minimum,now),got=snapshotBundle(requested,rightCards,b,mine.minimum,now);
+ verifyTradeSerials(savedOffer,gave);verifyTradeSerials(savedRequest,got);
+ requireBalance(gave,got);
  const receipts=await addMarketQuotes(db,[...gave,...got],now),writeId=crypto.randomUUID();
  const withRows=(cards,collection)=>cards.map(card=>({...card,row:collection.get(card.id).row}));
  const aChanges=exchangeCards(a,leftCards,gave,withRows(got,rightCards),now);
  const bChanges=exchangeCards(b,rightCards,got,withRows(gave,leftCards),now);
  await Promise.all([seedAchievements(db,sender.player_id,a,now,left),seedAchievements(db,recipient.player_id,b,now,right)]);
- updateAchievements(a,{records:left,changes:aChanges,traded:1},now);
- updateAchievements(b,{records:right,changes:bChanges,traded:1},now);
+ const events={foilTrades:Number(gave.some(card=>card.finish!=='standard')&&got.some(card=>card.finish!=='standard'))};
+ updateAchievements(a,{records:left,changes:aChanges,traded:1,events},now);
+ updateAchievements(b,{records:right,changes:bChanges,traded:1,events},now);
  const eligible=Number(trade.market_eligible&&marketTrusted(sender,a,adminOwner)&&marketTrusted(recipient,b,adminOwner));
  const writes=[db.prepare(`UPDATE game_trades SET status='completed',resolved_at=?,resolution_id=?,offered=?,requested=?,market_eligible=?
-   WHERE trade_id=? AND status='pending' AND expires_at>? AND ${currentProfile} AND ${currentProfile}`)
+   WHERE trade_id=? AND ${openOffer} AND ${currentProfile} AND ${currentProfile}`)
   .bind(now,writeId,payload(receipts.slice(0,gave.length)),payload(receipts.slice(gave.length)),eligible,id,now,
    sender.player_id,sender.revision,recipient.player_id,recipient.revision),
  ...transferWrites(db,{record:sender,wallet:a,records:left,changes:aChanges},id,writeId,now),
@@ -184,7 +202,7 @@ async function resolveTrade(db,viewer,id,action,context){
   if(current===status)return describeTrade(db,trade,viewer.player_id,now);
   if(current!=='pending')reject('This offer is already '+current+'.',409);
   const updated=action==='accept'?await acceptTrade(db,trade,context,now):Boolean((await db.prepare(`UPDATE game_trades
-   SET status=?,resolved_at=? WHERE trade_id=? AND status='pending' AND expires_at>?
+   SET status=?,resolved_at=? WHERE trade_id=? AND ${openOffer}
     AND EXISTS(SELECT 1 FROM game_profiles WHERE player_id=? AND banned_at IS NULL)`)
    .bind(status,now,id,now,viewer.player_id).run()).meta.changes);
   if(updated)return describeTrade(db,await getTrade(db,id),viewer.player_id,now);
@@ -223,7 +241,7 @@ export async function trading(db,viewer,url,body,context){
  }
  if(view==='find'){
   if(!tradePreferences(JSON.parse(viewer.wallet)).enabled)reject('Enable trading in Trade settings first.',403);
-  const rows=await searchPlayers(db,term,{exclude:viewer.player_id,discordOnly:context.discordOnly,
+  const rows=await searchPlayers(db,tradeSearchTerm(term),{exclude:viewer.player_id,discordOnly:context.discordOnly,
    minXp:playerXpAtLevel(tradeLevel),enabledOnly:true});
   return {players:rows.map(directoryPlayer)};
  }

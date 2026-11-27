@@ -1,3 +1,5 @@
+import {roundCoins} from './coin-economy.js';
+
 // Receipts are already saved. Only the displayed balance waits for the sprites to arrive.
 const currencies={
  gems:{file:'gem',label:'Gems',badge:'gemLink',count:'gemCount',tint:'#9ae8ff'},
@@ -26,7 +28,9 @@ export function createRewardFlight(sound,format){
  const tickets=new Set(),bursts=[];
  let layer,canvas,ctx,meter,raf=0,removeTimer=0,lastChime=0,width=0,height=0;
  let nextCoin=0,queuedCoin=null,lastCoinPulse=-Infinity;
- function visual(kind){return Math.max(0,kind==='gems'?Math.round(totals.gems*10-owed.gems)/10:totals[kind]-Math.round(owed[kind]/10))}
+ function visual(kind){
+  return Math.max(0,kind==='mana'?totals.mana-Math.round(owed.mana/10):roundCoins(totals[kind]-owed[kind]/10));
+ }
  function paint(kind){
   const el=document.getElementById(currencies[kind].count);
   const value=visual(kind);

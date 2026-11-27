@@ -8,7 +8,8 @@ export function cardFace(category){
 }
 export function cardBackMark(category){
  return '<span class="gd-card-back-mark" aria-hidden="true">'+
-  '<img src="'+cardFace(category||'Auto')+'" alt=""><b>GD KINGDOM</b></span>';
+  '<img class="gd-card-back-logo" src="/assets/gd-kingdom-castle-icon.png" alt="">'+
+  '<img class="gd-card-back-face" src="'+cardFace(category||'Auto')+'" alt=""><b>GD KINGDOM</b></span>';
 }
 
 const haloEdges=Array.from({length:16},(_,index)=>{

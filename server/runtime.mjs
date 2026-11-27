@@ -5,7 +5,7 @@ import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import worker from '../dist/server/index.js';
 import {openGameDatabase} from './sqlite.mjs';
-import {createDiscordAuth} from './discord.mjs';
+import {createDiscordAuth,officialGuildId} from './discord.mjs';
 import {createBugReports} from './bug-reports.mjs';
 
 const port=Number(process.env.PORT||8080);
@@ -25,7 +25,7 @@ if((railway&&publicUrl.protocol!=='https:')||!['http:','https:'].includes(public
  throw Error('GAME_PUBLIC_ORIGIN must be a valid origin.');
 }
 const {DB,sqlite}=openGameDatabase(join(directory,'gd-lvl-battles.sqlite'));
-const discord=createDiscordAuth(sqlite,{origin:publicUrl.origin,clientId:process.env.DISCORD_CLIENT_ID});
+const discord=createDiscordAuth(sqlite,{origin:publicUrl.origin,clientId:process.env.DISCORD_CLIENT_ID,guildId:officialGuildId});
 const reports=createBugReports(sqlite,{apiKey:process.env.RESEND_API_KEY,from:process.env.BUG_REPORT_FROM,to:process.env.BUG_REPORT_TO});
 const reportTimer=reports.start();
 const server=http.createServer(async(req,res)=>{

@@ -113,7 +113,6 @@
  .arc-heading:has(.arc-nav){display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
  .arc-heading .arc-nav-tools{display:contents}
  .arc-heading .arc-nav{grid-area:2/1/3/-1}
- .arc-heading #packSound{grid-column:2;grid-row:1}
  .arc-heading .arc-nav a{position:relative}
  .arc-heading .arc-nav .gacha-tab-alert{position:absolute;top:4px;right:4px;width:7px;height:7px;padding:0;border-radius:50%;font-size:0}
 }

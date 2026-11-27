@@ -3,12 +3,12 @@ import {cardCategories,difficulties,packs,rollPacks,upgrades,quoteUpgrade,random
 import {createMergePlanner,extremeTable,gemTenths,levelRewardTenths} from './card-economy.js';
 import {starterCube,cubeCatalogVersion,claimCube,ownsCube} from './cube-catalog.js';
 import {settleMine,creditMineTaps,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines} from './mine-economy.js';
-import {coinEconomyVersion,startingCoins} from './coin-economy.js';
+import {changeCoins,coinEconomyVersion,startingCoins} from './coin-economy.js';
 import {combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
 import {limboChoiceAt,limboPattern} from './limbo-keys.js';
-import {findRemix} from './remixes.js';
+import {findRemix,remixKeyReward} from './remixes.js';
 import {armyMaps,armyLimit} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix} from './game-replay.js';
@@ -60,7 +60,7 @@ function readySquad(wallet,ids,now) {
  requireRule(wallet.battle?.status!=='active','Finish the current battle first.');
  requireRule(ids.every(id=>(wallet.injuries?.[id]||0)<=now),'An equipped card is recovering.');
 }
-function awardPack(wallet,records,changes,pack,quantity,pools,now) {
+function awardPack(wallet,records,changes,pack,quantity,pools,now,mintSerial) {
  requireRule(!wallet.pending,'Finish your current opening first.');
  requireLevel(wallet,packLevels[pack.id],pack.name+' packs');
  if(quantity==='max'){
@@ -71,11 +71,11 @@ function awardPack(wallet,records,changes,pack,quantity,pools,now) {
  requireRule(wallet.coins>=price,'You need more coins for this pull.');
  spendPackStock(wallet,pack.id,quantity,now);
  const pull=rollPacks(pack,quantity,wallet,pools);
- wallet.coins-=price;
- saveOpening(wallet,records,changes,pull,now);
+ changeCoins(wallet,-price);
+ saveOpening(wallet,records,changes,pull,now,mintSerial);
 }
 
-function awardDemonPull(wallet,records,changes,{banner,quantity},prepared,now){
+function awardDemonPull(wallet,records,changes,{banner,quantity},prepared,now,mintSerial){
  requireRule(!wallet.pending,'Finish your current opening first.');
  const definition=demonBanners[banner];
  requireLevel(wallet,definition.level,definition.name+' Demon banner');
@@ -89,10 +89,10 @@ function awardDemonPull(wallet,records,changes,{banner,quantity},prepared,now){
  const pities=wallet.demonBanner.pity??={};
  pities[banner]=pull.pity;
  wallet.demonKeys-=keyCost;
- saveOpening(wallet,records,changes,pull,now);
+ saveOpening(wallet,records,changes,pull,now,mintSerial);
 }
 
-function saveOpening(wallet,records,changes,pull,now){
+function saveOpening(wallet,records,changes,pull,now,mintSerial){
  const owned=new Map(records.map(c=>[c.id,c]));
  const holo=new Set(pull.holos),antimatter=new Set(pull.antimatters);
  const newIds=[];
@@ -107,6 +107,8 @@ function saveOpening(wallet,records,changes,pull,now){
   entry.everHolo=Boolean(entry.everHolo||entry.holoCopies);
   entry.everAntimatter=Boolean(entry.everAntimatter||entry.antimatterCopies);
   entry.last=now;
+  const serial=mintSerial?.(entry,antimatter.has(index)?'antimatter':holo.has(index)?'holo':'standard');
+  if(serial!==undefined)(pull.serials??={})[index]=serial;
   changes.set(id,entry);
  });
  wallet.pending={...pull,id:crypto.randomUUID(),opened:0,gemsEarned:0,newIds};
@@ -239,13 +241,13 @@ const rules={
   const pack=packs.find(item=>item.id===packId);
   requireRule(pack&&(quantity==='max'||within(quantity,1,packStockLimit)),'Choose between 1 and '+packStockLimit+' packs.');
   return {pack,pools:await allPools(getPool,pack.id==='godly'?cardCategories:difficulties)};
- },run:({w,records,changes,args,prepared,now})=>awardPack(w,records,changes,prepared.pack,args.quantity,prepared.pools,now)},
+ },run:({w,records,changes,args,prepared,now,mintSerial})=>awardPack(w,records,changes,prepared.pack,args.quantity,prepared.pools,now,mintSerial)},
  'demon.keys.buy':{run:({w,args,now})=>buyDemonKeys(w,args,now)},
  'demon.keys.claim':{run:({w,now})=>claimDemonKeys(w,now)},
  'demon.pull':{cards:true,prepare:async (args,getPool)=>{
   requireRule(args.quantity==='max'||[1,10,50].includes(args.quantity),'Choose 1, 10, 50, or Max draws.');
   return prepareDemonPull(args,getPool);
- },run:({w,records,changes,args,prepared,now})=>awardDemonPull(w,records,changes,args,prepared,now)},
+ },run:({w,records,changes,args,prepared,now,mintSerial})=>awardDemonPull(w,records,changes,args,prepared,now,mintSerial)},
  'pack.advance':{run:({w,args,now})=>{
   requireRule(key(args.id)&&within(args.opened,0,50),'Choose a valid opening step.');
   const run=w.pending;
@@ -296,8 +298,8 @@ const rules={
   return {gems:tenths/10,count};
  }},
  'card.merge':{cards:true,prepare:async (_,getPool)=>createMergePlanner(await allPools(getPool,difficulties),difficulties),
-  run:({w,records,changes,args,prepared,now})=>{
-   const {changed,preview}=fuseCollection(w,records,prepared,args,randomBelow,now);
+  run:({w,records,changes,args,prepared,now,mintSerial})=>{
+   const {changed,preview}=fuseCollection(w,records,prepared,args,randomBelow,now,mintSerial);
    for(const [id,card] of changed)changes.set(id,card);
    awardPlayerXp(w,w.lastMerge.count*3);
    return {preview};
@@ -385,19 +387,25 @@ const rules={
  'remix.finish':{run:({w,args:{token,proof},now})=>{
   const run=w.remixRun;
   requireRule(key(token)&&run?.token===token,'Start a new arcade attempt.');
-  const finale=run.id===86084399&&run.finale;
+  const remix=findRemix(run.id),limbo=remix.mark==='KEY',finale=limbo&&run.finale;
   let percent;
   if(finale){
    requireRule(within(proof?.key,0,7)&&now-finale.start>=limboChoiceAt-250,'Wait for the keys to finish shuffling.');
    percent=proof.key===limboPattern(finale.seed).answer?100:99;
-  }else percent=replayRemix(findRemix(run.id),run,proof,now);
+  }else percent=Math.min(limbo?99:100,replayRemix(remix,run,proof,now));
+  const cleared=percent===100;
   w.remixBest??={};
-  const prior=w.remixBest[run.id]||0,playerXpEarned=finale&&percent===100?100:Math.max(0,Math.floor((percent-prior)*.3));
+  const prior=w.remixBest[run.id]||0,playerXpEarned=finale&&cleared?100:Math.max(0,Math.floor((percent-prior)*.3));
   w.remixBest[run.id]=Math.max(prior,percent);
-  if(finale&&percent===100)w.limboKeysCleared=true;
+  if(finale&&cleared)w.limboKeysCleared=true;
+  let demonKeys=0;
+  if(cleared&&!w.remixKeyRewards?.[run.id]){
+   demonKeys=rewardDemonKeys(w,remixKeyReward(remix),now);
+   if(demonKeys)(w.remixKeyRewards??={})[run.id]=demonKeys;
+  }
   awardPlayerXp(w,playerXpEarned);
   delete w.remixRun;
-  return {percent,playerXpEarned};
+  return {percent,playerXpEarned,cleared,demonKeys};
  }},
  'army.begin':{cards:true,prepare:armySetup,run:({w,records,args:{map,chapter,tier,ids},prepared,now})=>{
   const {series,rivals,starterRows}=prepared;
@@ -422,12 +430,12 @@ export async function prepareGameAction(name,args,getPool,hasArt=()=>true){
  requireRule(typeof name==='string'&&Object.hasOwn(rules,name)&&args&&typeof args==='object'&&!Array.isArray(args),'Unknown game action.');
  const rule=rules[name];
  const prepared=await rule.prepare?.(args,getPool,hasArt);
- return {cards:rule.cards,apply(w,records,changes,now,online){
+ return {cards:rule.cards,apply(w,records,changes,now,online,mintSerial){
   initDemonKeys(w,now);
   const {tower:finishedTower,houses:finishedHouses,forges:finishedForges,defences:finishedDefences}=settleKingdomConstruction(w,now);
   const feature=Object.hasOwn(gatedActions,name)?features[gatedActions[name]]:null;
   if(feature)requireLevel(w,feature.level,feature.name);
   const income=settleMine(w,now);
-  return rule.run({w,records,changes,args,prepared,now,online,income,finishedTower,finishedHouses,finishedForges,finishedDefences})??null;
+  return rule.run({w,records,changes,args,prepared,now,online,income,finishedTower,finishedHouses,finishedForges,finishedDefences,mintSerial})??null;
  }};
 }

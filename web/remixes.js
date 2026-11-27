@@ -16,6 +16,9 @@ export const remixes=[
  {id:75867791,level:'poocu',name:'Poocu Night Flight',creator:'Liisp',tier:9,mode:'ship',color:'#c6bafe',pattern:[.56,.45,.38,.63,.52,.38,.56],quote:'Made it before sunrise.',hint:'Use short lifts to stay between the reflections in the night tunnel.',rule:'Standard arena rules.',mark:'DUSK',cue:'alarmSnooze',music:'reverie',art:'/assets/battle/army/prism-harbor.avif'}
 ];
 export const findRemix=id=>remixes.find(r=>r.id===Number(id));
+// Base payouts follow the arcade course, whose difficulty can differ from its arena.
+const keyRewards={6508283:2,119550490:4,4284013:4,61079355:4,86407629:5,3979721:6,44062068:8,86084399:10};
+export const remixKeyReward=remix=>keyRewards[remix.id]??3;
 export const pulseCost=b=>b.remix===3979721&&b.kills>=2?1:2;
 export function keyTarget(b){
  const alive=b.enemies.map((u,i)=>u.hp>0?i:-1).filter(i=>i!==-1);

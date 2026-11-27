@@ -1,6 +1,7 @@
 import {renderPlayerMenu,setupPlayerMenu} from './account-menu.js';
 import {setupAdminTools} from './admin-tools.js';
 import {renderPlayerProgress} from './player-progress-view.js';
+import {setupNotifications} from './notifications.js';
 
 const updates = typeof window !== 'undefined' && typeof BroadcastChannel === 'function'
  ? new BroadcastChannel('gdlb-online-updates') : null;
@@ -8,6 +9,7 @@ let opening;
 let legacy;
 let discordRequired=false;
 let canAdmin=false;
+let notifications;
 let ordered = Promise.resolve();
 
 async function exchange(url, options) {
@@ -32,6 +34,7 @@ export function gameSession() {
   opening = (navigator.locks ? navigator.locks.request('gdlb-session', begin) : begin())
    .then(data => {
     renderAccount(data);
+    if(data.keyBonus)document.dispatchEvent(new CustomEvent('gdlb-discord-key-bonus',{detail:data.keyBonus}));
     if(data.playerProfile?.autoRefresh)refreshDiscordProfile(true);
     return data;
    })
@@ -87,6 +90,7 @@ export function tradeCommand(action,args){
  return queue(async()=>{
   const data=await submit('/api/trades',{action,args,requestId:crypto.randomUUID()});
   updates?.postMessage('trade');
+  notifications?.refresh();
   return data;
  });
 }
@@ -109,7 +113,7 @@ function refreshDiscordProfile(automatic=false) {
  form.submit();
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error,discordKeyBonusClaimed}) {
  const account=document.getElementById('gameAccount');
  const logout=document.getElementById('gameSignOut');
  const transfer=document.getElementById('gameTransfer');
@@ -123,12 +127,14 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  document.getElementById('gameSignInGuide').hidden=Boolean(banned);
  if(banned)document.getElementById('gameAuthError').textContent=error;
  document.body.dataset.account=locked?'locked':'ready';
+ notifications?.setAccount({signedIn:Boolean(signedIn&&!locked),discord:accountProvider==='discord'&&!locked,keyBonusClaimed:discordKeyBonusClaimed});
  document.getElementById('accountGate').hidden=!locked;
  document.getElementById('gameMain').hidden=locked;
  document.getElementById('gameGateLoading').hidden=true;
  document.getElementById('gameAuthRetry').hidden=true;
  if(locked)for(const dialog of document.querySelectorAll('dialog[open]'))dialog.close();
  renderPlayerProgress(locked?null:wallet,saveRevision);
+ if(locked||wallet)document.dispatchEvent(new CustomEvent('gdlb-key-balance',{detail:{keys:locked?null:wallet.demonKeys||0,revision:saveRevision??0}}));
  if(locked||wallet)document.dispatchEvent(new CustomEvent('gdlb-achievements',{detail:{earned:locked?null:wallet.achievements||{},saveRevision:saveRevision??0,pending:Boolean(wallet?.pending),keysToClaim:wallet?.demonKeysToClaim||0}}));
  if(account){
   account.hidden=!locked||Boolean(banned);
@@ -170,7 +176,16 @@ if (typeof document !== 'undefined') {
  const url=new URL(location.href);
  const error=url.searchParams.get('discord');
  const profileError=url.searchParams.get('discord_profile');
+ const membershipResult=url.searchParams.get('discord_membership');
  const status=document.getElementById('gameSaveNotice');
+ const noticeRoute='/api/game?view=notifications';
+ notifications=setupNotifications({membershipResult,load:()=>exchange(noticeRoute,{signal:AbortSignal.timeout(10_000)}),mark:body=>queue(async()=>{
+  const data=await submit(noticeRoute,body);
+  updates?.postMessage('notifications');
+  return data;
+ })});
+ onOtherTab(event=>{if(['notifications','trade'].includes(event.data))notifications.refresh();});
+ if(membershipResult)url.searchParams.delete('discord_membership');
  if(url.searchParams.get('save')==='local')url.searchParams.delete('save');
  if(error){
   url.searchParams.delete('discord');
