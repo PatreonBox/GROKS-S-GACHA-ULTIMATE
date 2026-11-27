@@ -28,7 +28,7 @@ import {buildingFootprint,collectForge,forgePlan,gemMine,gemMinePlan,housePlacem
 import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
-import {achievements,achievementById,achievementProgress,achievementXp} from '../web/progression-rules.js';
+import {achievements,achievementById,achievementMaterial,achievementProgress,achievementXp} from '../web/progression-rules.js';
 import {ico} from '../web/icons.js';
 import {bannerOdds,bannerPity,demonCatalogue,demonPity,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
 import {bannerUnlockDelay,demonKeyOffer,demonKeyPrice,starterDemonKeys} from '../web/demon-keys.js';
@@ -1453,6 +1453,28 @@ test('All 65 achievements use staged server progress including legacy collection
  assert.ok(wallet.achievements['training-100']&&wallet.achievements['army-three']&&wallet.achievements['battle-20']);
  assert.equal(achievementProgress(wallet).training,100);
  assert.equal(featureLevel('progression'),1);
+});
+
+test('Badge materials follow the stage count and added stages preserve earned milestones',async()=>{
+ const materials=['Wood','Brass','Bronze','Silver','Gold','Platinum','Diamond'];
+ for(let total=1;total<=7;total++){
+  const actual=Array.from({length:total},(_,i)=>achievementMaterial(i+1,total));
+  assert.deepEqual(actual,materials.slice(Math.max(0,5-total),Math.max(5,total)));
+ }
+ const seal=achievements.find(item=>item.id==='opened-packs'),binder=achievements.find(item=>item.id==='binder-milestones');
+ assert.equal(seal.stages.length,7);
+ assert.deepEqual(seal.stages.slice(0,3).map(({id,goal})=>[id,goal]),[['opened-packs:1',10],['opened-packs:2',50],['opened-packs',250]]);
+ assert.equal(binder.stages.length,4);
+ assert.equal(binder.stages[2].id,'binder-milestones');
+ const f=fixture(),player=await f.open(),earnedAt=Date.now()-60_000;
+ const saved=Object.fromEntries(seal.stages.slice(0,3).map(({id})=>[id,earnedAt]));
+ f.store(player.id,w=>{w.achievementProgress={version:3,packs:2_500};w.achievements={...saved};w.achievementRewards={...saved};});
+ const wallet=await f.wallet(player);
+ for(const {id} of seal.stages.slice(0,3))assert.equal(wallet.achievements[id],earnedAt);
+ for(const {id} of seal.stages.slice(3,6))assert.ok(wallet.achievements[id]>earnedAt);
+ assert.equal(wallet.achievements['opened-packs:7'],undefined);
+ assert.equal(wallet.achievementRewardXp,400);
+ assert.equal((await f.wallet(player)).achievementRewardXp,400);
 });
 
 test('New badge tracks have distinct art and count only actual multi-mode progress',()=>{

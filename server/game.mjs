@@ -15,7 +15,7 @@ import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
 import {trainingLevels,updateAchievements} from '../web/progression-rules.js';
-import {achievementActionEvents,refreshAchievementWallet,seedAchievements} from './progression.mjs';
+import {achievementActionEvents,achievementStatistics,refreshAchievementWallet,seedAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
 import {grantDiscordKeyBonus,playerNotifications} from './game-notifications.mjs';
 import {browseDemonTargets,demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
@@ -469,6 +469,7 @@ export function gameRoutes(readJson,hasArt){
    }
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
+   if(view==='achievement-stats')return json({'achievement-stats':await achievementStatistics(db,{adminOwner,discordOnly:requiresSignIn})});
    if(view==='demon-featured-levels')return json(await browseDemonTargets(getPool,{
     query:url.searchParams.get('q')||'',category:url.searchParams.get('category'),page:Number(url.searchParams.get('page')),
     playerLevel:playerProgress(JSON.parse(record.wallet).playerXp).level

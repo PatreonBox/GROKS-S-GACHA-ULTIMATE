@@ -1,4 +1,4 @@
-import {achievementVersion,bannerAchievementStat,updateAchievements} from '../web/progression-rules.js';
+import {achievementById,achievementVersion,bannerAchievementStat,updateAchievements} from '../web/progression-rules.js';
 import {normalizeWallet} from '../web/pack-engine.js';
 import {needsCoinNormalization} from '../web/coin-economy.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
@@ -8,6 +8,27 @@ import {initDemonKeys,releaseAchievementKeys} from '../web/demon-keys.js';
 export const needsAchievementSeed=wallet=>wallet.achievementProgress?.version!==achievementVersion;
 const olderBattleWins=wallet=>Object.keys(wallet.campaign||{}).length+Object.values(wallet.remixWins||{}).reduce((sum,wins)=>sum+wins,0);
 const fullSquadWon=battle=>battle?.status==='won'&&battle.allies?.length===4&&battle.allies.every(ally=>ally.hp>0);
+const statisticsCache=new WeakMap();
+
+export function achievementStatistics(db,{adminOwner,discordOnly},now=Date.now()){
+ const scope=adminOwner+'/'+Number(discordOnly),saved=statisticsCache.get(db);
+ if(saved?.scope===scope&&now<saved.expires)return saved.result;
+ const result=one(db,`WITH players AS (
+  SELECT wallet FROM game_profiles
+  WHERE banned_at IS NULL AND leaderboard_excluded=0 AND owner<>? AND (?=0 OR owner LIKE 'discord:%')
+ ), stages AS (
+  SELECT stage.key AS id,COUNT(*) AS owners FROM players, json_each(players.wallet,'$.achievements') AS stage
+  WHERE typeof(stage.key)='text' GROUP BY stage.key
+ ) SELECT (SELECT COUNT(*) FROM players) AS players,
+  (SELECT json_group_object(id,owners) FROM stages) AS earned`,adminOwner,Number(discordOnly)).then(row=>({
+   players:row.players,earned:Object.fromEntries(Object.entries(JSON.parse(row.earned)).filter(([id])=>achievementById(id)))
+  })).catch(error=>{
+   if(statisticsCache.get(db)?.result===result)statisticsCache.delete(db);
+   throw error;
+  });
+ statisticsCache.set(db,{scope,result,expires:now+30_000});
+ return result;
+}
 
 function revealedBannerChests(pull,from,to){
  if(!Object.hasOwn(bannerAchievementStat,pull?.banner)||to<=from)return {};

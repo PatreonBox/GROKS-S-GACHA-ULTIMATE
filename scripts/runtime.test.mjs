@@ -561,6 +561,30 @@ function tradeFixture(t){
 }
 const tradeLine=(row,finish='standard',count=1)=>({id:row[0],finish,count});
 
+test('Achievement counts report saved stage ownership without revealing player profiles',async t=>{
+ const now=Date.now();
+ t.mock.timers.enable({apis:['Date'],now});
+ const f=tradeFixture(t),path='/api/game?view=achievement-stats';
+ const wood={'opened-packs:1':now};
+ const a=f.player('reader',15,{wallet:{achievements:{...wood,'opened-packs:2':now,unknown:now}}});
+ f.player('hidden',15,{wallet:{profileHidden:true,achievements:wood}});
+ const c=f.player('newcomer');
+ const banned=f.player('banned',15,{wallet:{achievements:wood}});
+ f.sqlite.prepare('UPDATE game_profiles SET banned_at=? WHERE player_id=?').run(now,banned.id);
+ f.player('owner',20,{admin:true,wallet:{achievements:{...wood,'opened-packs:2':now}}});
+ f.sqlite.prepare('INSERT INTO game_profiles(player_id,owner,wallet,updated_at) VALUES(?,?,?,?)')
+  .run(crypto.randomUUID(),'guest:fixture',JSON.stringify({achievements:wood}),now);
+ const expected={players:3,earned:{'opened-packs:1':2,'opened-packs:2':1}};
+ assert.deepEqual(await f.json(a,path),{'achievement-stats':expected});
+ await f.json(null,path,undefined,401);
+ await f.json(banned,path,undefined,403);
+ f.sqlite.prepare('UPDATE game_profiles SET wallet=json_set(wallet,\'$.achievements\',json(?)) WHERE player_id=?')
+  .run(JSON.stringify(wood),c.id);
+ assert.deepEqual(await f.json(c,path),{'achievement-stats':expected});
+ t.mock.timers.tick(30_001);
+ assert.deepEqual(await f.json(c,path),{'achievement-stats':{players:3,earned:{...expected.earned,'opened-packs:1':3}}});
+});
+
 test('Trading matches usernames, honors receive floors, and exchanges exact finishes once',async t=>{
  const f=tradeFixture(t),a=f.player('merchant'),b=f.player('dash_mina',16),c=f.player('lowlevel',14);
  const [easy,elsewhere]=await tradePool('Easy');

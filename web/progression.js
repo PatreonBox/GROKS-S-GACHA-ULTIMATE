@@ -1,22 +1,30 @@
 import {
- achievementBoostLabels,achievementBoosts,achievementById,achievementCount,achievementProgress,achievements
+ achievementBoostLabels,achievementBoosts,achievementById,achievementCount,achievementMaterial,achievementProgress,achievements
 } from './progression-rules.js';
 import {playerProgress} from './player-progression.js';
 import {nextUnlocks} from './level-access.js';
 import {dropAccessSummary} from './drop-access.js';
 import {ico} from './icons.js';
+import {gameRead} from './game-client.js';
 
 const number=new Intl.NumberFormat('en-US');
 const percent=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const groups=[...new Set(achievements.map(item=>item.group))];
 const allStages=achievements.flatMap(item=>item.stages);
 const difficultyFaces={Easy:'easy',Normal:'normal',Hard:'hard',Harder:'harder',Insane:'insane',Demon:'demon-extreme'};
-const groupIcons={Cards:'pack',Battle:'battle',Training:'aim',Kingdom:'tower','Coin mine':'mine',Trading:'exchange'};
+const groupIcons={Cards:'pack',Battle:'battle',Training:'aim',Kingdom:'tower','Coin mine':'mine'};
 const names={overview:'Overview',achievements:'Achievements'};
+const materialFor=(item,stage)=>achievementMaterial(stage.stage,item.stages.length);
+const materialAttr=material=>' data-achievement-material="'+material.toLowerCase()+'"';
+const isEarned=(stage,earned)=>Object.hasOwn(earned,stage.id);
 
-function badge(item,earned=false){
- const art=item.icon?'<img src="'+item.icon+'" alt="">':ico(item.symbol||'crown');
- return '<span class="achievement-badge" data-badge-earned="'+earned+'" style="--medal:'+item.color+'" aria-hidden="true">'+art+'</span>';
+function badge(item,material,earned){
+ let art=item.icon?'<img src="'+item.icon+'" alt="">':ico(item.symbol||'crown');
+ if(art.startsWith('<svg')){
+  const source=encodeURIComponent(art.replace('<svg ','<svg xmlns="http://www.w3.org/2000/svg" '));
+  art='<span class="achievement-glyph" style="--glyph:url(\'data:image/svg+xml,'+source+'\')"></span>';
+ }
+ return '<span class="achievement-badge"'+materialAttr(material)+' data-badge-earned="'+earned+'" aria-hidden="true">'+art+'</span>';
 }
 function difficulty(stage){
  const face=difficultyFaces[stage.difficulty];
@@ -32,30 +40,36 @@ function rewards(stage){
 function keyReward(keys){
  return keys?'<span class="achievement-keys">+'+number.format(keys)+' Demon '+(keys===1?'Key':'Keys')+'</span>':'';
 }
-function stageState(stage,earned){
- return Object.hasOwn(earned,stage.id)?'<span class="achievement-earned">'+ico('check')+' Earned</span>':'<span class="achievement-unearned">In progress</span>';
-}
 function stageProgress(item,stage,count,earned){
- const value=Object.hasOwn(earned,stage.id)?stage.goal:Math.min(stage.goal,count);
+ const value=isEarned(stage,earned)?stage.goal:Math.min(stage.goal,count);
  return '<div class="achievement-track"><progress max="'+stage.goal+'" value="'+value+'" aria-label="'+item.name+' stage '+stage.stage+' progress"></progress>'+
   '<span>'+number.format(value)+' / '+number.format(stage.goal)+'</span></div>';
 }
-function stageDetails(item,count,earned,expanded){
- if(item.stages.length===1)return '';
- return '<details class="achievement-stages" data-badge-stages="'+item.id+'"'+(expanded?' open':'')+'><summary>All '+item.stages.length+' stages <span class="achievement-announcement">for '+item.name+'</span>'+ico('down')+'</summary>'+
-  '<ol>'+item.stages.map(stage=>'<li><span class="achievement-stage-index" aria-hidden="true">'+stage.stage+'</span>'+
-   '<div><div class="achievement-stage-meta"><b>Stage '+stage.stage+'</b>'+difficulty(stage)+stageState(stage,earned)+'</div>'+
-   '<p>'+stage.description+'</p>'+rewards(stage)+stageProgress(item,stage,count,earned)+'</div></li>').join('')+'</ol></details>';
+function communityCount(stats,stage){
+ const owners=stats.earned[stage.id]||0,share=stats.players?owners/stats.players*100:0;
+ return number.format(owners)+' '+(owners===1?'player':'players')+' · '+(share>0&&share<.01?'&lt;0.01':percent.format(share))+'%';
 }
-function achievementCard(item,stage,progress,earned,expanded=false){
- const count=achievementCount(item,progress);
- const complete=item.stages.every(entry=>Object.hasOwn(earned,entry.id));
- return '<article class="achievement-card" data-earned="'+complete+'">'+
-  '<div class="achievement-card-body">'+badge(item,Object.hasOwn(earned,stage.id))+'<div class="achievement-information">'+
-  '<div class="achievement-stage-meta">'+difficulty(stage)+'<span class="achievement-stage-number">Stage '+stage.stage+' of '+item.stages.length+'</span></div>'+
-  '<h4>'+item.name+'</h4><p>'+stage.description+'</p>'+stageProgress(item,stage,count,earned)+
-  '<div class="achievement-payoff">'+rewards(stage)+stageState(stage,earned)+'</div></div></div>'+
-  stageDetails(item,count,earned,expanded)+'</article>';
+function achievementTile(item,stage,progress,earned){
+ const highest=item.stages.findLast(entry=>isEarned(entry,earned)),metal=materialFor(item,highest||item.stages[0]);
+ const earnedCount=item.stages.filter(entry=>isEarned(entry,earned)).length;
+ const count=achievementCount(item,progress),value=isEarned(stage,earned)?stage.goal:Math.min(stage.goal,count);
+ const complete=earnedCount===item.stages.length;
+ return '<button class="achievement-tile" type="button" data-achievement-badge="'+item.id+'"'+materialAttr(metal)+
+  ' data-complete="'+complete+'" aria-haspopup="dialog" aria-label="'+item.name+', '+earnedCount+' of '+item.stages.length+' stages earned">'+
+  badge(item,metal,Boolean(highest))+'<strong>'+item.name+'</strong><span class="achievement-tile-material">'+metal+'</span>'+
+  '<span class="achievement-pips" aria-hidden="true">'+item.stages.map(entry=>'<i'+materialAttr(materialFor(item,entry))+
+   ' data-earned="'+isEarned(entry,earned)+'"></i>').join('')+'</span>'+
+  '<span class="achievement-tile-progress" style="--progress:'+(100*value/stage.goal)+'%" aria-hidden="true"></span></button>';
+}
+function achievementStage(item,stage,count,earned,next,stats){
+ const complete=isEarned(stage,earned),metal=materialFor(item,stage);
+ const state=complete?'earned':stage===next?'current':'upcoming';
+ return '<li class="achievement-stage"'+materialAttr(metal)+' data-state="'+state+'">'+badge(item,metal,complete)+
+  '<div><div class="achievement-stage-meta"><strong>'+metal+'</strong><span class="achievement-stage-number">Stage '+stage.stage+'</span>'+difficulty(stage)+'</div>'+
+  '<p>'+stage.description+'</p>'+stageProgress(item,stage,count,earned)+rewards(stage)+'</div>'+
+  '<div class="achievement-stage-status"><span class="achievement-'+(complete?'earned':'unearned')+'">'+
+  (complete?ico('check')+' Earned':stage===next?'Next stage':'Upcoming')+'</span>'+
+  (stats?'<span class="achievement-stage-community">'+communityCount(stats,stage)+'</span>':'')+'</div></li>';
 }
 function options(values,selected){
  return Object.entries(values).map(([value,label])=>'<option value="'+value+'"'+(value===selected?' selected':'')+'>'+label+'</option>').join('');
@@ -67,12 +81,73 @@ function filterSelect(key,label,values,selected){
 export function createProgression(root){
  let wallet,active=null,rootPanel,summary,shell,board,filters,result;
  let selection={category:'all',difficulty:'all',status:'all'};
+ let openedBadge,opener,statistics,statisticsRequest,statisticsError,statisticsUpdated=0;
  const renderCache=new WeakMap();
- const expanded=new Set();
+ const dialog=document.createElement('dialog');
+ dialog.className='achievement-dialog';
+ dialog.setAttribute('aria-labelledby','achievementBadgeTitle');
+ dialog.innerHTML='<div class="achievement-dialog-panel"><button type="button" class="iconbtn achievement-close" aria-label="Close badge" autofocus>'+ico('x')+'</button>'+
+  '<div class="achievement-hero" data-badge-hero></div><div class="achievement-community" data-badge-community aria-live="polite"></div>'+
+  '<div class="achievement-ladder-heading"><h3>Badge stages</h3><div><span data-badge-range></span><span data-badge-count></span></div></div>'+
+  '<ol class="achievement-ladder" role="list" data-badge-ladder></ol></div>';
+ document.body.append(dialog);
+ const panel=dialog.querySelector('.achievement-dialog-panel');
+ const closeBadge=dialog.querySelector('.achievement-close');
+ const hero=dialog.querySelector('[data-badge-hero]'),community=dialog.querySelector('[data-badge-community]');
+ const badgeRange=dialog.querySelector('[data-badge-range]'),badgeCount=dialog.querySelector('[data-badge-count]');
+ const ladder=dialog.querySelector('[data-badge-ladder]');
  function fill(node,html){
   if(renderCache.get(node)===html)return false;
   node.innerHTML=html;renderCache.set(node,html);return true;
  }
+ function renderBadge(){
+  if(!openedBadge||!wallet)return;
+  const item=openedBadge,earned=wallet.achievements||{};
+  const count=achievementCount(item,achievementProgress(wallet));
+  const won=item.stages.filter(stage=>isEarned(stage,earned));
+  const highest=won.at(-1),next=item.stages.find(stage=>!isEarned(stage,earned));
+  const metal=materialFor(item,highest||item.stages[0]);
+  hero.dataset.achievementMaterial=metal.toLowerCase();
+  fill(hero,badge(item,metal,Boolean(highest))+'<div><span class="achievement-hero-category">'+item.group+'</span>'+
+   '<h2 id="achievementBadgeTitle">'+item.name+'</h2><p>'+(!highest?'First stage · '+metal:next?metal+' earned':'Completed · '+metal)+'</p></div>');
+  fill(community,statistics?'<span>Players who earned this badge</span><strong>'+communityCount(statistics,item.stages[0])+'</strong>':
+   statisticsError?'<span>Player counts unavailable</span><button type="button" class="outline" data-badge-retry>Retry</button>':
+   '<span>Loading player counts…</span>');
+  badgeRange.textContent=item.stages.length>1?materialFor(item,item.stages[0])+' → '+materialFor(item,item.stages.at(-1)):'';
+  badgeCount.textContent=won.length+' / '+item.stages.length+' earned';
+  fill(ladder,item.stages.map(stage=>achievementStage(item,stage,count,earned,next,statistics)).join(''));
+ }
+ function loadStatistics(){
+  if(statisticsRequest||Date.now()-statisticsUpdated<30_000)return;
+  statisticsError=false;
+  statisticsRequest=gameRead('achievement-stats').then(data=>{
+   statistics=data;statisticsUpdated=Date.now();
+  }).catch(()=>{statisticsError=true;}).finally(()=>{
+   statisticsRequest=null;
+   if(dialog.open)renderBadge();
+  });
+ }
+ root.addEventListener('click',event=>{
+  if(!active||!wallet)return;
+  const button=event.target.closest('[data-achievement-badge]');
+  if(!button)return;
+  const item=achievementById(button.dataset.achievementBadge);
+  if(!item)return;
+  openedBadge=item;opener=button;
+  loadStatistics();renderBadge();dialog.showModal();panel.scrollTop=0;
+ });
+ closeBadge.onclick=()=>dialog.close();
+ dialog.addEventListener('click',event=>{
+  if(event.target===dialog)dialog.close();
+  if(event.target.closest('[data-badge-retry]')){loadStatistics();renderBadge();closeBadge.focus({preventScroll:true});}
+ });
+ dialog.addEventListener('close',()=>{
+  openedBadge=null;
+  const id=opener?.dataset.achievementBadge;
+  if(opener?.isConnected)opener.focus({preventScroll:true});
+  else if(id)root.querySelector('[data-achievement-badge="'+CSS.escape(id)+'"]')?.focus({preventScroll:true});
+  opener=null;
+ });
  function show(view){
   if(!shell?.isConnected){
    root.innerHTML='<section class="progression-room"><div class="progression-title"><div><h1>Progression</h1></div><div data-achievement-overall></div></div>'+
@@ -113,11 +188,6 @@ export function createProgression(root){
    for(const select of filters.querySelectorAll('select'))select.value='all';
    render();filters.querySelector('select').focus();
   });
-  board.addEventListener('toggle',event=>{
-   const details=event.target;
-   const id=details.dataset?.badgeStages;
-   if(id){if(details.open)expanded.add(id);else expanded.delete(id);}
-  },true);
  }
  function renderAchievements(progress,earned){
   const {category,difficulty:rank,status}=selection;
@@ -125,26 +195,27 @@ export function createProgression(root){
   for(const item of achievements){
    if(category!=='all'&&item.group!==category)continue;
    const stages=item.stages.filter(stage=>(rank==='all'||stage.difficulty===rank)&&
-    (status==='all'||Object.hasOwn(earned,stage.id)===(status==='earned')));
+    (status==='all'||isEarned(stage,earned)===(status==='earned')));
    if(!stages.length)continue;
    if(!sections.has(item.group))sections.set(item.group,[]);
-   sections.get(item.group).push({item,stage:stages.find(stage=>!Object.hasOwn(earned,stage.id))??stages.at(-1)});
+   sections.get(item.group).push({item,stage:stages.find(stage=>!isEarned(stage,earned))??stages.at(-1)});
   }
   const count=[...sections.values()].reduce((total,entries)=>total+entries.length,0);
   const label=number.format(count)+' '+(count===1?'badge':'badges');
   if(result.textContent!==label)result.textContent=label;
-  const prevFocus=board.contains(document.activeElement)?document.activeElement.closest('[data-badge-stages]')?.dataset.badgeStages:null;
+  const prevFocus=board.contains(document.activeElement)?document.activeElement.dataset.achievementBadge:null;
   const html=count?[...sections].map(([group,entries])=>
    '<section class="achievement-group"><h3>'+ico(groupIcons[group]||'crown')+group+'</h3><div class="achievement-grid">'+
-   entries.map(({item,stage})=>achievementCard(item,stage,progress,earned,expanded.has(item.id))).join('')+'</div></section>'
+   entries.map(({item,stage})=>achievementTile(item,stage,progress,earned)).join('')+'</div></section>'
   ).join(''):'<div class="achievement-empty"><h3>No matching stages</h3><button type="button" class="outline" data-clear-achievement-filters>Clear filters</button></div>';
-  if(fill(board,html)&&prevFocus)board.querySelector('[data-badge-stages="'+CSS.escape(prevFocus)+'"] summary')?.focus({preventScroll:true});
+  if(fill(board,html)&&prevFocus)board.querySelector('[data-achievement-badge="'+CSS.escape(prevFocus)+'"]')?.focus({preventScroll:true});
  }
  function render(){
   if(!active||!shell?.isConnected||!wallet)return;
   const progress=achievementProgress(wallet),earned=wallet.achievements||{};
   const done=allStages.filter(stage=>Object.hasOwn(earned,stage.id));
   const badges=achievements.filter(item=>item.stages.every(stage=>Object.hasOwn(earned,stage.id))).length;
+  if(dialog.open)renderBadge();
   fill(summary,ico('crown')+'<div><b>'+badges+' / '+achievements.length+'</b><span>Badges completed</span></div>'+
    '<progress max="'+allStages.length+'" value="'+done.length+'" aria-label="Total achievement stages"></progress>'+
    '<small>'+done.length+' of '+allStages.length+' stages earned</small>');
@@ -163,11 +234,13 @@ export function createProgression(root){
    '<section class="progression-recent"><div><h2>Recent achievements</h2><a class="outline" href="#progression/achievements">All achievements</a></div>'+
    (recent.length?'<div class="progression-recent-grid">'+recent.map(stage=>{
     const item=achievementById(stage.id);
-    return '<article>'+badge(item,true)+'<div><h3>'+item.name+'</h3><div class="achievement-stage-meta">'+difficulty(stage)+
-     '<span class="achievement-stage-number">Stage '+stage.stage+' of '+item.stageCount+'</span></div>'+rewards(stage)+'</div></article>';
+    const metal=materialFor(item,stage);
+    return '<button type="button" data-achievement-badge="'+stage.id+'" aria-haspopup="dialog">'+badge(item,metal,true)+
+     '<span><strong>'+item.name+'</strong><span class="achievement-stage-meta">'+difficulty(stage)+
+     '<span class="achievement-stage-number">'+metal+' · Stage '+stage.stage+' of '+item.stageCount+'</span></span>'+rewards(stage)+'</span></button>';
    }).join('')+'</div>':'<p>Your first badge will appear here.</p>')+'</section>');
  }
- return {show,leave(){active=null;},setWallet(next){wallet=next;if(active)render();}};
+ return {show,leave(){active=null;if(dialog.open)dialog.close();},setWallet(next){wallet=next;if(active)render();}};
 }
 
 export function setupAchievementBanners(sound,flights){
@@ -208,9 +281,10 @@ export function setupAchievementBanners(sound,flights){
   const boost=item?(many?'Permanent boosts earned':boostLabel(item.boost)):'';
   const payout='<span class="achievement-rewards">'+(xp?'<b>+'+number.format(xp)+' XP</b>':'')+
    (boost?'<span>'+boost+'</span>':'')+keyReward(keys)+'</span>';
-  const medal=item?badge(item,true):'<span class="achievement-badge" data-badge-earned="true" style="--medal:#a9dafa">'+ico('demonKey')+'</span>';
+  const metal=item?materialFor(item,item):'Platinum';
+  const medal=badge(item||{symbol:'demonKey'},metal,true);
   banner.innerHTML=medal+'<div><small>'+label+'</small><strong>'+(item?item.name:'Keys received')+'</strong>'+
-   (item?'<span class="achievement-stage-meta">'+difficulty(item)+'<span class="achievement-stage-number">Stage '+item.stage+' of '+item.stageCount+'</span></span>':'')+
+   (item?'<span class="achievement-stage-meta">'+difficulty(item)+'<span class="achievement-stage-number">'+metal+' · Stage '+item.stage+' of '+item.stageCount+'</span></span>':'')+
    payout+'</div>'+ico('right');
   announcement.textContent=label+'. '+(item?item.name+', stage '+item.stage+'. ':'')+
    [xp?xp+' XP':'',keys?keys+' Demon '+(keys===1?'Key':'Keys'):''].filter(Boolean).join(' and ')+' earned.';

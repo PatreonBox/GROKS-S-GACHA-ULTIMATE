@@ -9,7 +9,9 @@ import {keyLimit,releaseAchievementKeys} from './demon-keys.js';
 import {remixes} from './remixes.js';
 
 export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js';
-export const achievementVersion=3;
+export const achievementVersion=4;
+const medalMaterials=['Wood','Brass','Bronze','Silver','Gold','Platinum','Diamond'];
+export const achievementMaterial=(stage,total)=>medalMaterials[Math.max(0,5-total)+stage-1];
 export const achievementXp={Easy:20,Normal:45,Hard:70,Harder:85,Insane:100,Demon:150};
 const difficultyNames=Object.keys(achievementXp);
 const boostPercents=[.1,.15,.2,.25,.35,.5];
@@ -87,8 +89,8 @@ export const achievements=[
  track('Cards','trade-first','A Fair Exchange','trades',[[1,'Normal'],[5,'Hard'],[15,'Harder']],
   goal=>'Complete '+n(goal)+' player '+plural(goal,'trade')+'.',{legacyStage:1,href:'#trading',symbol:'exchange'}),
 
- track('Cards','binder-milestones','Room in the Binder','unique',[[25,'Normal'],[125,'Hard'],[500,'Demon']],
-  goal=>'Discover '+n(goal)+' different cards.',{symbol:'badgeBinder'}),
+ track('Cards','binder-milestones','Room in the Binder','unique',[[25,'Normal'],[125,'Hard'],[500,'Demon'],[1_000,'Demon']],
+  goal=>'Discover '+n(goal)+' different cards.',{symbol:'badgeBinder',legacyStage:3}),
  track('Cards','demon-binder','Demon Index','demons',[[5,'Hard'],[30,'Harder'],[120,'Demon']],
   goal=>'Discover '+n(goal)+' different Demon cards.',{boost:'battle',icon:'/assets/faces/demon.webp'}),
  track('Cards','holo-binder','Through the Foil','holos',[[1,'Normal'],[15,'Harder'],[60,'Insane']],
@@ -97,8 +99,8 @@ export const achievements=[
   goal=>'Find the Antimatter finish on '+n(goal)+' different '+plural(goal,'card')+'.',{boost:'battle',symbol:'badgeOrbit',color:'#d6a4fa'}),
  track('Cards','index-claimed','A Gem of a Find','index',[[10,'Normal'],[100,'Harder'],[500,'Demon']],
   goal=>'Claim gem rewards from '+n(goal)+' different cards in the Card index.',{icon:'/assets/packs/gem.png'}),
- track('Cards','opened-packs','Seal Breaker','packs',[[10,'Normal'],[50,'Hard'],[250,'Insane']],
-  goal=>'Open '+n(goal)+' packs.',{href:'#gacha'}),
+ track('Cards','opened-packs','Seal Breaker','packs',[[10,'Normal'],[50,'Hard'],[250,'Insane'],[500,'Insane'],
+  [1_000,'Demon'],[2_500,'Demon'],[5_000,'Demon']],goal=>'Open '+n(goal)+' packs.',{href:'#gacha',legacyStage:3}),
  track('Cards','merged-pairs','Better Together','merges',[[3,'Normal'],[15,'Harder'],[60,'Demon']],
   goal=>'Merge '+n(goal)+' pairs of duplicate cards.',{href:'#gacha/merge',symbol:'badgeFusion'}),
  track('Cards','cube-wardrobe','A Different Look','cubes',[[3,'Normal'],[8,'Hard'],[16,'Insane']],
