@@ -23,7 +23,7 @@ export const sectionGuides={
   ['Trade gems for keys','Buy a Demon Key for 10 gems. The one-time starter offer gives you 50 keys for 20 gems during your first 24 hours.']
  ]},
  'pack-shop':{title:'Coin Packs',art:'/assets/packs/common.png',steps:[
-  ['Open a Common pack','A Common pack costs '+packs[0].price+' coins and deals at least five cards. Different packs have their own difficulty odds and stock.'],
+  ['Open a Common pack','A Common pack costs '+packs[0].price+' coins and deals at least five cards. Difficulty odds vary by pack type.'],
   ['Watch the stock','All coin pack types share up to '+packStockLimit+' packs. Stock refills by one pack per minute, even while you’re away.']
  ]},
  'pack-results':{title:'Pack results',art:'/assets/packs/common.png',steps:[
