@@ -123,8 +123,7 @@ function setSection(route){
  if(section!==selected.section||activeTier!==selected.tier)$('results').replaceChildren();
  section=selected.section;activeTier=selected.tier;
  clearTimeout(timer);
- const activeTab=section==='battle'&&activeTier==='arcade'?'battle/arcade':section;
- document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===activeTab);if(b.dataset.tab===activeTab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+ document.querySelectorAll('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===section);if(b.dataset.tab===section)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
  $('showcase').hidden=section!=='leaderboard'||playerRanks();drawTierNav();
  ranks.show(section==='leaderboard'?(playerRanks()?'full':'spotlight'):null);
  archiveRefresh.schedule();demonRefresh.schedule();

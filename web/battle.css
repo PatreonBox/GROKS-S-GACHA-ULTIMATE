@@ -101,8 +101,8 @@ button.full-card:enabled:hover{border-color:white;box-shadow:0 0 0 1px #ffffff80
 }
 .battle-mode-link{
  --mode-accent:#9cebd5;position:relative;display:grid;align-items:center;justify-content:center;
- grid-template-columns:auto minmax(0,max-content) auto;gap:3px 7px;min-height:48px;
- padding:6px 8px;border:1px solid transparent;border-radius:7px;color:#e2ddeb;
+ grid-template-columns:auto minmax(0,max-content) auto;gap:3px 7px;min-height:54px;
+ padding:8px 10px;border:1px solid transparent;border-radius:7px;color:#e2ddeb;
  font-size:14px;font-weight:750;line-height:1.2;
  transition:background-color .17s ease,border-color .17s ease,color .17s ease,transform .13s ease;
 }
@@ -150,7 +150,7 @@ button.full-card:enabled:hover{border-color:white;box-shadow:0 0 0 1px #ffffff80
  .battle-navigation{grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
  .battle-mode-link{
   grid-column:span 2;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:center;
-  min-height:52px;gap:3px;padding:5px 3px;font-size:13px;text-align:center;
+  min-height:58px;gap:3px;padding:6px 3px;font-size:13px;text-align:center;
  }
  .battle-mode-link:nth-child(n+4){grid-column:span 3}
  .battle-mode-link>svg{width:15px;height:15px}
@@ -223,11 +223,6 @@ body:has(#battleRoom:not([hidden]) .live-arena)>:is(header,footer){display:none}
 }
 .runner-frame::after{content:"";position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--remix);transform:scaleX(var(--runner-progress,0));transform-origin:left;box-shadow:0 0 7px var(--remix);pointer-events:none}
 
-.headwrap nav .mini-games-tab{
- min-height:40px;padding-inline:10px;border:1px solid #487c89;border-radius:7px;
- background:#16333d;color:#cefbff;justify-content:center;
-}
-.headwrap nav .mini-games-tab:hover,.headwrap nav .mini-games-tab.active{border-color:#7de3ef;background:#24505d}
 .battle-mode-link[data-battle-link="arcade"]{border-color:#557e8b}
 .mini-game-browser{display:block;padding:clamp(11px,2vw,24px)}
 .mini-game-browser .remix-preview{
