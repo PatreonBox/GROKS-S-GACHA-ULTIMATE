@@ -9,7 +9,7 @@ export const features={
  kingdom:{level:8,name:'Kingdom',href:'#kingdom',icon:'tower',detail:'Build a village and discover visiting creators.'},
  army:{level:8,name:'Army mode',href:'#battle/army',icon:'battle',detail:'Deploy a squad in real-time battles.'},
  cubes:{level:8,name:'Cube shop',href:'#gacha/cubes',icon:'box',detail:'Equip a new cube to roam your Kingdom.'},
- upgrades:{level:10,name:'Gem Upgrades',href:'#gacha/upgrades',icon:'spark',detail:'Improve your card luck and bonus card chance.'},
+ upgrades:{level:10,name:'Gem Upgrades',href:'#gacha/upgrades',icon:'spark',detail:'Upgrade Gacha Luck and your chance to draw an extra card.'},
  trading:{level:15,name:'Trading',href:'#trading',icon:'exchange',detail:'Find players and exchange cards at Level 15.'},
  towerExpansion:{level:15,name:'Tower Level 3',href:'#kingdom',icon:'tower',detail:'Upgrade the Kingdom tower and open a fourth housing lot.'},
  demonPro:{level:20,name:'Pro Demon banner',href:'#gacha/demon',icon:'pack',detail:'Spend five Demon Keys per draw for higher premium rarity odds.'}

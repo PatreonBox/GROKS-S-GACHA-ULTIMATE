@@ -46,8 +46,8 @@ const legacyPackBases={
 const TICKETS=1000000;
 export const packQuantities=[1,10,50];
 export const upgrades={
- luck:{name:'Card luck',max:500},
- bonus:{name:'Extra card',max:90},
+ luck:{name:'Gacha Luck',max:500},
+ bonus:{name:'Extra Gacha Card',max:90},
 };
 export const upgradeCost=level=>(20+5*level)/10;
 const upgradeTenths=(level,count)=>count*(20+5*level)+5*count*(count-1)/2;

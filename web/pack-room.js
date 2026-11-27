@@ -28,7 +28,7 @@ import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
 import {createDemonBannerRoom,demonKeyIcon} from './demon-banner-room.js';
 import {openChestReveal,prepareChestReveal} from './chest-reveal.js';
-import {demonBanners} from './demon-banner.js';
+import {bannerLuckBonus,demonBanners} from './demon-banner.js';
 import {packAvailability,packStockLimit} from './pack-stock.js';
 import {cardRarity,rarityBadge} from './card-rarity.js';
 
@@ -390,8 +390,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
  function renderUpgrades(){
   const body=byId('arcBody');if(!body)return;
   if(!wallet){body.innerHTML='<p>Loading upgrades…</p>';return}
-  const effects={luck:n=>n,bonus:bonusChance};
-  const details={luck:'Each 100% adds a difficulty roll. The hardest result wins.',bonus:'Each pack rolls independently for a sixth card, up to a 90% chance.'};
+  const effects={luck:n=>bannerLuckBonus(n)*100,bonus:bonusChance};
+  const details={luck:'Each upgrade boosts Legendary-and-higher banner odds by 0.1% of their base value. It also improves coin pack rolls.',bonus:'Each banner draw and coin pack can deal a sixth card, up to a 90% chance.'};
   const tiles=Object.entries(upgrades).map(([key,item])=>{
    const level=wallet[key]||0,maxed=level>=item.max,effect=effects[key];
    const override=key==='luck'&&level>item.max;
@@ -402,7 +402,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,init
    }).join('');
    return '<article class="upgrade-card upgrade-'+key+'"><div class="upgrade-title"><span class="up-icon">'+ico(key==='luck'?'spark':'pack')+'</span><span>'+
     (override?'Admin luck override':'Level '+level+' / '+item.max)+'</span></div><h3>'+item.name+'</h3><p>'+details[key]+'</p><div class="up-effect"><b>'+
-    (override?'+'+number(level)+'%':pct(effect(level)))+'</b><span>'+(override?'Applied to pack rolls':maxed?'Max level reached':'Next level <strong>'+pct(effect(level+1))+'</strong>')+
+    pct(effect(level))+'</b><span>'+(override?'Banner cap · +'+number(level)+'% coin pack luck':maxed?'Max level reached':'Next level <strong>'+pct(effect(level+1))+'</strong>')+
     '</span></div><div class="upgrade-meter"><i style="width:'+100*Math.min(level,item.max)/item.max+'%"></i></div><div class="gem-buy-actions">'+buttons+'</div></article>';
   }).join('');
   body.innerHTML='<section class="upgrade-panel"><div class="upgrade-heading"><div><h2>Gem upgrades</h2><p>Earn gems from the <a href="#gacha/index">card index</a> and <a href="#gacha/merge">merges</a>. Each upgrade starts at 2 gems. The price rises by 0.5 gems per level.</p></div><strong class="gem-balance">'+gem+number(wallet.gems)+' gems</strong></div><div class="upgrade-grid">'+tiles+'</div></section>';

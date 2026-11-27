@@ -22,11 +22,12 @@ const focusChance=.06;
 export const keyBannerLevelCap=100;
 export const proOddsMultiplier=20;
 export const bannerLuckCap=500;
+export const bannerLuckBonus=luck=>Math.max(0,Math.min(bannerLuckCap,luck))*.001;
 
 export function bannerOdds(id,level=0,{target=false,luck=0}={}){
  if(!Object.hasOwn(demonBanners,id))throw Error('Choose a Demon banner.');
  const levelBonus=Math.max(0,Math.min(keyBannerLevelCap,level))*.006;
- const luckBonus=Math.max(0,Math.min(bannerLuckCap,luck))*.001;
+ const luckBonus=bannerLuckBonus(luck);
  const multiplier=(1+levelBonus)*(1+luckBonus);
  const weights=baseWeights.map((weight,i)=>i<legendaryIndex?weight:Math.round(weight*multiplier)*(id==='pro'?proOddsMultiplier:1));
  if(id==='pro'){
