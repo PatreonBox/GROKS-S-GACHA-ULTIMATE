@@ -1,6 +1,7 @@
 import {ico} from './icons.js';
 import {cardRarities} from './card-rarity.js';
 import {cardBackMark} from './pack-model.js';
+import {chestDropMotion,chestKeyColor,chestKeyMotion,chestTimeline,phaseProgress} from './chest-motion.js';
 
 const trims={
  standard:{name:'Standard Chest',accent:'#92defd'},
@@ -8,10 +9,6 @@ const trims={
  pro:{name:'Pro Chest',accent:'#e4adff'}
 };
 const rarityOrder=cardRarities.map(({id})=>id);
-const chestStrength={
- common:1,uncommon:1,rare:1,epic:1,legendary:1,mythic:.86,ancient:.89,exotic:.97,celestial:1.10,
- secret:1.13,divine:1.04,apex:1.13,impossible:1
-};
 const reducedMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cardsPerPage=10;
 const sceneLoadLimit=1450;
@@ -24,11 +21,6 @@ export function prepareChestReveal(){
  return worldPromise;
 }
 
-function timeline(rarity){
- const scale=chestStrength[rarity]||1,descent=rarity==='impossible'?1.17:0;
- const mark=t=>descent+t*scale;
- return {descent,landing:mark(1.14),settle:mark(1.50),turnStart:mark(2.33),turnEnd:mark(2.93),open:mark(3.59)};
-}
 function cardFlight(origin,slot,index){
  const x=origin.x-slot.left-slot.width/2,y=origin.y-slot.top-slot.height/2;
  const rise=Math.max(60,Math.min(150,slot.height*.46));
@@ -46,8 +38,8 @@ function cardFlight(origin,slot,index){
 }
 function sceneMarkup(config,step,total,bulkCount,hasOpenAll){
  return '<div class="chest-stage" aria-hidden="true"><canvas></canvas><div class="chest-fallback">'+
-  '<div class="chest-fallback-glow"></div><div class="chest-fallback-box"><i></i><b></b></div>'+
-  '<div class="chest-fallback-key"><b></b></div></div><div class="chest-shade"></div></div>'+
+  '<div class="chest-fallback-glow"></div><div class="chest-fallback-box"><i></i><b></b>'+
+  '<div class="chest-fallback-key"></div></div></div><div class="chest-shade"></div></div>'+
   '<header class="chest-head"><div><h2 id="chestRevealTitle">'+config.name+'</h2>'+
   (bulkCount>1?'<p>'+bulkCount+' chests opened together</p>':total>1?'<p>Draw '+step+' of '+total+'</p>':'')+
   '</div><button class="chest-close" type="button" data-chest-close aria-label="Close chest opening">'+ico('x')+'</button></header>'+
@@ -73,49 +65,52 @@ function cardMarkup({html,difficulty},i,up){
 }
 
 export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpenAll,onFlipAll,sound,toggleSound,observeArt,step=1,total=1,bulkCount=1,initialFlipped=[]}){
- const config=trims[tier]||trims.standard,rarity=highestRarity(cards),timePlan=timeline(rarity),still=reducedMotion();
+ const config=trims[tier]||trims.standard,rarity=highestRarity(cards),timePlan=chestTimeline(rarity),still=reducedMotion();
  const bulk=bulkCount>1,finalHand=bulk||step>=total;
  const dialog=document.createElement('dialog'),prior=document.activeElement;
  dialog.className='chest-reveal';dialog.dataset.tier=tier;dialog.dataset.rarity=rarity;
  dialog.dataset.phase='cinematic';
  if(bulk)dialog.dataset.bulk='';
  dialog.style.setProperty('--chest-accent',config.accent);
- dialog.style.setProperty('--chest-drop',Math.round((timePlan.landing-timePlan.descent)*1000)+'ms');
- dialog.style.setProperty('--chest-fly',Math.round((timePlan.turnStart-timePlan.settle)*1000)+'ms');
- dialog.style.setProperty('--chest-turn',Math.round((timePlan.turnEnd-timePlan.turnStart)*1000)+'ms');
- dialog.style.setProperty('--chest-open',Math.round((timePlan.open-timePlan.turnEnd)*1000)+'ms');
+ dialog.style.setProperty('--chest-key-metal',chestKeyColor(tier,rarity));
  dialog.setAttribute('aria-labelledby','chestRevealTitle');
  dialog.innerHTML=sceneMarkup(config,step,total,bulkCount,Boolean(onOpenAll));
  const get=selector=>dialog.querySelector(selector);
  const canvas=get('canvas'),closeButton=get('[data-chest-close]'),skipButton=get('[data-chest-skip]');
+ const fallbackBox=get('.chest-fallback-box'),fallbackLid=fallbackBox.querySelector('i');
+ const fallbackKey=get('.chest-fallback-key'),fallbackGlow=get('.chest-fallback-glow');
  const mute=get('[data-chest-mute]'),next=get('[data-chest-next]'),content=get('.chest-content'),live=get('.chest-live'),count=get('.chest-count');
  const openAll=get('[data-chest-open-all]'),flipAll=get('[data-chest-flip-all]');
  const grid=get('.chest-cards'),pages=get('.chest-pages'),previousPage=get('[data-chest-prev]'),nextPage=get('[data-chest-more]');
  const pageSize=bulk?cardsPerPage:cards.length,pageCount=Math.ceil(cards.length/pageSize);
  const flipped=new Set(initialFlipped);
  const tasks=new Set(),flights=[];
- let closed=false,flipping=false,submitting=false,world,frame=0,resize,resolve,rarityStarted,start;
+ let closed=false,flipping=false,submitting=false,world,frame=0,resize,resolve,rarityStarted,start,pausedAt;
+ let nextBeat=0;
  let page=0,buttons=[],slots=[];
  const done=new Promise(r=>{resolve=r});
  function schedule(fn,milliseconds){
   const token=setTimeout(()=>{tasks.delete(token);if(!closed)fn()},milliseconds);
   tasks.add(token);
  }
- function stopWorld(showFallback=false){
-  cancelAnimationFrame(frame);frame=0;
+ function disposeWorld(){
   resize?.disconnect();resize=null;
   world?.dispose();world=null;
   delete dialog.dataset.worldReady;
-  if(showFallback)dialog.dataset.fallback='';
  }
- const lostContext=()=>stopWorld(true);
+ function showFallback(){disposeWorld();dialog.dataset.fallback='';}
+ function lostContext(){
+  showFallback();
+  if(!closed&&!frame&&!document.hidden)frame=requestAnimationFrame(draw);
+ }
  function close(){
   if(closed)return;closed=true;
   tasks.forEach(clearTimeout);tasks.clear();
   flights.forEach(animation=>animation.cancel());
   canvas.removeEventListener('webglcontextlost',lostContext);
+  document.removeEventListener('visibilitychange',visibilityChanged);
   window.removeEventListener('pagehide',close);
-  stopWorld();sound.stopChestAudio?.();
+  cancelAnimationFrame(frame);disposeWorld();sound.stopChestAudio?.();
   if(dialog.open)dialog.close();
   dialog.remove();
   if(prior?.isConnected&&!document.querySelector('dialog[open]'))prior.focus({preventScroll:true});
@@ -178,9 +173,9 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpen
   if(!slots[0]?.animate){makeAvailable();return}
   dialog.dataset.phase='dealing';content.hidden=false;
   const destinations=slots.map(slot=>slot.getBoundingClientRect());
-  playCue('sweep',.49);
+  if(!submitting)playCue('sweep',.49);
   slots.forEach((slot,i)=>{
-   const point=world?.getCardOrigin?.(i),surface=(point?canvas:get('.chest-fallback-box')).getBoundingClientRect();
+   const point=world?.getCardOrigin?.(i),surface=(point?canvas:fallbackBox).getBoundingClientRect();
    const origin={x:surface.left+surface.width*(point?.x??.5),y:surface.top+surface.height*(point?.y??.16)};
    flights.push(slot.animate(cardFlight(origin,destinations[i],i),{duration:970,delay:i*(bulk?45:76),fill:'backwards'}));
   });
@@ -196,20 +191,72 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpen
  }
  function playCue(name,level){sound.play?.(name,{level})}
  function playRarity(){
+  if(submitting)return;
   rarityStarted=performance.now();
   sound.playChestRarity?.(rarity);
  }
+ const playEffect=effect=>{if(!submitting)sound.playChestEffect?.(effect,rarity)};
+ function drawFallback(time){
+  const {fall,bump,impact,secondImpact,lid}=chestDropMotion(time,timePlan);
+  const {flight,arc,seat,turn,color,withdraw,opacity}=chestKeyMotion(time,timePlan);
+  const descent=timePlan.descent;
+  const sinking=descent&&time<descent,depth=sinking?phaseProgress(time,0,descent):0;
+  const height=sinking?11*depth:-56*(1-fall**2)-3.4*bump;
+  fallbackBox.style.opacity=sinking?String(.60*(1-depth)):String(phaseProgress(fall,0,.26));
+  fallbackBox.style.transform=`perspective(650px) translateY(${height}vh) rotateX(${11+3*bump}deg) rotateZ(${12*(1-fall)+2.3*bump}deg) scaleY(${1-.055*impact-.024*secondImpact})`;
+  fallbackLid.style.transform=`rotateX(${-96*lid-3*impact}deg)`;
+  fallbackGlow.style.opacity=String(.44+.44*lid+.10*impact);
+  fallbackGlow.style.transform=`translateY(${22-15*lid}%) scale(${1+.58*lid},${.54+.26*lid})`;
+  fallbackKey.style.opacity=String(opacity);
+  if(!opacity)return;
+  const distance=1-flight;
+  fallbackKey.style.setProperty('--chest-key-charge',String(color));
+  fallbackKey.style.transform=`translate3d(${145*distance+12*(1-seat)-20*arc+61*withdraw}%,${-225*distance-140*arc-71*withdraw}%,${38*(1-seat)+37*withdraw}px) rotateZ(${-21*distance+18*arc-11*withdraw}deg) rotateY(${-53*flight+30*withdraw}deg) rotateX(${-76*turn+22*withdraw}deg)`;
+ }
+ const soundStages=new Set(['landing','latch','open']);
+ const beats=[
+  [timePlan.descent,'drop',()=>{if(timePlan.descent&&!submitting)playCue('tear',.38)}],
+  [timePlan.landing,'landing',()=>playEffect('land')],
+  [timePlan.keyStart,'key',()=>{if(!timePlan.descent)playRarity()}],
+  [timePlan.latch,'latch',()=>playEffect('latch')],
+  [timePlan.turnStart,'turn'],
+  [timePlan.openStart,'open',()=>playEffect('open')],
+  [timePlan.open,null,dealCards]
+ ];
  function draw(){
   frame=0;
-  if(closed||!world)return;
-  const now=Math.min((timePlan.open+.77)*1000,performance.now()-start);
-  try{
-   if(world.draw(now,timePlan,dialog.dataset.phase))dialog.dataset.worldReady='true';
-  }catch{lostContext();return}
-  if(now<(timePlan.open+.77)*1000)frame=requestAnimationFrame(draw);
+  if(closed||start===undefined||document.hidden)return;
+  const end=timePlan.open+.77;
+  const elapsed=(performance.now()-start)/1000;
+  let time=Math.min(end,elapsed);
+  // A slow frame still needs to show contact before the bounce or the lid's first movement.
+  for(let i=nextBeat;i<beats.length&&beats[i][0]<=time;i++){
+   const [at,stage]=beats[i];
+   if(!soundStages.has(stage))continue;
+   if(time-at>1/30){start+=(elapsed-at)*1000;time=at;}
+   break;
+  }
+  if(world){
+   try{if(!world.draw(time*1000,timePlan,dialog.dataset.phase))showFallback()}
+   catch{showFallback()}
+  }
+  if(!world)drawFallback(time);
+  // Run each cue after drawing its beat, so impact and lid sounds use the rendered timeline.
+  while(nextBeat<beats.length&&time>=beats[nextBeat][0]){
+   const [,stage,action]=beats[nextBeat++];
+   if(stage)dialog.dataset.stage=stage;
+   action?.();
+  }
+  if(time<end)frame=requestAnimationFrame(draw);
  }
- function runStep(stage,time,fn){
-  schedule(()=>{dialog.dataset.stage=stage;fn?.()},time*1000);
+ function visibilityChanged(){
+  if(start===undefined)return;
+  if(document.hidden){
+   pausedAt=performance.now();cancelAnimationFrame(frame);frame=0;
+  }else if(pausedAt!==undefined){
+   start+=performance.now()-pausedAt;pausedAt=undefined;
+   if(!frame)frame=requestAnimationFrame(draw);
+  }
  }
  closeButton.onclick=abandon;
  skipButton.onclick=()=>submit(onSkip);
@@ -227,8 +274,11 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpen
  mute.onclick=()=>{
   if(toggleSound)toggleSound();else sound.toggle();
   if(!sound.enabled)sound.stopChestAudio?.();
-  else if(rarityStarted!==undefined)sound.playChestRarity?.(rarity,(performance.now()-rarityStarted)/1000);
-  else sound.prepareChestRarity?.(rarity);
+  else{
+   sound.prepareChestEffects?.(rarity);
+   sound.prepareChestRarity?.(rarity);
+   if(rarityStarted!==undefined&&dialog.dataset.stage!=='open')sound.playChestRarity?.(rarity,(performance.now()-rarityStarted)/1000);
+  }
   setMute();
  };
  canvas.addEventListener('webglcontextlost',lostContext,{once:true});
@@ -269,39 +319,34 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpen
   },still?0:item.cinematic?430:285);
  }
  document.body.append(dialog);dialog.showModal();closeButton.focus({preventScroll:true});
- setMute();sound.unlock?.();sound.prepareChestRarity?.(rarity);
+ setMute();sound.unlock?.();sound.prepareChestEffects?.(rarity);
  renderPage();
  observeArt?.(dialog);
  if(still){
-  if(rarity!=='common')playRarity();
   dialog.dataset.still='true';dialog.dataset.fallback='';dialog.dataset.stage='open';makeAvailable();
+  sound.playChestEffect?.('open',rarity,{allowLoading:true});
   return {close,done};
  }
+ sound.prepareChestRarity?.(rarity);
+ document.addEventListener('visibilitychange',visibilityChanged);
  function startScene(module){
   if(closed||start!==undefined)return;
   dialog.dataset.stage=timePlan.descent?'descent':'drop';
   try{
    world=module?.createChestRevealWorld(canvas,tier,rarity,bulkCount);
-   if(world&&!world.draw(0,timePlan,dialog.dataset.phase))lostContext();
    if(world){
-    dialog.dataset.worldReady='true';
-    resize=new ResizeObserver(()=>{if(!frame)draw()});
-    resize.observe(canvas);
+    if(world.draw(0,timePlan,dialog.dataset.phase)){
+     dialog.dataset.worldReady='true';
+     resize=new ResizeObserver(()=>{if(!frame)draw()});
+     resize.observe(canvas);
+    }else showFallback();
    }
-  }catch{lostContext()}
+  }catch{showFallback()}
   start=performance.now();
-  if(world)frame=requestAnimationFrame(draw);
-  if(!world)dialog.dataset.fallback='';
-  runStep('drop',timePlan.descent,()=>{if(timePlan.descent)playCue('tear',.38)});
+  if(!world){drawFallback(0);dialog.dataset.fallback='';}
+  if(document.hidden)pausedAt=start;
+  else frame=requestAnimationFrame(draw);
   if(rarity==='impossible')playRarity();
-  runStep('landing',timePlan.landing,()=>{
-   playCue('stack',.63);
-   if(rarity!=='common'&&rarity!=='impossible')playRarity();
-  });
-  runStep('key',timePlan.settle,()=>playCue('sweep',.48));
-  runStep('turn',timePlan.turnStart,()=>playCue('forge',.47));
-  runStep('open',timePlan.turnEnd,()=>playCue('tear',.68));
-  schedule(dealCards,timePlan.open*1000);
  }
  // Pick the renderer once. A late WebGL import never replaces a running fallback.
  schedule(()=>startScene(null),sceneLoadLimit);

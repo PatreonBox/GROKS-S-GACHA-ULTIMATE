@@ -1,6 +1,7 @@
 import {startRareScore} from './rare-scores.js';
 import {synthCue} from './tactical-audio.js';
 import {packCues} from './pack-cues.js';
+import {cardRarities} from './card-rarity.js';
 
 import {battleCues,difficultyCueNames} from './battle-cues.js';
 import {findRemix} from './remixes.js';
@@ -43,8 +44,23 @@ const gameCues={
 };
 const slideRates=[.94,.99,1.04,1.10,1.16,1.23];
 const chestMixes=new Set(['legendary','mythic','ancient','exotic','celestial','secret','divine','apex','impossible']);
-const chestSource=rarity=>'/reveal-media/chests/'+rarity+'.mp3';
-const chestAccents={uncommon:['star',.18],rare:['star',.36],epic:['elite',.48]};
+const chestFolder='/reveal-media/chests/';
+const chestEffects={
+ // Start just before the first impact so its transient lines up with the rendered contact.
+ chestLand:{offset:.022,level:.79,fallback:'stack'},
+ chestClick:{offset:0,level:.96,fallback:'forge'},
+ chestOpen01:{offset:0,level:.87,fallback:'tear'},
+ chest07:{offset:0,level:.77,fallback:'elite'},
+ chest08:{offset:0,level:.58,fallback:'extreme'}
+};
+const rarityIndex=id=>cardRarities.findIndex(rarity=>rarity.id===id);
+const celestialIndex=rarityIndex('celestial'),divineIndex=rarityIndex('divine');
+
+export function chestOpeningSound(rarity){
+ const index=rarityIndex(rarity);
+ if(index>=divineIndex)return 'chest08';
+ return index>=celestialIndex?'chest07':'chestOpen01';
+}
 
 const channels={
  select:'menu',inspect:'menu',stack:'menu',buy:'pack',tear:'pack',sweep:'paper',
@@ -55,7 +71,7 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,keys:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,navigation:1,rareMusic:1,rareBed:1,chest:1};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,keys:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,navigation:1,rareMusic:1,rareBed:1,chest:1,chestEffect:3};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
@@ -186,32 +202,52 @@ export function createPackSound(){
  }
  const playRevealTrack=(src,offset,seconds,{loop=false}={})=>playRevealClip(src,offset,seconds,'rareMusic',.58,loop);
  const playRevealBed=(src,offset,seconds)=>playRevealClip(src,offset,seconds,'rareBed',.66);
- function stopChestAudio(){
-  chestVersion++;
+ function preloadChestEffects(){
+  for(const name of Object.keys(chestEffects)){
+   const src=chestFolder+name+'.ogg';
+   preloadGame(src,src);
+  }
+ }
+ function prepareChestEffects(rarity){
+  for(const name of ['chestLand','chestClick',chestOpeningSound(rarity)])prepareRevealTrack(chestFolder+name+'.ogg');
+ }
+ function fadeChestRarity(){
   for(const voice of voices)if(voice.lane==='chest')fadeOut(voice);
  }
+ function stopChestAudio(){
+  chestVersion++;
+  for(const voice of voices)if(voice.lane==='chest'||voice.lane==='chestEffect')fadeOut(voice);
+ }
+ function playChestEffect(effect,rarity,{allowLoading=false}={}){
+  if(!enabled||document.hidden)return;
+  const name=effect==='open'?chestOpeningSound(rarity):effect==='land'?'chestLand':'chestClick';
+  const {offset,level,fallback}=chestEffects[name];
+  if(effect==='open'){
+   chestVersion++;fadeChestRarity();
+  }
+  const src=chestFolder+name+'.ogg',version=chestVersion;
+  function playReady(){
+   if(!enabled||document.hidden||version!==chestVersion||ctx?.state!=='running')return;
+   const track=gameBuffers.get(src);
+   if(track&&track.duration>offset){cueSerial++;emitClip(track,[offset,track.duration-offset],'chestEffect',1,0,level);}
+   else play(fallback,{level:.56});
+  }
+  const loading=allowLoading&&prepareRevealTrack(src);
+  if(loading){
+   const requested=performance.now();
+   loading.then(()=>{if(performance.now()-requested<180)playReady()});
+  }else playReady();
+ }
  function prepareChestRarity(rarity){
-  const id=String(rarity).toLowerCase();
-  if(chestMixes.has(id))return prepareRevealTrack(chestSource(id));
+  if(chestMixes.has(rarity))return prepareRevealTrack(chestFolder+rarity+'.mp3');
  }
  function playChestRarity(rarity,elapsedSeconds=0){
-  const id=String(rarity).toLowerCase();
-  if(!enabled||document.hidden)return;
-  stopChestAudio();
-  if(!chestMixes.has(id)){
-   if(elapsedSeconds===0&&Object.hasOwn(chestAccents,id)){
-    const [cue,level]=chestAccents[id];
-    play(cue,{level});
-   }
-   return;
-  }
-  const src=chestSource(id),version=chestVersion,started=performance.now();
+  if(!enabled||document.hidden||!chestMixes.has(rarity))return;
+  const src=chestFolder+rarity+'.mp3',version=chestVersion,started=performance.now();
   const ready=()=>{
    const delay=(performance.now()-started)/1000,offset=elapsedSeconds+delay,track=gameBuffers.get(src);
    if(!enabled||document.hidden||version!==chestVersion||ctx?.state!=='running')return;
-   if(elapsedSeconds===0&&delay>.55){play('extreme',{level:.43});return}
-   if(track&&track.duration>offset)emitClip(track,[offset,track.duration-offset],'chest',1,0,.77);
-   else if(!track&&elapsedSeconds===0)play('extreme',{level:.43});
+   if(delay<.55&&track&&track.duration>offset)emitClip(track,[offset,track.duration-offset],'chest',1,0,rarity==='impossible'?.37:.24);
   };
   const loading=prepareRevealTrack(src);
   if(loading)loading.then(ready);else ready();
@@ -355,5 +391,5 @@ export function createPackSound(){
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll();else flushKeyReward()});
  window.addEventListener('pagehide',stopAll);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,keyReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed,prepareChestRarity,playChestRarity,stopChestAudio};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,keyReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed,preloadChestEffects,prepareChestEffects,playChestEffect,prepareChestRarity,playChestRarity,stopChestAudio};
 }

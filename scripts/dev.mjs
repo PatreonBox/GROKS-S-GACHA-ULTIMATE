@@ -10,7 +10,7 @@ import {mediaResponse} from '../server/media-range.mjs';
 import {sceneBundles} from './scene-bundles.mjs';
 process.chdir(fileURLToPath(new URL('../',import.meta.url)));
 restoreAssets(new URL('../',import.meta.url));
-const types={'.mp3':'audio/mpeg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.svg':'image/svg+xml','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.woff2':'font/woff2'};
+const types={'.mp3':'audio/mpeg','.ogg':'audio/ogg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.svg':'image/svg+xml','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.woff2':'font/woff2'};
 const flag=process.argv.indexOf('--port'),port=Number(process.env.PORT||(flag>=0&&process.argv[flag+1])||4173);
 const {DB}=createGameDatabase();
 const scenes=await sceneBundles();
@@ -43,7 +43,7 @@ http.createServer(async(req,res)=>{
   if(p.endsWith('.webp')&&!fs.existsSync(p))p=p.slice(0,-5)+'.avif';
   if(/\/catalog-\d+\.json$/.test(p)){p=p.slice(0,-5)+'.gz';res.setHeader('Content-Encoding','gzip');res.setHeader('Content-Type','application/json')}else res.setHeader('Content-Type',types[path.extname(p)]||'application/octet-stream');
   if(!fs.existsSync(p)||!fs.statSync(p).isFile()){res.writeHead(404).end();return}
-  if(p.endsWith('.mp3')||p.endsWith('.mp4')){
+  if(/\.(mp3|ogg|mp4)$/.test(p)){
    const request=new Request(u,{method:req.method,headers:req.headers});
    const media=mediaResponse(request,fs.readFileSync(p),{'Content-Type':types[path.extname(p)]});
    res.writeHead(media.status,Object.fromEntries(media.headers));res.end(Buffer.from(await media.arrayBuffer()));return;

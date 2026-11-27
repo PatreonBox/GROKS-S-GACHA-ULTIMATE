@@ -300,7 +300,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   root.innerHTML='<div class="arc-heading"><h1>Gacha</h1><div class="arc-nav-tools">'+sectionNav()+'</div></div><div id="arcBody"></div>';
   if(['banners','keys','banner-test'].includes(view)){
    const owner=!byId('openAdminTools').hidden;
-   if(view!=='keys')prepareChestReveal();
+   if(view!=='keys'){prepareChestReveal();sound.preloadChestEffects();}
    banners.show(byId('arcBody'),view,wallet,owner);
    if(view==='banner-test'&&owner)banners.openTest();
   }

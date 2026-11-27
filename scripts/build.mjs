@@ -7,7 +7,7 @@ import {build} from 'esbuild';
 import {sceneBundles} from './scene-bundles.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));process.chdir(root);
 restoreAssets(new URL('../',import.meta.url));
-const types={'.mp3':'audio/mpeg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.woff2':'font/woff2','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.svg':'image/svg+xml'};
+const types={'.mp3':'audio/mpeg','.ogg':'audio/ogg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.woff2':'font/woff2','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.svg':'image/svg+xml'};
 const assets={};
 function encodeNumbers(values,increasing=false){
  let last=0;
@@ -79,7 +79,7 @@ export default {async fetch(request,env){
  if(!data)return new Response('Page not found',{status:404});
  const head={'Content-Type':data[0],'Cache-Control':key.startsWith('/assets/')||key.startsWith('/fonts/')?'public, max-age=86400':'no-cache','X-Content-Type-Options':'nosniff'};
  if(data[1])head['Content-Encoding']=data[1];
- const mediaAsset=key.endsWith('.mp3')||key.endsWith('.mp4');
+ const mediaAsset=/\\.(mp3|ogg|mp4)$/.test(key);
  const raw=request.method!=='HEAD'||mediaAsset?decode(data[2]):null;
  if(mediaAsset)return mediaResponse(request,raw,head);
  return new Response(raw,{headers:head,encodeBody:'manual'});

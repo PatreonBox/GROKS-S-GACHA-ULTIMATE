@@ -1,6 +1,5 @@
 dialog.chest-reveal{
  --chest-plate:#c7daf3;--chest-wall:#36537d;--chest-halo:#263952;
- --chest-drop:1.14s;--chest-fly:.83s;--chest-turn:.60s;--chest-open:.66s;
  position:fixed;inset:0;width:100%;max-width:none;height:100dvh;max-height:none;
  margin:0;border:0;border-radius:0;padding:0;overflow:auto;overscroll-behavior:contain;
  color:#f7f9ff;background:#0b101b;isolation:isolate;
@@ -94,7 +93,7 @@ dialog.chest-reveal{
 .chest-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .chest-reveal [hidden]{display:none!important}
 .chest-fallback{display:grid;place-items:center}
-.chest-fallback-box,.chest-fallback-key,.chest-fallback-glow{grid-area:1/1;position:relative}
+.chest-fallback-box,.chest-fallback-glow{grid-area:1/1;position:relative}
 .chest-fallback-glow{
  width:min(69vw,420px);height:min(70vw,420px);border-radius:50%;
  background:radial-gradient(ellipse,color-mix(in srgb,var(--chest-accent) 27%,transparent),transparent 60%);
@@ -120,24 +119,22 @@ dialog.chest-reveal{
  content:"";position:absolute;inset:36%;border-radius:50%;background:var(--chest-accent);box-shadow:0 0 17px var(--chest-accent);
 }
 .chest-fallback-key{
- width:110px;height:16px;translate:49% 18px;transform:rotate(-19deg);transform-origin:8% 50%;
- background:linear-gradient(0deg,#3e5073,var(--chest-plate) 42% 70%,#f5f6ff);
- border-radius:5px;opacity:0;box-shadow:0 5px 17px #040615;
+ --chest-key-image:url('/assets/ui/demon-key.svg');
+ position:absolute;left:50%;top:39%;width:clamp(68px,14vw,142px);aspect-ratio:406/243;
+ translate:-6% -56%;transform-origin:6% 56%;opacity:0;isolation:isolate;
+ filter:drop-shadow(0 5px 9px #030610a8);
 }
-.chest-fallback-key b{position:absolute;right:-12px;top:-15px;width:45px;aspect-ratio:1;border:6px solid var(--chest-plate);border-radius:29%;background:#333549}
-.chest-reveal[data-stage="descent"] .chest-fallback-box{animation:chest-fallback-sink 1.17s ease-in both}
-.chest-reveal[data-stage="drop"] .chest-fallback-box{animation:chest-fallback-drop var(--chest-drop) ease-out both}
-.chest-reveal[data-stage="key"] .chest-fallback-key{animation:chest-fallback-insert var(--chest-fly) cubic-bezier(.2,.7,.29,1) both}
-.chest-reveal[data-stage="turn"] .chest-fallback-key{animation:chest-fallback-turn var(--chest-turn) ease-in-out both}
-.chest-reveal[data-stage="open"] .chest-fallback-box i{animation:chest-fallback-lid var(--chest-open) ease-out both}
-.chest-reveal[data-stage="open"] .chest-fallback-glow{animation:chest-fallback-light .66s ease-out both}
+.chest-fallback-key::before,.chest-fallback-key::after{
+ content:"";position:absolute;inset:0;transform:scaleX(-1);
+}
+.chest-fallback-key::before{background:var(--chest-key-image) center/contain no-repeat;filter:grayscale(1)}
+.chest-fallback-key::after{
+ mask:var(--chest-key-image) center/contain no-repeat;
+ background:linear-gradient(153deg,#ecf1ff,var(--chest-key-metal) 47%,color-mix(in srgb,var(--chest-key-metal) 76%,#32344a));
+ mix-blend-mode:color;opacity:var(--chest-key-charge,0);
+}
+.chest-reveal[data-rarity="apex"] .chest-fallback-key::after{background:linear-gradient(128deg,#ffe994,#ff9abb,#ce9dff,#7cf5f3)}
 @keyframes chest-cave-transition{0%,20%,100%{background-color:transparent}55%{background-color:#05040bea}}
-@keyframes chest-fallback-sink{0%{transform:translateY(-12%);opacity:.28}100%{transform:translateY(38%);opacity:0}}
-@keyframes chest-fallback-drop{0%{transform:translateY(-67vh) rotate(14deg);opacity:0}73%{transform:perspective(650px) rotateX(13deg);opacity:1}86%{transform:translateY(-7%)}100%{transform:perspective(650px) rotateX(11deg)}}
-@keyframes chest-fallback-insert{from{transform:translate(45vw,-16vh) rotate(35deg);opacity:0}to{transform:rotate(-19deg);opacity:1}}
-@keyframes chest-fallback-turn{from{transform:rotate(-19deg);opacity:1}to{transform:rotate(-79deg);opacity:1}}
-@keyframes chest-fallback-lid{to{transform:rotateX(-87deg) translateY(-4%)}}
-@keyframes chest-fallback-light{to{transform:scale(1.62);opacity:.75}}
 @media(max-width:800px){
  .chest-cards{grid-template-columns:repeat(3,minmax(0,1fr));width:min(100%,540px);margin-inline:auto}
  .chest-card-back{min-height:133px}

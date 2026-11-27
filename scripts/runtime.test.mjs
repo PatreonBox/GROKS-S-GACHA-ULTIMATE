@@ -16,9 +16,48 @@ import {newWallet} from '../web/game-rules.js';
 import {playerXpAtLevel} from '../web/player-progression.js';
 import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
+import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
+import {chestOpeningSound} from '../web/pack-sound.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
+
+test('Demon chest openings select the uploaded sound at the correct rarity boundaries',async()=>{
+ for(const [sound,rarities] of [
+  ['chestOpen01',['common','rare','legendary','exotic']],['chest07',['celestial','secret']],
+  ['chest08',['divine','apex','impossible']]
+ ])for(const rarity of rarities)assert.equal(chestOpeningSound(rarity),sound);
+ for(const name of ['chestLand','chestClick','chestOpen01','chest07','chest08']){
+  const path='/reveal-media/chests/'+name+'.ogg',original=readFileSync(new URL('../web'+path,import.meta.url));
+  const response=await worker.fetch(new Request(publicOrigin+path,{headers:{Range:'bytes=0-31'}}));
+  assert.equal(response.status,206);
+  assert.equal(response.headers.get('Content-Type'),'audio/ogg');
+  assert.equal(response.headers.get('Content-Range'),`bytes 0-31/${original.length}`);
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()),original.subarray(0,32));
+ }
+});
+
+test('Demon chest contact, key turn, and lid opening use the same timeline',()=>{
+ for(const rarity of ['common','celestial','divine','impossible']){
+  const plan=chestTimeline(rarity);
+  const {landing,rebound,keyStart,align,latch,turnStart,turnEnd,openStart}=plan;
+  assert.equal(chestDropMotion(landing,plan).fall,1);
+  assert.equal(chestDropMotion(landing,plan).impact,1);
+  assert.equal(chestDropMotion(landing,plan).bump,0);
+  assert.ok(chestDropMotion((landing+rebound)/2,plan).bump>.99);
+  assert.equal(chestDropMotion(rebound,plan).secondImpact,1);
+  assert.ok(rebound<keyStart&&keyStart<align&&align<latch&&latch<turnStart&&turnEnd<openStart);
+  assert.equal(chestKeyMotion(latch,plan).seat,1);
+  assert.equal(chestKeyMotion(turnStart,plan).color,0);
+  assert.ok(chestKeyMotion(turnStart+(turnEnd-turnStart)*.20,plan).turn<0);
+  assert.ok(chestKeyMotion(turnStart+(turnEnd-turnStart)*.8,plan).turn>1);
+  assert.equal(chestKeyMotion(turnEnd,plan).color,1);
+  assert.equal(chestKeyMotion(turnEnd,plan).turn,1);
+  assert.equal(chestKeyMotion(turnEnd,plan).withdraw,0);
+  assert.ok(Math.abs(chestDropMotion(openStart-.01,plan).lid)<1e-9);
+  assert.ok(chestDropMotion(openStart+.1,plan).lid>.4);
+ }
+});
 
 test('a thumbnail that times out during download returns a recoverable response',async t=>{
  t.mock.method(globalThis,'fetch',async()=>new Response(new ReadableStream({

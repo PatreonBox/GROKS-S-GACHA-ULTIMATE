@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {chestDropMotion,chestKeyColor,chestKeyMotion} from '../web/chest-motion.js';
 
 const pi=Math.PI, turn=2*pi;
 const clamp=(number,min=0,max=1)=>Math.min(max,Math.max(min,number));
@@ -15,19 +16,19 @@ const selectTier={
 };
 const empty='#080a17';
 const hints={
- common:{color:'#a6c9e5',key:null,power:0,amount:0},
- uncommon:{color:'#62ffc3',key:null,power:.12,amount:9},
- rare:{color:'#60d5ff',key:null,power:.22,amount:14},
- epic:{color:'#b47aff',key:'#a99aef',power:.44,amount:22},
- legendary:{color:'#ffcb57',key:'#ffe581',power:.58,amount:28},
- mythic:{color:'#ff627b',key:'#ff7973',power:.66,amount:36},
- ancient:{color:'#ae71ec',key:'#ba88ed',power:.73,amount:42,shadow:'#231932'},
- exotic:{color:'#ff679c',key:'#ff5477',power:.80,amount:48},
- celestial:{color:'#dcebff',key:'#a6b5c9',power:1.05,amount:60,shadow:'#171722'},
- secret:{color:'#eb4b74',key:'#9b3148',power:1.14,amount:65,shadow:'#230f19'},
- divine:{color:'#fff295',key:'#fff3a1',power:1.24,amount:72},
- apex:{color:'#e2b8ff',key:'#ffce65',power:1.33,amount:78},
- impossible:{color:'#b886ff',key:'#9970ff',power:1.38,amount:78,shadow:'#160e22'}
+ common:{color:'#a6c9e5',power:.085,amount:8},
+ uncommon:{color:'#62ffc3',power:.12,amount:9},
+ rare:{color:'#60d5ff',power:.22,amount:14},
+ epic:{color:'#b47aff',power:.44,amount:22},
+ legendary:{color:'#ffcb57',power:.58,amount:28},
+ mythic:{color:'#ff627b',power:.66,amount:36},
+ ancient:{color:'#ae71ec',power:.73,amount:42,shadow:'#231932'},
+ exotic:{color:'#ff679c',power:.80,amount:48},
+ celestial:{color:'#dcebff',power:1.05,amount:60,shadow:'#171722'},
+ secret:{color:'#eb4b74',power:1.14,amount:65,shadow:'#230f19'},
+ divine:{color:'#fff295',power:1.24,amount:72},
+ apex:{color:'#e2b8ff',power:1.33,amount:78},
+ impossible:{color:'#b886ff',power:1.38,amount:78,shadow:'#160e22'}
 };
 const palettes=(tier,rarity)=>({colors:selectTier[tier]||selectTier.standard,hint:hints[rarity]||hints.common});
 
@@ -208,10 +209,10 @@ function chestModel(parent,style,tier){
  return {rig,hinge};
 }
 function demonKey(parent,style){
- const {frame,edge,trim,bright,iris,dark}=style;
+ const {frame,edge,bright,iris,dark}=style;
  const key=group(parent),head=group(key);
  head.scale.setScalar(.47);
- badge(head,false,{frame,edge,trim,bright,iris,dark},true);
+ badge(head,false,{frame,edge,bright,iris,dark},true);
  const shaft=[[.13,.104],[.93,.104],[.93,-.172],[.804,-.172],[.804,-.049],
   [.683,-.049],[.683,-.171],[.521,-.171],[.521,-.053],[.13,-.053]];
  plate(key,shaft,.179,dark,0,0,-.031,null,.025);
@@ -385,15 +386,23 @@ export function createChestRevealWorld(canvas,tier,rarity,chestCount=1){
   const copy=chest.rig.clone();
   rig.add(copy);formation.push({rig:copy,hinge:copy.children[hingeIndex],x,z:three?-.75:0,size:three?.72:.84});
  }
- const keyColor=hint.key?new THREE.Color(hint.key):null;
+ const keyColor=new THREE.Color(chestKeyColor(tier,rarity));
  const keyParts={
-  ...accents,frame:flatMaterial(keyColor||'#edf3fb',{metalness:.40,roughness:.30}),
-  edge:flatMaterial(keyColor?keyColor.clone().multiplyScalar(.33):'#747c87',{metalness:.32,roughness:.42}),
-  iris:new THREE.MeshBasicMaterial({color:keyColor?hint.color:'#49e8ff',toneMapped:false})
+  frame:flatMaterial('#bfc1c4',{metalness:.43,roughness:.29}),
+  edge:flatMaterial('#777a7e',{metalness:.32,roughness:.42}),
+  bright:flatMaterial('#e3e3e3',{metalness:.26,roughness:.31}),
+  dark:flatMaterial('#28292b',{roughness:.65}),
+  iris:new THREE.MeshBasicMaterial({color:'#949598',toneMapped:false})
  };
+ const chargedKey={
+  frame:keyColor,edge:rarity==='apex'?new THREE.Color('#704ecd'):keyColor.clone().multiplyScalar(.34),
+  bright:rarity==='apex'?new THREE.Color('#ffec83'):keyColor.clone().lerp(new THREE.Color('#ffffff'),.48),
+  iris:rarity==='apex'?new THREE.Color('#79ffea'):keyColor.clone().lerp(new THREE.Color('#ffffff'),.24)
+ };
+ const keyFinishes=Object.entries(chargedKey).map(([part,target])=>({finish:keyParts[part],gray:keyParts[part].color.clone(),target}));
  const key=demonKey(chest.rig,keyParts),flecks=particles(group(rig,0,caveFloor,0),hint);
  batchModels(key);batchModels(room);if(hall)batchModels(hall);
- const bloom=glowPlane(rig,hint.color,5,.0),keyGlow=glowPlane(rig,hint.color,1.14,0);
+ const bloom=glowPlane(rig,hint.color,5,0),keyGlow=glowPlane(rig,keyColor,1.4,0);
  const under=glowPlane(rig,hint.color,7.1,.25);
  under.position.y=-.023;under.rotation.x=-pi/2;
  const sky=scene.fog=new THREE.Fog(cave?'#0a0912':colors.room,11,24);
@@ -412,7 +421,8 @@ export function createChestRevealWorld(canvas,tier,rarity,chestCount=1){
  const flood=place(rig,new THREE.PointLight(hint.color,2.5,10,1.7),0,1.15,.28);
  scene.add(hemi);
  const view=new THREE.PerspectiveCamera(39,1,.06,42);
- const focus=v(),bow=v(),spinAxis=v(1,0,0),upAxis=v(0,1,0),aim=new THREE.Quaternion(),spin=new THREE.Quaternion();
+ const focus=v(),bow=v(),spinAxis=v(1,0,0),bearing=new THREE.Euler(0,0,0,'YXZ'),spin=new THREE.Quaternion();
+ const keyTip=v(.925,0,0),rotatedTip=v();
  const projectedMouth=v();
  const cardOrigins=[];
  let width=0,height=0,disposed=false;
@@ -425,28 +435,34 @@ export function createChestRevealWorld(canvas,tier,rarity,chestCount=1){
    renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.40,Math.sqrt(1_950_000/(w*h))));
    renderer.setSize(w,h,false);
   }
-  const t=ms/1000,{descent,landing,settle,turnStart,turnEnd,open}=timePlan;
-  const p=phase==='cards'?1:smooth(fraction(t,turnEnd,open));
+  const t=ms/1000,{descent,landing,keyStart,openStart,open}=timePlan;
+  const {fall,bump,impact,secondImpact,lid}=chestDropMotion(t,timePlan);
+  const {flight,arc,seat,turn:keyTurn,color:charge,withdraw,opacity}=chestKeyMotion(t,timePlan);
+  const p=Math.min(1,lid);
   const base=t-descent;
   const descend=cave?fraction(t,.07,descent):1;
-  const impact=t-landing;
-  const fall=fraction(t,descent+.10,landing);
-  const bounce=impact<0?(1-fall**2)*(cave?1.45:4):Math.max(0,Math.sin(impact*14.5))*.42*Math.exp(-impact*5.7);
-  const shakeStart=fraction(t,landing,settle),shaking=(1-shakeStart)*Math.sin(shakeStart*pi)*hint.power;
-  const baseY=cave&&t<descent?(-2.95*smooth(descend)):caveFloor+bounce;
+  const drop=(1-fall**2)*(cave?1.45:4),recoil=bump*.30;
+  const shakeStart=fraction(t,landing,keyStart),shaking=(1-shakeStart)*Math.sin(shakeStart*pi)*hint.power;
+  const baseY=cave&&t<descent?(-2.95*smooth(descend)):caveFloor-.040+drop+recoil;
   const spread=Math.max(.61,Math.min(1,view.aspect));
   for(const {rig:caseRig,hinge,x,z,size} of formation){
-   caseRig.position.set(x*spread+shaking*.165*Math.cos(t*34),baseY,z);
-   caseRig.rotation.set((1-fall)*.24*Math.sin(base*5),-.32+x*.16-(1-fall)*.42+shaking*.09*Math.sin(t*31),shaking*.11*Math.cos(t*35));
-   caseRig.scale.set(size,size*(1-(impact>=0?.082*Math.exp(-impact*13):0)),size);
-   hinge.rotation.x=-1.95*p-.075*Math.sin(p*pi*2)*(1-p);
+   caseRig.position.set(x*spread+shaking*.115*Math.cos(t*34),baseY,z);
+   caseRig.rotation.set((1-fall)*.24*Math.sin(base*5)+bump*.038,-.32+x*.16-(1-fall)*.42+shaking*.058*Math.sin(t*31),
+    (shaking*.065*Math.cos(t*35)+bump*.048));
+   caseRig.scale.set(size,size*(1-impact*.055-secondImpact*.021),size);
+   hinge.rotation.x=-1.93*lid-impact*.027-secondImpact*.016;
   }
-  const fly=smooth(fraction(t,settle,turnStart)),twist=fraction(t,turnStart,turnEnd);
-  const withdraw=smooth(fraction(t,turnEnd-.035,turnEnd+.39));
-  key.visible=t>=settle&&t<turnEnd+.4;
-  key.position.set(.07+(1-fly)*2.8+withdraw*1.04,.773+(1-fly)*2.01+withdraw*.94,2.023+(1-fly)*1.35+withdraw*1.56);
-  aim.setFromAxisAngle(upAxis,-.39+2.04*fly);spin.setFromAxisAngle(spinAxis,(1-fly)*-.5-1.30*smooth(twist)+.47*withdraw);
-  key.quaternion.copy(aim).multiply(spin);
+  key.visible=opacity>.001;
+  const approach=1-flight;
+  bearing.set(0,-.37*approach+pi/2*flight-.68*withdraw,.31*approach-.35*arc+.14*withdraw,'YXZ');
+  spin.setFromAxisAngle(spinAxis,-.36*approach+.38*arc-1.46*keyTurn+.63*withdraw);
+  key.quaternion.setFromEuler(bearing).multiply(spin);
+  key.scale.setScalar(.84+.16*opacity);
+  // Move the tip to the socket and rotate around it while the key is seated.
+  key.position.set(approach*2.96-arc*.31+withdraw*1.15,.742+approach*1.80+arc*.72+withdraw*.83,
+   1.11+(1-seat)*.38+approach*1.62+arc*.41+withdraw*1.68);
+  key.position.sub(rotatedTip.copy(keyTip).multiplyScalar(key.scale.x).applyQuaternion(key.quaternion));
+  if(key.visible)for(const {finish,gray,target} of keyFinishes)finish.color.copy(gray).lerp(target,charge);
   const cameraWide=Math.min(1,view.aspect)/.9;
   const minimumDistance=chestCount>1?((three?2.25:1.28)*spread+1.38)/(Math.tan(39*pi/360)*Math.max(.28,view.aspect)):0;
   const distance=Math.max(8.1+Math.max(0,1-cameraWide)*4.35,minimumDistance);
@@ -455,12 +471,12 @@ export function createChestRevealWorld(canvas,tier,rarity,chestCount=1){
   room.visible=!cave||descend>=.45;
   if(hall)hall.visible=descend<.51;
   const falling=cave?.51*Math.sin(pi*descend):0;
-  view.position.set(.76+(1-fly)*.42,3.38-falling+(.7*gallery),distance+gallery*1.30);
+  view.position.set(.76+approach*.42,3.38-falling+gallery*.7-(impact+.50*secondImpact)*.047,distance+gallery*1.30);
   focus.set(0,1.18-(.14*gallery),0);view.lookAt(focus);
   chest.rig.localToWorld(bow.copy(key.position));
   keyGlow.position.copy(rig.worldToLocal(bow));
   keyGlow.quaternion.copy(view.quaternion);
-  keyGlow.material.uniforms.power.value=key.visible?hint.power*(1-withdraw)*.44:0;
+  keyGlow.material.uniforms.power.value=opacity*charge*(.39+hint.power*.34);
   bloom.position.set(0,caveFloor+1.17+.54*p,.48);bloom.quaternion.copy(view.quaternion);
   bloom.material.uniforms.power.value=(p*.87+shaking*.37)*(.70+hint.power*.15)*(1-.37*gallery);
   under.position.y=caveFloor-.023;
@@ -473,9 +489,9 @@ export function createChestRevealWorld(canvas,tier,rarity,chestCount=1){
   sky.far=24+Math.max(0,distance-9);
   rim.intensity=cave?13+descend*6:19;
   rays.forEach((beam,i)=>{
-   beam.material.uniforms.power.value=(shaking+.36*fly+p*1.12)*(.22+.09*Math.cos(i*1.5+t*2.4));
+   beam.material.uniforms.power.value=(shaking+.36*charge+p*1.12)*(.22+.09*Math.cos(i*1.5+t*2.4));
   });
-  flecks.draw(t,landing,turnEnd);
+  flecks.draw(t,landing,openStart);
   renderer.render(scene,view);
   if(p>.8)formation.forEach(({rig:caseRig},i)=>{
    caseRig.localToWorld(projectedMouth.set(0,1.13,.36)).project(view);
