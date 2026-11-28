@@ -28,7 +28,7 @@ import {buildingFootprint,collectForge,forgePlan,gemMine,gemMinePlan,housePlacem
 import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
-import {achievements,achievementById,achievementMaterial,achievementProgress,achievementXp} from '../web/progression-rules.js';
+import {achievements,achievementById,achievementChallenge,achievementMaterial,achievementProgress,achievementXp} from '../web/progression-rules.js';
 import {ico} from '../web/icons.js';
 import {bannerOdds,bannerPity,demonCatalogue,demonPity,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
 import {bannerUnlockDelay,demonKeyOffer,demonKeyPrice,starterDemonKeys} from '../web/demon-keys.js';
@@ -1552,9 +1552,14 @@ test('Difficulty badges use seven goals and only unique cards from their own Car
   const total=new Set((await pool(badge.discoveryDifficulty)).map(row=>row[0])).size;
   const sixty=Math.ceil(total*3/5);
   assert.deepEqual(badge.stages.map(stage=>stage.goal),[5,20,50,150,350,sixty,total]);
+  const ratings=badge.stages.map(stage=>difficulties.indexOf(achievementChallenge(stage)));
+  assert.ok(ratings.every((rank,i)=>rank>0&&(i===0||rank>=ratings[i-1])));
+  assert.ok(ratings[6]>=difficulties.indexOf('Hard Demon'));
   assert.match(badge.stages[5].description,/60% of this difficulty/);
   assert.match(badge.stages[6].description,/100% of this difficulty/);
  }
+ const easyDemon=badges.find(badge=>badge.discoveryDifficulty==='Easy Demon');
+ assert.deepEqual(easyDemon.stages.slice(-2).map(achievementChallenge),['Insane Demon','Extreme Demon']);
  const f=fixture(),player=await f.open(),hard=await pool('Hard'),badge=badges.find(item=>item.discoveryDifficulty==='Hard');
  const [first,second,third,fourth,fifth,sixth,seventh]=badge.stages;
  f.addCards(player.id,[...hard.slice(0,sixth.goal-1),[9_000_001_112,...hard[0].slice(1)],(await pool('Hard Demon'))[0]]);

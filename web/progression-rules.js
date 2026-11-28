@@ -14,6 +14,7 @@ export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js'
 export const achievementVersion=5;
 const medalMaterials=['Wood','Brass','Bronze','Silver','Gold','Platinum','Diamond'];
 export const achievementMaterial=(stage,total)=>medalMaterials[Math.max(0,5-total)+stage-1];
+export const achievementChallenge=stage=>stage.challenge??stage.difficulty;
 export const achievementXp={Easy:20,Normal:45,Hard:70,Harder:85,Insane:100,Demon:150};
 const difficultyNames=Object.keys(achievementXp);
 const boostPercents=[.1,.15,.2,.25,.35,.5];
@@ -44,6 +45,18 @@ const firstCards=[
  ['demon-insane','Insane Demon','Against All Odds','#f494bf','Harder','Insane','Demon'],
  ['demon-extreme','Extreme Demon','Beyond the Red Line','#ffbd79','Insane','Demon','Demon']
 ];
+const earlyDiscoveryChallenges=['Easy','Normal','Hard','Harder','Insane','Insane','Hard Demon'];
+const advancedDiscoveryChallenges=['Normal','Hard','Harder','Insane','Easy Demon','Easy Demon','Insane Demon'];
+// Ratings account for the number of distinct cards, drop access, and completing the entire index.
+const discoveryChallenges={
+ Auto:earlyDiscoveryChallenges,Easy:earlyDiscoveryChallenges,Normal:earlyDiscoveryChallenges,
+ Hard:advancedDiscoveryChallenges,Harder:advancedDiscoveryChallenges,Insane:advancedDiscoveryChallenges,
+ 'Easy Demon':['Hard','Harder','Insane','Easy Demon','Medium Demon','Insane Demon','Extreme Demon'],
+ 'Medium Demon':['Hard','Harder','Insane','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'],
+ 'Hard Demon':['Harder','Insane','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon'],
+ 'Insane Demon':['Harder','Insane','Medium Demon','Hard Demon','Insane Demon','Extreme Demon','Extreme Demon'],
+ 'Extreme Demon':['Insane','Easy Demon','Medium Demon','Hard Demon','Insane Demon','Extreme Demon','Extreme Demon']
+};
 const achievementsForCards=firstCards.map(([face,difficulty,name,color,first,second,third],i)=>{
  const id='card-'+face,total=discoveryTotals[difficulty],sixty=Math.ceil(total*3/5);
  const goals=[5,20,50,150,350,sixty,total];
@@ -52,7 +65,7 @@ const achievementsForCards=firstCards.map(([face,difficulty,name,color,first,sec
   i<6?'mine':'battle',goals.map((goal,index)=>[goal,ranks[index]]),(goal,index)=>
    'Discover '+n(goal)+' different '+difficulty+' cards'+
    (index===5?' (60% of this difficulty’s Card Index).':index===6?' (100% of this difficulty’s Card Index).':'.'));
- badge.stages=badge.stages.map((stage,index)=>({...stage,id:id+':discovery:'+(index+1),
+ badge.stages=badge.stages.map((stage,index)=>({...stage,id:id+':discovery:'+(index+1),challenge:discoveryChallenges[difficulty][index],
   ...(index<3?{previousReward:index===0?id:id+':'+(index+1)}:{})}));
  return {...badge,discoveryDifficulty:difficulty};
 });

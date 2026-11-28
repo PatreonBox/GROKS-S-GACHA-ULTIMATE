@@ -1,5 +1,5 @@
 import {
- achievementBoostLabels,achievementBoosts,achievementById,achievementCount,achievementMaterial,achievementProgress,achievements
+ achievementBoostLabels,achievementBoosts,achievementById,achievementChallenge,achievementCount,achievementMaterial,achievementProgress,achievements
 } from './progression-rules.js';
 import {playerProgress} from './player-progression.js';
 import {nextUnlocks} from './level-access.js';
@@ -11,7 +11,7 @@ const number=new Intl.NumberFormat('en-US');
 const percent=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const groups=[...new Set(achievements.map(item=>item.group))];
 const allStages=achievements.flatMap(item=>item.stages);
-const difficultyFaces={Auto:'auto',Easy:'easy',Normal:'normal',Hard:'hard',Harder:'harder',Insane:'insane',
+const difficultyFaces={Easy:'easy',Normal:'normal',Hard:'hard',Harder:'harder',Insane:'insane',
  Demon:'demon-extreme','Easy Demon':'demon-easy','Medium Demon':'demon-medium','Hard Demon':'demon-hard',
  'Insane Demon':'demon-insane','Extreme Demon':'demon-extreme'};
 const groupIcons={Cards:'pack',Battle:'battle',Training:'aim',Kingdom:'tower','Coin mine':'mine'};
@@ -28,9 +28,9 @@ function badge(item,material,earned){
  }
  return '<span class="achievement-badge"'+materialAttr(material)+' data-badge-earned="'+earned+'" aria-hidden="true">'+art+'</span>';
 }
-function difficulty(item,stage=item){
- const label=item.discoveryDifficulty||stage.difficulty,face=difficultyFaces[label];
- return '<span class="achievement-difficulty" data-difficulty="'+face+'"><img src="/assets/faces/'+face+'.webp" alt="">'+label+'</span>';
+function difficulty(stage){
+ const label=achievementChallenge(stage),face=difficultyFaces[label];
+ return '<span class="achievement-difficulty" data-difficulty="'+face+'" title="Challenge difficulty"><img src="/assets/faces/'+face+'.webp" alt="">'+label+'</span>';
 }
 function boostLabel({key,percent:amount}){
  return '+'+percent.format(amount)+'% '+achievementBoostLabels[key];
@@ -67,7 +67,7 @@ function achievementStage(item,stage,count,earned,next,stats){
  const complete=isEarned(stage,earned),metal=materialFor(item,stage);
  const state=complete?'earned':stage===next?'current':'upcoming';
  return '<li class="achievement-stage"'+materialAttr(metal)+' data-state="'+state+'">'+badge(item,metal,complete)+
-  '<div><div class="achievement-stage-meta"><strong>'+metal+'</strong><span class="achievement-stage-number">Stage '+stage.stage+'</span>'+difficulty(item,stage)+'</div>'+
+  '<div><div class="achievement-stage-meta"><strong>'+metal+'</strong><span class="achievement-stage-number">Stage '+stage.stage+'</span>'+difficulty(stage)+'</div>'+
   '<p>'+stage.description+'</p>'+stageProgress(item,stage,count,earned)+rewards(stage)+'</div>'+
   '<div class="achievement-stage-status"><span class="achievement-'+(complete?'earned':'unearned')+'">'+
   (complete?ico('check')+' Earned':stage===next?'Next stage':'Upcoming')+'</span>'+
@@ -110,7 +110,8 @@ export function createProgression(root){
   const highest=won.at(-1),next=item.stages.find(stage=>!isEarned(stage,earned));
   const metal=materialFor(item,highest||item.stages[0]);
   hero.dataset.achievementMaterial=metal.toLowerCase();
-  fill(hero,badge(item,metal,Boolean(highest))+'<div><span class="achievement-hero-category">'+item.group+'</span>'+
+  const category=item.discoveryDifficulty?item.discoveryDifficulty+' collection':item.group;
+  fill(hero,badge(item,metal,Boolean(highest))+'<div><span class="achievement-hero-category">'+category+'</span>'+
    '<h2 id="achievementBadgeTitle">'+item.name+'</h2><p>'+(!highest?'First stage · '+metal:next?metal+' earned':'Completed · '+metal)+'</p></div>');
   fill(community,statistics?'<span>Players who earned this badge</span><strong>'+communityCount(statistics,item.stages[0])+'</strong>':
    statisticsError?'<span>Player counts unavailable</span><button type="button" class="outline" data-badge-retry>Retry</button>':
@@ -174,7 +175,7 @@ export function createProgression(root){
    '<div class="achievement-tools"><div class="achievement-tools-copy"><h2>Achievement badges</h2><p>Earn XP, Demon Keys and permanent boosts at each stage.</p></div>'+
    '<div class="achievement-filters" role="group" aria-label="Filter achievements">'+
    filterSelect('category','Category',{all:'All categories',...Object.fromEntries(groups.map(group=>[group,group]))},selection.category)+
-   filterSelect('difficulty','Difficulty',{all:'All difficulties',...Object.fromEntries(Object.keys(difficultyFaces).map(label=>[label,label]))},selection.difficulty)+
+   filterSelect('difficulty','Challenge difficulty',{all:'All difficulties',...Object.fromEntries(Object.keys(difficultyFaces).map(label=>[label,label]))},selection.difficulty)+
    filterSelect('status','Stage status',{all:'Any status',open:'In progress',earned:'Earned'},selection.status)+
    '</div></div><p class="achievement-result" aria-live="polite"></p><div class="achievement-board"></div></section>';
   filters=rootPanel.querySelector('.achievement-filters');
@@ -196,7 +197,7 @@ export function createProgression(root){
   const sections=new Map();
   for(const item of achievements){
    if(category!=='all'&&item.group!==category)continue;
-   const stages=item.stages.filter(stage=>(rank==='all'||(item.discoveryDifficulty||stage.difficulty)===rank)&&
+   const stages=item.stages.filter(stage=>(rank==='all'||achievementChallenge(stage)===rank)&&
     (status==='all'||isEarned(stage,earned)===(status==='earned')));
    if(!stages.length)continue;
    if(!sections.has(item.group))sections.set(item.group,[]);
@@ -238,7 +239,7 @@ export function createProgression(root){
     const item=achievementById(stage.id);
     const metal=materialFor(item,stage);
     return '<button type="button" data-achievement-badge="'+stage.id+'" aria-haspopup="dialog">'+badge(item,metal,true)+
-     '<span><strong>'+item.name+'</strong><span class="achievement-stage-meta">'+difficulty(item,stage)+
+     '<span><strong>'+item.name+'</strong><span class="achievement-stage-meta">'+difficulty(stage)+
      '<span class="achievement-stage-number">'+metal+' · Stage '+stage.stage+' of '+item.stageCount+'</span></span>'+rewards(stage)+'</span></button>';
    }).join('')+'</div>':'<p>Your first badge will appear here.</p>')+'</section>');
  }
