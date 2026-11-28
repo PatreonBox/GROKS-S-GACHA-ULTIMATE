@@ -8,7 +8,7 @@ import {seededRandom,drillInput} from './game-replay.js';
 
 const laneNames=['Left','Center','Right'];
 const portalNames=['Yellow','Green','Blue'];
-const compact=n=>Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n);
+const compact=new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format;
 const leftKeys=new Set(['ArrowLeft','KeyA']),rightKeys=new Set(['ArrowRight','KeyD']);
 const instructions={
  spike:'Hold Space or Charge. Release at the gold notch when the wall enters range.',
@@ -36,7 +36,10 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
  const pad=dialog.querySelector('.drill-touch'),banner=dialog.querySelector('[data-banner]'),score=dialog.querySelector('[data-score]'),speed=dialog.querySelector('[data-speed]'),record=dialog.querySelector('[data-best]');
  const meter=dialog.querySelector('.forge-charge'),meterLabel=dialog.querySelector('[data-forge-state]');
  const gravity=dialog.querySelector('[data-gravity]');
- const view=createDrillViewport(field.querySelector('canvas'),field,avatar);
+ const view=createDrillViewport(field.querySelector('canvas'),field,avatar,quality=>{
+  sound.playGame('forge',{rate:quality==='perfect'?1.13:1,level:.64});
+  if(quality==='perfect')sound.play('perfect',{level:.5,seed:run.score});
+ });
  const canvas=view?.canvas;
  let run=makeDrill(kind),phase='ready',frame=0,last=0,carry=0,token=null,closeOnSaved=false,bankReason='',flashAt=-Infinity;
  const keys=new Set(),pointerDirs=new Map();
@@ -124,10 +127,12 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
   if(phase!=='running')return;
   const axis=Number([...keys].some(key=>rightKeys.has(key))||[...pointerDirs.values()].includes(1))-
    Number([...keys].some(key=>leftKeys.has(key))||[...pointerDirs.values()].includes(-1));
-  carry+=last?Math.min(.12,(now-last)/1000):0;last=now;
+  carry+=last?Math.min(.25,(now-last)/1000):0;last=now;
   while(carry>=drillStep){
    if(axis!==recordedAxis){trace.push([ticks,'axis',axis]);recordedAxis=axis;}
+   const charge=run.charge,released=run.pressed;
    stepDrill(run,drillStep,axis);ticks++;carry-=drillStep;
+   if(forge&&run.event)view?.strike(run,charge,released);
    if(run.event?.quality==='miss'){
     const lostAttempt=run;
     bank('crash');
@@ -137,8 +142,7 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
    if(run.event){
     flashAt=run.time;
     if(run.event.portal)sound.playGame('portal',{rate:run.inverted?.92:1.13,level:.57});
-    else if(forge&&run.event.quality==='hit')sound.playGame('forge',{level:.64});
-    else sound.play(run.event.quality==='perfect'?'perfect':'spin',{level:.62,seed:run.score});
+    else if(!forge)sound.play(run.event.quality==='perfect'?'perfect':'spin',{level:.62,seed:run.score});
    }
   }
   if(ticks-verified>=3600&&ticks>=retryAt&&!checkpoint){
@@ -193,18 +197,18 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
   canvas.onpointerup=e=>{if(pointer===e.pointerId){if(forge)control('release');pointer=null}};
   canvas.onpointercancel=canvas.onlostpointercapture=e=>{if(pointer===e.pointerId)pause()};
  }
- for(const control of pad.querySelectorAll('button')){
-  const index=Number(control.dataset.lane);
-  control.onpointerdown=e=>{
+ for(const padButton of pad.querySelectorAll('button')){
+  const index=Number(padButton.dataset.lane);
+  padButton.onpointerdown=e=>{
    if(phase!=='running'||e.button!==0)return;
-   e.preventDefault();canvas.focus({preventScroll:true});control.setPointerCapture(e.pointerId);
+   e.preventDefault();canvas.focus({preventScroll:true});padButton.setPointerCapture(e.pointerId);
    pointerDirs.set(e.pointerId,saw?index*2-1:0);
    if(forge)control('press');else if(!saw)control('lane',index);
   };
-  control.onpointerup=control.onlostpointercapture=e=>{
+  padButton.onpointerup=padButton.onlostpointercapture=e=>{
    if(pointerDirs.delete(e.pointerId)&&forge)control('release');
   };
-  control.onpointercancel=pause;
+  padButton.onpointercancel=pause;
  }
  const hidden=()=>{if(document.hidden)pause()};
  const resize=new ResizeObserver(()=>{if(phase!=='running')render(true)});
@@ -216,6 +220,7 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
   phase='closed';resize.disconnect();cancelAnimationFrame(frame);view?.close();
   window.removeEventListener('keyup',keyup);window.removeEventListener('blur',pause);document.removeEventListener('visibilitychange',hidden);
   sound.stop();dialog.remove();onClose();
+  sound.playGameReady('gdQuit',{level:.65},()=>document.body.dataset.account!=='locked');
  },{once:true});
  dialog.showModal();resize.observe(field);
  label.textContent=canvas?instructions[kind]+' One miss ends the run.':'The 3D playfield is unavailable in this browser.';

@@ -94,12 +94,13 @@ export function createCubeShop({root,applyWallet,sound,announce}){
   if(!button||!shown||busy)return;
   if(button.dataset.cubeFilter){ownedOnly=button.dataset.cubeFilter==='owned';paint();root.querySelector('[data-cube-filter][aria-pressed="true"]')?.focus({preventScroll:true});return}
   const id=button.dataset.cube;if(!id||button.disabled)return;
-  const buying=!ownsCube(wallet,id);
   const restoreFocus=button===document.activeElement;
   busy=true;sound.unlock();paint();
   try{
-   const {wallet:next,result:{cube}} = await gameCommand('cube.equip',{id});
-   applyWallet(next);sound.play(buying?'buy':'select');announce(cube.name+(buying?' unlocked and equipped':' equipped'));
+   const {wallet:next,result:{cube,purchased}} = await gameCommand('cube.equip',{id});
+   applyWallet(next);
+   if(purchased)sound.playGameReady('gdUnlocked',{level:.75});else sound.play('select');
+   announce(cube.name+(purchased?' unlocked and equipped':' equipped'));
   }catch(error){announce(error.message)}
   finally{
    busy=false;paint();

@@ -28,8 +28,10 @@ async function exchange(url, options) {
  return result;
 }
 
-function showDiscordReward(data) {
- if(data.keyBonus)document.dispatchEvent(new CustomEvent('gdlb-discord-key-bonus',{detail:data.keyBonus}));
+function showAward(data) {
+ const bonus=Boolean(data.reward?.bonus);
+ const keys=Boolean(data.reward?.keys||data.keyBonus?.keys>0||data.achievementKeysReleased>0);
+ if(bonus||keys)document.dispatchEvent(new CustomEvent('gdlb-reward-claimed',{detail:{bonus,keys}}));
 }
 
 export function gameSession() {
@@ -38,7 +40,7 @@ export function gameSession() {
   opening = (navigator.locks ? navigator.locks.request('gdlb-session', begin) : begin())
    .then(data => {
     renderAccount(data);
-    showDiscordReward(data);
+    showAward(data);
     if(data.playerProfile?.autoRefresh)refreshDiscordProfile(true);
     return data;
    })
@@ -55,7 +57,7 @@ export async function gameRead(view) {
  const data = initial && view === 'wallet' ? session : await exchange('/api/game?view=' + view);
  if (view === 'wallet') {
   renderAccount(data);
-  if(data!==session)showDiscordReward(data);
+  if(data!==session)showAward(data);
  }
  if(data.banned)throw Error(data.error);
  return data[view];
@@ -83,6 +85,7 @@ export function gameCommand(action, args = {}, notice = 'changed') {
   if(session.requiresSignIn&&!session.signedIn)throw Error('Sign in with Discord to play.');
   const data=await submit('/api/game',{action,args,requestId:crypto.randomUUID()});
   renderAccount(data);
+  showAward(data);
   if(notice)updates?.postMessage(notice);
   return data;
  });
@@ -146,7 +149,6 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
   const keys=locked?null:wallet.demonKeys||0,paid=wallet?.achievementKeysPaid||0;
   document.dispatchEvent(new CustomEvent('gdlb-achievements',{detail:{earned:locked?null:wallet.achievements||{},saveRevision:saveRevision??0,
    pending:Boolean(wallet?.pending),keys,paid,initialKeys:achievementKeysReleased||0}}));
-  document.dispatchEvent(new CustomEvent('gdlb-key-balance',{detail:{keys,paid,revision:saveRevision??0}}));
  }
  if(account){
   account.hidden=!locked||Boolean(banned);

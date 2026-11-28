@@ -1,31 +1,9 @@
 import * as THREE from 'three';
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {batchStaticParts} from './building-geometry.js';
 
 const lights=['#4fe1ff','#64f2bf','#bb8bff','#ffb963'];
 
-function batchShadows(group){
- const finishes=new Map();
- for(const piece of group.children){
-  if(!piece.isMesh||!piece.castShadow)continue;
-  if(!finishes.has(piece.material))finishes.set(piece.material,[]);
-  finishes.get(piece.material).push(piece);
- }
- for(const [finish,pieces] of finishes){
-  if(pieces.length<2)continue;
-  const shapes=pieces.map(piece=>{
-   piece.updateMatrix();
-   const shape=piece.geometry.index?piece.geometry.toNonIndexed():piece.geometry;
-   if(shape!==piece.geometry)piece.geometry.dispose();
-   group.remove(piece);
-   return shape.applyMatrix4(piece.matrix);
-  });
-  const batch=new THREE.Mesh(mergeGeometries(shapes),finish);
-  batch.castShadow=batch.receiveShadow=true;group.add(batch);
-  shapes.forEach(shape=>shape.dispose());
- }
-}
-
-export function makeSpikeShooter(level,icon){
+export function makeSpikeShooter(level=1,icon){
  const model=new THREE.Group(),barrel=new THREE.Group(),accent=lights[level-1];
  const finish=(color,options={})=>new THREE.MeshStandardMaterial({color,roughness:.68,metalness:.27,...options});
  const steel=finish('#425367'),dark=finish('#172332'),rim=finish('#6c879b');
@@ -62,15 +40,34 @@ export function makeSpikeShooter(level,icon){
  crest.castShadow=false;
  block(barrel,rim,0,.443,-.47,.73,.12,.59);
  block(barrel,bright,0,.523,-.47,.46,.06,.38);
+ if(level>=2){
+  for(const side of [-1,1]){
+   const magazine=block(barrel,dark,side*.70,.12,-.42,.36,.62,.70);
+   magazine.rotation.z=side*.15;
+   block(barrel,rim,side*.66,.40,-.42,.39,.095,.73).rotation.z=side*.15;
+   for(const z of [-.63,-.42,-.21])block(barrel,bright,side*.88,.13,z,.028,.22,.050);
+  }
+ }
  if(level>=3){
   for(const side of [-1,1]){
    block(barrel,rim,side*.48,.365,-.34,.21,.26,.61).rotation.z=side*.21;
    block(barrel,bright,side*.47,.48,-.34,.13,.048,.39);
+   const rail=part(barrel,rim,new THREE.CylinderGeometry(.087,.095,1.05,8),side*.462,.375,.37);
+   rail.rotation.x=Math.PI/2;
   }
  }
- if(level>=4)block(barrel,bright,0,-.31,.99,.88,.08,.28);
- batchShadows(model);
- batchShadows(barrel);
+ if(level>=4){
+  // A triangulated rangefinder and heatsinks distinguish the final turret from the rail upgrade.
+  for(const side of [-1,1]){
+   block(barrel,dark,side*.25,.50,-.63,.09,.27,.16).rotation.z=-side*.17;
+   for(let i=0;i<3;i++)block(model,rim,side*.84,.55,-.42+i*.17,.28,.26,.065);
+  }
+  block(barrel,steel,0,.629,-.63,.75,.20,.29);
+  block(barrel,bright,0,.637,-.476,.48,.09,.018);
+  block(barrel,bright,0,-.31,.99,.88,.08,.28);
+ }
+ batchStaticParts(model);
+ batchStaticParts(barrel);
  return model;
 }
 

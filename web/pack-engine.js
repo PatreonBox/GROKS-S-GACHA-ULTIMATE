@@ -247,7 +247,7 @@ const resultFrom = async (action,args,notice) => {
  const {wallet,result} = await gameCommand(action,args,notice);
  return {wallet,...result};
 };
-export const collectMineIncome = () => resultFrom('mine.collect',{},null);
+export const collectMineIncome = (returning=false) => resultFrom('mine.collect',{returning},null);
 export const mineCoin = count => resultFrom('mine.tap',{count},'mine');
 export const purchaseMineMachine = (id,mode) => resultFrom('mine.machine',{id,mode},'mine');
 export const purchaseMineSkill = id => walletFrom('mine.skill',{id},'mine');

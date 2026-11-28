@@ -302,6 +302,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   closed=true;
   if(endless)sendEndlessResult();
   closeFinale?.();music?.close();input.dispose();observer.disconnect();cancelAnimationFrame(frame);sound.stop();
+  sound.playGameReady('gdQuit',{level:.65},()=>document.body.dataset.account!=='locked');
   document.removeEventListener('visibilitychange',hidden);dialog.remove();
  },{once:true});
  resize();message.textContent=breakwater?instruction:

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {kingdomRenderer} from './kingdom-renderer.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {groundHeight,makeHouse,makeKingdomTrail,makeLandscape,makeSky,makeTower} from './kingdom-model.js';
+import {applyTowerLevel,groundHeight,makeHouse,makeKingdomTrail,makeLandscape,makeSky,makeTower} from './kingdom-model.js';
 import {makeKingdomComputer} from '../web/kingdom-computer-art.js';
 import {createHouseInterior} from './kingdom-interior.js';
 import {makeResident} from './kingdom-cubes.js';
@@ -9,12 +9,12 @@ import {createBuildingPreview} from './building-preview.js';
 import {makeResourceBubble,makeManaForge} from './mana-forge-model.js';
 import {makeGemMine} from './gem-mine-model.js';
 import {makeSpikeProjectile,makeSpikeShooter,makeSpikeTarget} from './spike-shooter-model.js';
-import {buildingSpecs,campfireKind,forgeMinimum,forgeStored,gemMinePlan,housePlan,kingdomBounds,kingdomDaylight,kingdomPhaseDuration,kingdomTrail,manaIcon,manorHeight,maxTrailPoints,plotTrees,visitorSlots,visitorWelcomeMs} from '../web/kingdom-rules.js';
+import {buildingSpecs,campfireKind,campfirePlan,forgeMinimum,forgeStored,gemMinePlan,housePlan,kingdomBounds,kingdomDaylight,kingdomPhaseDuration,kingdomTrail,manaIcon,manorHeight,maxTrailPoints,plotTrees,visitorSlots,visitorWelcomeMs} from '../web/kingdom-rules.js';
 import {spikeIcon,spikeKind,spikePlan} from '../web/kingdom-defences.js';
 import {kingdomNavigation} from './kingdom-navigation.js';
 import {createKingdomWalker} from './kingdom-walkers.js';
 import {treeWithin} from '../web/kingdom-forest.js';
-import {makeTowerConstruction} from './tower-construction.js';
+import {makeBuildingConstruction,makeTowerConstruction} from './tower-construction.js';
 import {routeKingdomTrail,trailPatrol} from './kingdom-trail.js';
 import {makeCampfire,campfireMotion} from './campfire-model.js';
 import {kingdomCameraMotion} from './kingdom-camera.js';
@@ -88,7 +88,7 @@ function release(root){
  parts.forEach(item=>item.dispose());
 }
 
-export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect,onSpikeHit,onTrailDraw,onInteriorPick}){
+export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect,onSpikeHit,onTrailDraw,onInteriorPick,onHouseEntry,onOccupancy}){
  const renderer=kingdomRenderer(canvas);
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -117,9 +117,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  const tower=makeTower(),owner=makeResident(renderer.software),trailMesh=makeKingdomTrail();
  const spikeTexture=loader.load(spikeIcon);spikeTexture.colorSpace=THREE.SRGBColorSpace;
  const defences=[1,2,3,4].map(level=>makeSpikeShooter(level,spikeTexture));
- const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine(),[spikeKind]:defences[0],[campfireKind]:makeCampfire()};
+ const fireModels=[1,2,3,4].map(level=>makeCampfire(level));
+ const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine(),[spikeKind]:defences[0],[campfireKind]:fireModels[0]};
  let workstationPreview,interior,interiorActive=false;
- const playingResidents=new Set();
+ const playingResidents=new Map(),occupants=new Map(),buildingSites=new Map();
  const fireLights=Array.from({length:3},()=>{
   const light=new THREE.PointLight('#ffab55',0,9,1.55);
   scene.add(light);return light;
@@ -210,7 +211,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const finished=worksite&&towerLevel>=(worksite.schedule.level??2)&&!schedule;
   if(worksite){worksite.site.removeFromParent();release(worksite.site);worksite=null}
   if(schedule){
-   worksite={...makeTowerConstruction(),schedule};
+   worksite={...makeTowerConstruction({software:renderer.software}),schedule};
    worksite.site.position.copy(tower.position);
    scene.add(worksite.site);
   }else if(finished){
@@ -248,7 +249,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   setLand(landLevel,plotTrees(buildings,removedTrees));
   setWorksite(construction,towerLevel);
   playingResidents.clear();
-  for(const house of buildings)if(house.resident&&house.computer?.playing)playingResidents.add(house.resident);
+  for(const house of buildings)if(house.resident&&house.computer?.playing)playingResidents.set(house.resident,house.id);
   const key=[landLevel,Boolean(construction),forestKey,JSON.stringify(trail),...buildings.map(item=>[item.id,item.x,item.z,item.rotation,item.resident].join(':'))].join('/');
   if(navKey!==key){
    nav=kingdomNavigation(bounds,buildings,forest.map(tree=>[tree.x,tree.z]),construction);navKey=key;
@@ -257,10 +258,8 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    trailDirty=true;
   }
   const towerScale=1+Math.min(4,towerLevel-1)*.115;
-  tower.scale.y=towerScale;
-  tower.getObjectByName('tower-upgraded-trim').visible=towerLevel>=2;
+  applyTowerLevel(tower,towerLevel);
   const towerHit=picked.get('tower').mesh;towerHit.scale.y=towerScale;towerHit.position.y=3.65*towerScale;
-  tower.getObjectByName('pennant').material.color.set(['#7ce5d9','#eeb852','#f17e57','#bb81eb','#ffe398'][towerLevel-1]);
   const buildingIds=new Set(buildings.map(house=>house.id));
   const visitorIds=new Set(visitors.map(guest=>guest.id));
   for(const [id,structure] of structures)if(!buildingIds.has(id)){
@@ -273,13 +272,13 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   for(const building of buildings){
    const {id,x,z,rotation,kind='house'}=building,{size,height}=buildingSpecs[kind],key=kind+':'+id;
    const level=kind===spikeKind?spikePlan(building,clock()).level:
-    kind==='house'?housePlan(building,clock()).level:building.level===2?2:1,existing=structures.get(id);
-   const tall=kind==='house'&&level===3?manorHeight:height;
+    kind==='house'?housePlan(building,clock()).level:kind===campfireKind?campfirePlan(building,clock()).level:building.level===2?2:1,existing=structures.get(id);
+   const tall=kind==='house'&&level===3?manorHeight:kind===campfireKind&&level>=3?(level===3?1.6:1.8):height;
    if(existing?.level===level&&existing.building.x===x&&existing.building.z===z&&existing.building.rotation===rotation){
     existing.building=building;continue;
    }
    if(testShot?.id===id)endTestShot();
-   const template=kind===spikeKind?defences[level-1]:level===3?manor:(level===2&&improvedModels[kind])||models[kind];
+   const template=kind===spikeKind?defences[level-1]:kind===campfireKind?fireModels[level-1]:kind==='house'&&level===3?manor:(level===2&&improvedModels[kind])||models[kind];
    const model=template.clone(),floor=floorAt(building);
    model.position.set(x,floor,z);model.rotation.y=rotation*Math.PI/2;
    scene.add(model);
@@ -307,8 +306,18 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    }
    structures.set(id,structure);
   }
+  for(const [id,work] of buildingSites){
+   if(structures.get(id)?.building.upgrade?.startedAt===work.schedule.startedAt)continue;
+   work.site.removeFromParent();release(work.site);buildingSites.delete(id);
+  }
+  for(const [id,{building,model}] of structures){
+   if(!building.upgrade||buildingSites.has(id))continue;
+   const work=makeBuildingConstruction(building.kind||'house',{software:renderer.software});
+   work.schedule=building.upgrade;work.site.position.copy(model.position);work.site.rotation.y=model.rotation.y;
+   scene.add(work.site);buildingSites.set(id,work);
+  }
   for(const [id,walker] of guests)if(!visitorIds.has(id)){
-   walker.walk.releaseHome();
+   walker.walk.releaseHome();noteOccupant('visitor:'+walker.slot,null);
    walker.resident.removeFromParent();release(walker.resident);
    removePicker('visitor:'+id);guests.delete(id);
   }
@@ -351,11 +360,13 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const width=canvas.clientWidth,height=canvas.clientHeight;
   if(!width||!height)return;
   camera.aspect=width/height;camera.updateProjectionMatrix();
-  renderer.setSize(width,height,false);
+  renderer.setSize(width,height,false);interior?.invalidate();
  }
+ canvas.addEventListener('webglcontextrestored',()=>{resize();wake();},{signal});
  const size=new ResizeObserver(resize);
  size.observe(canvas);resize();
  function reset(){
+  if(interiorActive){interior.reset();return;}
   controls.target.set(build?0:-.40,build ? .55 : 1.82,.05);
   const scale=bounds.right/14;
   controls.maxTargetRadius=bounds.right+11;
@@ -384,10 +395,12 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   ghostOutline.color.set(good?'#c6ffb4':'#ffa9a6');
  }
  function panMode(on){
+  if(interiorActive){interior.panMode(on);return;}
   controls.mouseButtons.LEFT=on?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;
   controls.touches.ONE=on?THREE.TOUCH.PAN:THREE.TOUCH.ROTATE;
  }
  function zoom(factor){
+  if(interiorActive){interior.zoom(factor);return;}
   offset.subVectors(camera.position,controls.target);
   offset.setLength(clamp(offset.length()*factor,controls.minDistance,controls.maxDistance));
   camera.position.copy(controls.target).add(offset);
@@ -405,8 +418,11 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   return {x,y};
  }
  function setInterior(state){
-  if(state&&!interior)interior=createHouseInterior(renderer);
+  if(state&&!interior)interior=createHouseInterior(renderer,canvas,clock);
+  const changed=Boolean(state)!==interiorActive;
+  if(state&&previewOpen)setBuildingPreview(null);
   interiorActive=Boolean(state);
+  if(changed){candidate=null;fingers.clear();interior?.setActive(interiorActive);}
   if(state)interior.set(state);
   controls.enabled=!state&&!trailMode;
   canvas.dataset.room=String(interiorActive);
@@ -454,7 +470,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   onHover(hovered,hit);
  }
  canvas.addEventListener('pointerdown',event=>{
-  if(interiorActive){candidate=event.button===0?{id:event.pointerId,x:event.clientX,y:event.clientY}:null;return;}
+  if(interiorActive){
+   canvas.focus({preventScroll:true});candidate=!fingers.size&&event.button===0?{id:event.pointerId,x:event.clientX,y:event.clientY}:null;
+   fingers.add(event.pointerId);return;
+  }
   if(trailMode){
    if(trailPointer===null&&event.button===0){
     trailPointer=event.pointerId;trailDraft=[];trailDirty=true;
@@ -467,7 +486,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   fingers.add(event.pointerId);hover(null);
  },{signal});
  canvas.addEventListener('pointermove',event=>{
-  if(interiorActive)return;
+  if(interiorActive){if(candidate&&Math.hypot(event.clientX-candidate.x,event.clientY-candidate.y)>5)candidate=null;return;}
   if(trailMode){if(trailPointer===event.pointerId)recordTrail(event);return;}
   if(fingers.size){
    if(!candidate||Math.hypot(event.clientX-candidate.x,event.clientY-candidate.y)>5){
@@ -483,7 +502,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  canvas.addEventListener('pointerup',event=>{
   if(interiorActive){
    if(candidate?.id===event.pointerId&&Math.hypot(event.clientX-candidate.x,event.clientY-candidate.y)<=6)onInteriorPick?.(pickInterior(event));
-   candidate=null;return;
+   fingers.delete(event.pointerId);candidate=null;return;
   }
   if(trailMode){
    if(trailPointer!==event.pointerId)return;
@@ -667,13 +686,23 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   sun.intensity=.64+1.84*light;
   for(const material of windows)material.emissiveIntensity=.23+.96*(1-light);
  }
+ function noteOccupant(actor,home){
+  const previous=occupants.get(actor);
+  if((previous||null)===(home||null))return;
+  if(home)occupants.set(actor,home);else occupants.delete(actor);
+  const arrived=home&&structures.get(home)?.building;
+  if(arrived&&!arrived.resident)onHouseEntry?.(home,actor);
+  onOccupancy?.();
+ }
  function animateCubes(delta,night,nightAge){
   openDoors.clear();
   const roster=[{id:'cube',model:owner.resident,walk:residentWalk,hit:cubeHit,radius:.68},
    ...[...guests.values()].map(g=>({id:'visitor:'+g.slot,model:g.resident,walk:g.walk,hit:g.hit,radius:.57}))];
   const actors=roster.filter(actor=>{
    if(!playingResidents.has(actor.id))return true;
-   if(actor.model.visible)actor.walk.releaseHome();
+   const home=playingResidents.get(actor.id);
+   actor.walk.seatAt(nav.targets.housing.find(target=>target.home.id===home)?.home);
+   noteOccupant(actor.id,home);
    actor.model.visible=false;actor.hit.userData.inactive=true;
    return false;
   });
@@ -688,6 +717,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    });
    const home=actor.walk.update(nav,delta,groundHeight,motion,actor.hit,night,canStep,nightAge);
    if(home)openDoors.add(home);
+   noteOccupant(actor.id,actor.walk.insideHouse);
   }
   for(const [id,{door}] of structures){
    if(!door)continue;
@@ -726,6 +756,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   const delta=last?Math.min(renderer.software ? .16 : .05,(now-last)/1000):0;
   last=now;elapsed+=delta;
   if(interiorActive){
+   if(nav){const day=kingdomDaylight(clock());animateCubes(delta,day.night,kingdomPhaseDuration-day.remaining);}
    interior.render(canvas.clientWidth,canvas.clientHeight,elapsed,motion);
    frame=requestAnimationFrame(render);return;
   }
@@ -743,6 +774,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    const {startedAt,endsAt}=worksite.schedule;
    worksite.animate(elapsed,clamp((timestamp-startedAt)/(endsAt-startedAt),0,1),motion);
   }
+  for(const work of buildingSites.values()){const {startedAt,endsAt}=work.schedule;work.animate(elapsed,clamp((timestamp-startedAt)/Math.max(1,endsAt-startedAt),0,1),motion);}
   animateProduction(timestamp);
   showRing(selectRing,selected);
   showRing(hoverRing,hovered===selected?null:hovered);
@@ -774,12 +806,12 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
   preview?.dispose();interior?.dispose();if(workstationPreview)release(workstationPreview);
-  scene.add(...Object.values(models),...Object.values(improvedModels),manor,...defences,...Object.values(resources).map(resource=>resource.bubble));
+  scene.add(...Object.values(models),...Object.values(improvedModels),manor,...fireModels,...defences,...Object.values(resources).map(resource=>resource.bubble));
   release(scene);foundationMaterial.dispose();
   sun.shadow.dispose();
   renderer.dispose();renderer.forceContextLoss?.();
  }
- return {select,setCube,setPlot,setInterior,setBuild,setTrailMode,setBuildingPreview,productionOrigin,popProduction,fireSpike,panMode,zoom,reset,dispose};
+ return {insideHouse:id=>[...occupants].find(([,home])=>home===id)?.[0]??null,select,setCube,setPlot,setInterior,setBuild,setTrailMode,setBuildingPreview,productionOrigin,popProduction,fireSpike,panMode,zoom,reset,dispose};
 }
 
 export {createCubePortraitRenderer} from './cube-shop-preview.js';

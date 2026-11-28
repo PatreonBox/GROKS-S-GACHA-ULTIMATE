@@ -1,6 +1,7 @@
 import {achievementById,achievementVersion,bannerAchievementStat,updateAchievements as applyAchievementRewards} from '../web/progression-rules.js';
 import {normalizeWallet} from '../web/pack-engine.js';
 import {needsCoinNormalization} from '../web/coin-economy.js';
+import {settleKingdomHouseLife} from '../web/kingdom-rules.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {one,reject} from './game-http.mjs';
 import {initDemonKeys,releaseAchievementKeys} from '../web/demon-keys.js';
@@ -79,6 +80,8 @@ export async function refreshAchievementWallet(db,record,now=Date.now()){
   const prior=JSON.parse(record.wallet),coinMigration=needsCoinNormalization(prior);
   const wallet=normalizeWallet(prior),seed=needsAchievementSeed(wallet);
   const keyMigration=initDemonKeys(wallet,now);
+  const construction=settleKingdomHouseLife(wallet,now);
+  const kingdomChanged=construction.computers.length>0||construction.stored.length>0;
   const originalXp=wallet.achievementRewardXp||0;
   const priorKeys=wallet.achievementKeysPaid||0;
   let visitors=0;
@@ -91,7 +94,7 @@ export async function refreshAchievementWallet(db,record,now=Date.now()){
   const achievementKeysReleased=(wallet.achievementKeysPaid||0)-priorKeys;
   const changed=(wallet.achievementRewardXp||0)!==originalXp||achievementKeysReleased>0;
   // Untouched brand-new profiles only need the migration the first time they play.
-  if(!coinMigration&&!keyMigration&&!changed&&(!seed||record.revision===0))return {wallet,saveRevision:record.revision};
+  if(!kingdomChanged&&!coinMigration&&!keyMigration&&!changed&&(!seed||record.revision===0))return {wallet,saveRevision:record.revision};
   const {meta}=await db.prepare(`UPDATE game_profiles SET wallet=?,revision=revision+1,updated_at=?,ranking_xp=?
    WHERE player_id=? AND owner=? AND revision=? AND banned_at IS NULL`)
    .bind(JSON.stringify(wallet),now,wallet.playerXp||0,record.player_id,record.owner,record.revision).run();

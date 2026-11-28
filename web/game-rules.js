@@ -17,8 +17,8 @@ import {tidalVideoId,tidalVideoMode,tidalVideoVersion} from './tidal-video-rules
 import {endlessKeyInterval,endlessKeyStatus,endlessMilestones,rewardEndlessRemix} from './remix-endless.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildCampfire,buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,updateKingdomTrail,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
-import {placeHouseComputer,assignHouseResident,playHouseComputer,upgradeHouseComputer,collectHouseStars} from './kingdom-computer.js';
+import {buildCampfire,buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipBuilding,upgradeCampfire,skipTower,storeKingdomBuilding,towerExperience,towerPlan,updateKingdomTrail,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
+import {computerHouse,stopHouseSession,enterHouse,repairHouseComputer,placeHouseComputer,assignHouseResident,playHouseComputer,upgradeHouseComputer,collectHouseStars} from './kingdom-computer.js';
 import {validTradeMinimum} from './trade-rules.js';
 import {achievementBoost} from './achievement-boosts.js';
 import {bannerPrice,demonBanners,maxBannerDraws,prepareDemonPull,rollDemonBanner} from './demon-banner.js';
@@ -41,7 +41,7 @@ const gatedActions={
  'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
  'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom','kingdom.campfire':'kingdom','kingdom.trail':'kingdom',
- 'kingdom.computer.place':'kingdom','kingdom.house.assign':'kingdom','kingdom.computer.play':'kingdom',
+ 'kingdom.computer.place':'kingdom','kingdom.house.assign':'kingdom','kingdom.house.enter':'kingdom','kingdom.computer.repair':'kingdom','kingdom.campfire.upgrade':'kingdom','kingdom.building.skip':'kingdom','kingdom.computer.play':'kingdom',
  'kingdom.computer.upgrade':'kingdom','kingdom.computer.collect':'kingdom',
  'kingdom.gem-mine':'kingdom','kingdom.gem-mine.collect':'kingdom',
  'kingdom.spike-shooter':'kingdom','kingdom.spike-shooter.upgrade':'kingdom',
@@ -197,11 +197,13 @@ const rules={
   awardPlayerXp(w,skill.purchaseXp);
  }},
  'mine.code':{run:({w,args})=>{requireRule(key(args.code),'Enter a valid code.');return {amount:grantCoinCode(w,args.code)};}},
- 'cube.equip':{run:({w,args})=>{
+ 'cube.equip':{run:({w,args,now})=>{
   requireRule(key(args.id),'Choose a cube.');
+  const home=computerHouse(w);
+  if(home?.resident==='cube'&&w.equippedCube!==args.id)stopHouseSession(home,now,w);
   const buying=!ownsCube(w,args.id),cube=claimCube(w,args.id);
   if(buying)awardPlayerXp(w,cube.purchaseXp);
-  return {cube};
+  return {cube,purchased:buying};
  }},
  'kingdom.house':{run:({w,args,now})=>{
   const house=buildHouse(w,args,now);
@@ -209,6 +211,10 @@ const rules={
   return {house};
  }},
  'kingdom.computer.place':{run:({w,args,now})=>placeHouseComputer(w,args,now)},
+ 'kingdom.house.enter':{run:({w,args,now})=>enterHouse(w,args,now)},
+ 'kingdom.computer.repair':{run:({w,args,now})=>repairHouseComputer(w,args,now)},
+ 'kingdom.building.skip':{run:({w,args,now})=>skipBuilding(w,args,now)},
+ 'kingdom.campfire.upgrade':{run:({w,args,now})=>({campfire:upgradeCampfire(w,args.id,args.level,now)})},
  'kingdom.house.assign':{run:({w,args,now})=>assignHouseResident(w,args,now)},
  'kingdom.computer.play':{run:({w,args,now})=>playHouseComputer(w,args,now)},
  'kingdom.computer.upgrade':{run:({w,args,now})=>upgradeHouseComputer(w,args,now)},

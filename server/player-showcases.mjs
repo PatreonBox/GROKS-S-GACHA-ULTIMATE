@@ -3,7 +3,7 @@ import {bestFinish} from '../web/card-finishes.js';
 import {cardSerials} from '../web/card-serials.js';
 import {schools,skillsFor} from '../web/card-skills.js';
 import {equippedCube} from '../web/cube-catalog.js';
-import {forgePlan,housePlan,kingdomStats} from '../web/kingdom-rules.js';
+import {campfirePlan,forgePlan,housePlan,kingdomStats} from '../web/kingdom-rules.js';
 import {spikeKind,spikePlan} from '../web/kingdom-defences.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {combatPower} from './player-rankings.mjs';
@@ -15,8 +15,9 @@ export function kingdomShowcase(wallet,clock=Date.now()){
   towerLevel:plot.tower.level,construction:plot.tower.construction,removedTrees:plot.removedTrees,trail:plot.trail,
   buildings:plot.buildings.map(({id,x,z,rotation,kind='house',...details})=>({
    id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:
-    kind==='forge'?forgePlan(details,clock).level:kind===spikeKind?spikePlan(details,clock).level:1,
-   ...(details.upgrade?.endsAt>clock?{upgradeEndsAt:details.upgrade.endsAt,upgradeLevel:details.upgrade.level??2}:{})
+    kind==='campfire'?campfirePlan(details,clock).level:kind==='forge'?forgePlan(details,clock).level:kind===spikeKind?spikePlan(details,clock).level:1,
+   ...(details.resident?{resident:details.resident,...(details.computer?.playing?{computer:{playing:true}}:{})}:{}),
+   ...(details.upgrade?.endsAt>clock?{upgrade:{startedAt:details.upgrade.startedAt,endsAt:details.upgrade.endsAt,level:details.upgrade.level??2},upgradeEndsAt:details.upgrade.endsAt,upgradeLevel:details.upgrade.level??2}:{})
   })),
   visitors:discoveredVisitors(wallet,clock).map(({id,slot,cube,name,arrivedAt})=>({id,slot,cube,name,arrivedAt}))
  };

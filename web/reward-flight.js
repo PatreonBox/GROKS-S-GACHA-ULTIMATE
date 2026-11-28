@@ -27,10 +27,10 @@ export function rewardOrigin(element){
  return {x:clamp(r.left+r.width/2,20,innerWidth-20),y:clamp(r.top+r.height/2,18,innerHeight-22)};
 }
 
-export function createRewardFlight(sound,format=headerAmount){
+export function createRewardFlight(format=headerAmount){
  const totals={coins:0,gems:0,mana:0,demonKeys:0},owed={coins:0,gems:0,mana:0,demonKeys:0},images={};
  const tickets=new Set(),bursts=[];
- let layer,canvas,ctx,meter,coveringDialog,raf=0,removeTimer=0,lastChime=0,width=0,height=0;
+ let layer,canvas,ctx,meter,coveringDialog,raf=0,removeTimer=0,width=0,height=0;
  let nextCoin=0,queuedCoin=null,lastCoinPulse=-Infinity;
  function visual(kind){
   return Math.max(0,kind==='mana'?totals.mana-Math.round(owed.mana/10):roundCoins(totals[kind]-owed[kind]/10));
@@ -94,13 +94,11 @@ export function createRewardFlight(sound,format=headerAmount){
    lastCoinPulse=now;
   }
   badge?.animate?.([{filter:'brightness(1.9)',scale:b.reduce?'1':'1.12'},{filter:'brightness(1)',scale:'1'}],{duration:b.reduce?120:260,easing:'ease-out'});
-  if(b.kind==='demonKeys'){sound.keyReward();return}
-  if(!b.quiet&&performance.now()-lastChime>105){lastChime=performance.now();sound.play(b.kind==='coins'?'mineAccent':'bonus',{rate:1.2,level:.41})}
  }
  function frame(now){
   if(queuedCoin&&now>=nextCoin){
    const {ticket,origin}=queuedCoin;queuedCoin=null;nextCoin=now+coinCadence;
-   launch(ticket,origin,{streamed:true,quiet:true});
+   launch(ticket,origin,{streamed:true});
   }
   const w=innerWidth,h=innerHeight;
   if(w!==width||h!==height){
@@ -187,7 +185,7 @@ export function createRewardFlight(sound,format=headerAmount){
   setup();
   if(!raf)raf=requestAnimationFrame(frame);
  }
- function launch(ticket,origin,{small=false,front=false,quiet=false,streamed=false}={}){
+ function launch(ticket,origin,{small=false,front=false,streamed=false}={}){
   if(!tickets.has(ticket))return;
   const amount=ticket.units/10,count=streamed?1:rewardSpriteCount(ticket.kind,amount);
   if(!count||document.hidden||!origin){settle(ticket);return}
@@ -215,7 +213,7 @@ export function createRewardFlight(sound,format=headerAmount){
     occupied-=old.sprites.length;settle(old.ticket);bursts.splice(i,1);
    }
   }
-  bursts.push({ticket,kind:ticket.kind,small,quiet,streamed,force:front,from,sprites,reduce,at:performance.now()});
+  bursts.push({ticket,kind:ticket.kind,small,streamed,force:front,from,sprites,reduce,at:performance.now()});
   if(!raf)raf=requestAnimationFrame(frame);
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)clear()});

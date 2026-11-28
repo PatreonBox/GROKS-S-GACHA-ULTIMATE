@@ -25,7 +25,7 @@ export const cubeCatalog=[
  ['170','Void Maw','Mythic',1800000,'#ff779c'],
  ['462','Lunar Scarab','Mythic',4200000,'#b9a3ff'],
  ['classic','Classic','Mythic',10000000,'#58edf6']
-].map(([id,name,rarity,price,color])=>({id,name,rarity,price:coinPrice(price),color,
+].map(([id,name,rarity,price,color])=>({id,name,rarity,price:Math.ceil(coinPrice(price)*14/10),color,
  purchaseXp:price>0?6+Math.floor(4*Math.log10(price*coinDivisor)):0,
  icon:id==='classic'?'/assets/player-cube.png':'/assets/cubes/'+id+'.webp'}));
 

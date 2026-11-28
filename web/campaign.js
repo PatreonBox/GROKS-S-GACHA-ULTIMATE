@@ -10,7 +10,7 @@ const chapters=[
  {name:'C',team:[34085027,58270823,3264805,60887211],captain:'Ultra violence',first:45_000,master:15_000,turns:13,openCast:true,relay:2},
  {name:'eight circles',team:[6939821,40945673,44062068,4284013],captain:'Nine Circles',first:110_000,master:35_000,turns:13,teamShield:.18,power:1.08},
  {name:'Water Bound',team:[7054561,4957691,5155022,4706930],captain:'Supersonic',first:340_000,master:120_000,turns:14,shield:.28,charge:3,power:1.10},
- {name:'Tie in a chess',team:[10565740,42584142,86407629,149992717],captain:'GRIEF',firstClear:30_000_000_000,master:1_200_000,turns:14,hp:1.16,power:1.12,shield:.25,openCast:true}
+ {name:'Tie in a chess',team:[10565740,42584142,149992717,86407629],captain:'Tidal Wave',firstClear:30_000_000_000,master:1_200_000,turns:14,hp:1.16,power:1.12,shield:.25,openCast:true}
 ];
 // Each chapter keeps its original encounter and introduces two different squads.
 // The last slot is always the captain and supplies the stage artwork.
@@ -53,7 +53,8 @@ const chapterEncounters=[
  ],
  [
   {name:'Amethyst',team:[4125776,142896409,126242564,119550490],captain:'Amethyst'},
-  {name:'Endgame',team:[148598469,119544028,127323087,86407629],captain:'Tidal Wave'}
+  // GrenadeOfTacos's section belongs to GRIEF, whose card supplies the boss and cover.
+  {name:'Tacos',team:[148598469,119544028,127323087,149992717],captain:'GRIEF'}
  ]
 ];
 const variants=[
@@ -66,7 +67,7 @@ export const campaignStages=chapters.flatMap((chapter,index)=>{
  return [chapter,...chapterEncounters[index]].map((encounter,slot)=>{
   const {variant,hpScale,powerScale}=variants[slot];
   return {...chapter,...encounter,tier,variant,chapterName:chapter.name,
-   // Original IDs 1–10 remain attached to the same captains, clears and medals.
+   // Original IDs 1–10 keep their chapter progress, clears and medals.
    id:tier+slot*chapters.length,number:index*variants.length+slot+1,
    hp:(chapter.hp??1)*hpScale,power:(chapter.power??1)*powerScale,
    turns:chapter.turns-slot};
@@ -74,16 +75,19 @@ export const campaignStages=chapters.flatMap((chapter,index)=>{
 });
 const stagesById=new Map(campaignStages.map(stage=>[stage.id,stage]));
 
-// Versions 1 and 2 keep their original payouts for battles already in progress.
-// Boolean true is also accepted for old prize records without a stored amount.
-const currentRewardVersion=3;
-const rewardPercent=version=>version===true||version===1?100:version===2?40:52;
+// Keep each battle's original rates. Integer ratios avoid losing whole coins to rounding.
+export const campaignRewardVersion=4;
+const rewardScales={1:[1,1],2:[2,5],3:[13,25],4:[13,30]};
+function scaledReward(coins,version=campaignRewardVersion){
+ const [numerator,denominator]=rewardScales[version===true?1:version]||rewardScales[campaignRewardVersion];
+ return coins*numerator/denominator;
+}
 const legacyFirstMultiplier=30,legacyRepeatMultiplier=2;
-export const campaignFirstMultiplier=legacyFirstMultiplier*rewardPercent(currentRewardVersion)/100;
-export const campaignRepeatMultiplier=legacyRepeatMultiplier*rewardPercent(currentRewardVersion)/100;
-export const campaignFirstCoins=(stage,version=currentRewardVersion)=>Math.floor((stage.firstClear??stage.first*legacyFirstMultiplier)*rewardPercent(version)/100);
-export const campaignMasterCoins=(stage,first,version=currentRewardVersion)=>campaignBounty(stage.master,first,version);
-export const campaignBounty=(bounty,first,version=currentRewardVersion)=>Math.floor(bounty*(first?legacyFirstMultiplier:legacyRepeatMultiplier)*rewardPercent(version)/100);
+export const campaignFirstMultiplier=scaledReward(legacyFirstMultiplier);
+export const campaignRepeatMultiplier=scaledReward(legacyRepeatMultiplier);
+export const campaignFirstCoins=(stage,version)=>Math.floor(scaledReward(stage.firstClear??stage.first*legacyFirstMultiplier,version));
+export const campaignMasterCoins=(stage,first,version)=>campaignBounty(stage.master,first,version);
+export const campaignBounty=(bounty,first,version)=>Math.floor(scaledReward(bounty*(first?legacyFirstMultiplier:legacyRepeatMultiplier),version));
 export const stageFor=id=>stagesById.get(Number(id));
 export const medalCount=record=>record?1+Number(Boolean(record.tempo))+Number(Boolean(record.squad)):0;
 export const stageCleared=(w,id)=>Boolean(w.campaign?.[id]);
@@ -91,9 +95,9 @@ export function stageUnlocked(w,id){
  const stage=stageFor(id);
  if(!stage)return false;
  if(stage.number===1||stageCleared(w,id)||stageCleared(w,campaignStages[stage.number-2].id))return true;
- // The previous campaign unlocked the next chapter after a single battle.
+ // Saves from before the 30-stage campaign (v3) unlocked a chapter per clear.
  const priorChapter=w.campaign?.[stage.tier-1];
- return stage.variant==='Easy'&&Boolean(priorChapter)&&(priorChapter.firstVersion??1)<currentRewardVersion;
+ return stage.variant==='Easy'&&Boolean(priorChapter)&&(priorChapter.firstVersion??1)<3;
 }
 
 export function stageRules(stage){
@@ -108,7 +112,7 @@ export function stageRules(stage){
 }
 export function configureCampaignBattle(b,stageId=b.tier){
  const stage=stageFor(stageId);
- b.campaign=stage.id;b.campaignRewardVersion=currentRewardVersion;b.charge=stage.charge||b.charge;
+ b.campaign=stage.id;b.campaignRewardVersion=campaignRewardVersion;b.charge=stage.charge||b.charge;
  const bossIndex=b.enemies.length-1;
  if(stage.openCast)b.enemyTurn=bossIndex;
  for(const [i,u] of b.enemies.entries()){
@@ -139,7 +143,7 @@ export function settleCampaignClear(w,b,survivors){
  const bountyBonus=Math.max(0,campaignBounty(bounties,first,version)-b.earned);
  const clearPrize=first?campaignFirstCoins(stage,version):0;
  const masteryPrize=mastered?campaignMasterCoins(stage,first,version):0;
- record.clearPrize=first?clearPrize:prior.clearPrize??campaignFirstCoins(stage,true);
+ record.clearPrize=first?clearPrize:prior.clearPrize??campaignFirstCoins(stage,record.firstVersion);
  if(masteryPrize)record.masteryPrize=masteryPrize;
  else if(prior?.masteryPrize!==undefined)record.masteryPrize=prior.masteryPrize;
  w.campaign[b.campaign]=record;

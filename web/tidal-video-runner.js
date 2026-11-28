@@ -1,5 +1,6 @@
 import {ico} from './icons.js';
 import {starterCube} from './cube-catalog.js';
+import {arcadeCubePortrait} from './arcade-cube-art.js';
 import {bindRunnerControls} from './remix-controls.js';
 import {drawWave,drawWaveTrail,keepWavePoint,waveAngle} from './remix-wave.js';
 import {tidalCubeRadius,tidalPortalApproachX} from './tidal-cube-intro.js';
@@ -51,7 +52,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  const action=dialog.querySelector('[data-tidal-action]'),audio=dialog.querySelector('[data-tidal-audio]');
  const pad=dialog.querySelector('.runner-touch');
  const touch=matchMedia('(pointer:coarse)');
- const icon=new Image();icon.src=avatar.icon||starterCube.icon;
+ const icon=arcadeCubePortrait(avatar);
  let phase='ready',run=newTidalWave(),trace=[],trail=[],token,frame=null,lastPortal=-Infinity;
  let quiet=false,closed=false,terminal=false,held=false,applied=0;
  let overlayVisible=false;
@@ -217,6 +218,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
   document.removeEventListener('gdlb-game-sound',syncAudio);
   document.removeEventListener('visibilitychange',visibilityChanged);
   video.pause();video.removeAttribute('src');video.load();dialog.remove();
+  sound.playGameReady('gdQuit',{level:.65},()=>document.body.dataset.account!=='locked');
  },{once:true});
  document.addEventListener('gdlb-game-sound',syncAudio);
  document.addEventListener('visibilitychange',visibilityChanged);

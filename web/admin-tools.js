@@ -45,7 +45,7 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
    kingdomProgress.querySelector('small').textContent=kingdomSuggestionStatus(next,now);
    kingdomProgress.querySelector('progress').value=next.progress;
   }
-  kingdomFinish.disabled=busy||!(currentWallet.kingdom?.towerConstruction||plot.buildings.some(item=>item.upgrade));
+  kingdomFinish.disabled=busy||!(currentWallet.kingdom?.towerConstruction||plot.buildings.some(item=>item.upgrade||item.computer?.construction));
  }
 
  function showBalances(wallet){

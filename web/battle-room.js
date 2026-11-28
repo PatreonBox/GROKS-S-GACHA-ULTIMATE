@@ -67,7 +67,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const ticket=clearTicket;clearTicket=null;
   if(ticket){
    const reward=root.querySelector('.campaign-clear-reward');
-   if(visible&&!gym&&!arcadePage&&reward){sound.play('extraAccent',{level:.62});rewards.launch(ticket,reward,{front:true})}
+   if(visible&&!gym&&!arcadePage&&reward){rewards.launch(ticket,reward,{front:true})}
    else rewards.settle(ticket);
   }
  }
@@ -427,6 +427,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
     for(const evt of w.battle.events)if(evt.kind==='knockout'&&evt.amount>0)bountyTickets.set(evt.index,rewards.reserve('coins',evt.amount));
    }
    applyWallet(w);
+   if(visible&&before?.status==='active'&&w.battle?.status==='retreated')sound.playGameReady('gdQuit',{level:.69});
    if(animate){
     if(!root.querySelector('.command'))render();
     root.querySelector('.arena-view').classList.add('camera-locked');

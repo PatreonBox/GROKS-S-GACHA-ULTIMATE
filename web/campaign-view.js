@@ -8,7 +8,7 @@ const coin='<img src="/assets/packs/coin.png" alt="">';
 
 export function campaignView(w,tier,{action,coverSource,face,enc,colors}){
  const stage=stageFor(tier),record=w.campaign?.[tier],cleared=stageCleared(w,tier),mastered=medalCount(record)===3;
- const clearPrize=cleared?record.clearPrize??campaignFirstCoins(stage,true):campaignFirstCoins(stage);
+ const clearPrize=cleared?record.clearPrize??campaignFirstCoins(stage,record.firstVersion??1):campaignFirstCoins(stage);
  const masteryPrize=mastered?(record.masteryPrize??stage.master):campaignMasterCoins(stage,!cleared);
  const medals=campaignStages.reduce((n,entry)=>n+medalCount(w.campaign?.[entry.id]),0);
  const stages=campaignStages.filter(entry=>stageCleared(w,entry.id)).length;
@@ -40,7 +40,7 @@ export function campaignView(w,tier,{action,coverSource,face,enc,colors}){
   '<div class="campaign-prizes"><span>'+coin+' <b>'+number(clearPrize)+'</b> first clear'+(cleared?' ✓':'')+'</span>'+
   '<span class="campaign-key-prize">'+ico('demonKey')+' <b>'+campaignKeyReward+' Demon Keys</b> first clear'+(cleared?' ✓':'')+'</span>'+
   '<span>'+coin+' <b>'+number(masteryPrize)+'</b> 3-star bonus'+(mastered?' ✓':'')+
-  '</span><span>'+coin+' <b>'+(cleared?campaignRepeatMultiplier+'×</b> replay bounties':campaignFirstMultiplier+'×</b> bounties on first clear')+'</span></div>'+
+  '</span><span>'+coin+' <b>'+(cleared?'≈ '+number(campaignRepeatMultiplier)+'×</b> replay bounties':number(campaignFirstMultiplier)+'×</b> bounties on first clear')+'</span></div>'+
   '<div class="campaign-actions">'+action+'</div></div></article><div class="campaign-map" aria-label="Campaign stages">'+map+'</div></div></section>';
 }
 

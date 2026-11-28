@@ -40,7 +40,7 @@ function nextGate(run,distance){
 }
 export function makeDrill(kind,random=Math.random){
  const run={kind,random,dist:0,time:0,x:0,aim:0,v:0,lane:1,score:0,perfect:0,charge:0,
-  hammer:0,hammerV:0,held:false,pressed:false,failed:false,event:null,lastGate:null,serial:1,gates:[],inverted:false,lift:0};
+  held:false,pressed:false,failed:false,event:null,lastGate:null,serial:1,gates:[],inverted:false,lift:0};
  run.gates.push(nextGate(run,spawns[kind]*2.15));
  fillCourse(run);
  return run;
@@ -84,13 +84,11 @@ function stepForge(run,gate,dt,pace){
  if(run.held)run.charge=Math.min(1,run.charge+dt*(1.48+slowTime(run.time)*.0055));
  if(run.pressed){
   run.pressed=false;
-  const charge=run.charge;run.charge=0;run.hammer=1;run.hammerV=-2;
+  const charge=run.charge;run.charge=0;
   const approach=(gate.distance-run.dist)/pace.speed;
   const precision=1-Math.abs(charge-gate.charge)/pace.opening;
   resolve(run,gate,approach<=pace.strike&&approach>=-.01?precision:-1);
  }
- run.hammerV+=(-95*run.hammer-13*run.hammerV)*dt;
- run.hammer+=run.hammerV*dt;
 }
 export function stepDrill(run,dt,axis=0){
  run.event=null;

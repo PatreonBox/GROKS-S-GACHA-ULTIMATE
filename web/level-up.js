@@ -37,9 +37,9 @@ export function setupLevelUps(dialog,sound){
    '<button class="level-up-continue" type="button" data-continue-level>Click anywhere to continue</button></div>';
   dialog.showModal();
   dialog.querySelector('[data-continue-level]').focus({preventScroll:true});
-  const generation=sound.generation,loading=sound.prepareGame(cue);
-  const play=()=>{if(active===celebration&&generation===sound.generation)sound.playGame(cue,{level:.79})};
-  if(loading)loading.then(play);else play();
+  const generation=sound.generation;
+  sound.playGameReady(items.length?'gdUnlocked':cue,{level:.79},
+   ()=>active===celebration&&generation===sound.generation);
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
   const target=dialog.querySelector('.level-up-number'),start=performance.now();
   function count(now){

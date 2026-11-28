@@ -3,6 +3,7 @@ import {orbSprites} from './combat-arts.js';
 import {drillSprites} from './drill-sprites.js';
 import {arcadeSprites} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
+import {arcadeCubePortrait} from './arcade-cube-art.js';
 import {drawWave,drawWaveTrail} from './remix-wave.js';
 
 export const maxRunnerPlayerX=154;
@@ -91,7 +92,8 @@ function tilePattern(ctx,theme,tint){
 export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
  const theme=styles[remix.mark],tint=remix.color;
  const scene=remix.mark==='KEY'?null:image(remix.art||(theme.image?'/assets/remix/'+theme.image+'.webp':'/assets/shots/'+remix.id+'.webp'),onReady);
- const icon=image(skin.icon,onReady),vehicle=course.mode==='ship'?image(arcadeSprites.ship,onReady):null;
+ const icon=course.mode==='wave'?null:arcadeCubePortrait(skin,onReady);
+ const vehicle=course.mode==='ship'?image(arcadeSprites.ship,onReady):null;
  const pinkOrb=image(orbSprites[0],onReady),spikeSprite=image(drillSprites.spike,onReady);
  const exitPortal=image(drillSprites.exit,onReady),miniPortal=course.miniAt?image(drillSprites.mini,onReady):null;
  const tiles=tilePattern(ctx,theme,tint),wall=ctx.createLinearGradient(0,0,0,H);

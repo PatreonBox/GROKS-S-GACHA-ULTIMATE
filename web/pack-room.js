@@ -26,7 +26,7 @@ import {packPlayerXp,packXpAllowance,packXpLimit,playerProgress} from './player-
 import {featureLevel,features,packLevels} from './level-access.js';
 import {dropAccess,dropAccessSummary,dropEligible} from './drop-access.js';
 import {lockAttributes,lockBadge,lockedPage,setLevelLock} from './level-lock.js';
-import {machineOwned,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,quoteMachine,skillOwned} from './mine-economy.js';
+import {machineOwned,mineCheckpointMs,mineEarnings,mineMachineLock,mineMachines,mineSkillLock,mineSkills,quoteMachine,skillOwned} from './mine-economy.js';
 import {markGuide,newAreas,seenGuide} from './guide-progress.js';
 import {gameCommand,gameRead} from './game-client.js';
 import {createDemonBannerRoom,demonKeyIcon} from './demon-banner-room.js';
@@ -56,7 +56,6 @@ const tabLinks=[['banners','Demon Banners','Banners','flame'],['shop','Coin Pack
 const tabVisit=key=>'gacha-tab-'+key+'-1';
 const plural=n=>n===1?'pack':'packs';
 const visiblePackLimit=10;
-const mineCheckpointMs=20000;
 
 export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewards,initialWallet}){
  const root=byId('arcade'),reveal=byId('packReveal'),code=byId('coinCode');
@@ -121,7 +120,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   else badge.parentElement.setAttribute('aria-describedby',badge.id);
  };
  const failure=e=>announce(e?.message||'Could not save this change. Please try again.');
- function applyWallet(w,{pans=[],credited=0}={}){
+ function applyWallet(w,{pans=[]}={}){
   const first=!wallet,oldLuck=wallet?.luck,previousLevel=playerLevel;
   wallet=w;walletError='';refreshId++;
   if(Number.isFinite(w.kingdomClock))serverClockOffset=w.kingdomClock-Date.now();
@@ -143,18 +142,18 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   const keys=w.demonKeys||0;
   keyLink.title=number(keys)+' Demon Keys';
   keyLink.setAttribute('aria-label',keyLink.title+'. Open Key Shop');
-  refreshCoins(true,pans,credited);
+  refreshCoins(true,pans);
   byId('gemLink').title=number(w.gems)+' gems'+(locked('upgrades')?' · Gem Upgrades at Level '+featureLevel('upgrades'):'');
   byId('gemLink').setAttribute('aria-label',byId('gemLink').title+(locked('upgrades')?'':'. Open Gem Upgrades'));
   if(view==='upgrades'&&!routeLocked)renderUpgrades();
   if(view==='results')resultsPage();
   refreshActivity();
  }
- function refreshCoins(force=false,pans=[],credited=0){
+ function refreshCoins(force=false,pans=[]){
   if(!wallet)return;
   const coins=roundCoins(wallet.coins+mineEarnings(wallet).coins);
   if(!force&&coins===displayedCoins)return;
-  const previous=displayedCoins<0?(credited?coins-credited:coins):displayedCoins;
+  const previous=displayedCoins<0?coins:displayedCoins;
   const gain=roundCoins(coins-previous);
   displayedCoins=coins;
   rewards.balance({coins,gems:wallet.gems,mana:wallet.kingdom?.mana||0,demonKeys:wallet.demonKeys||0});
@@ -162,9 +161,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   byId('walletLink').setAttribute('aria-label',byId('walletLink').title+(locked('mine')?'':'. Open the coin mine'));
   coinMine.setCoins(coins,force?0:gain);
   kingdom.setCoins(coins);
-  if(gain>0&&gain>previous*.5)sound.coinReward(true);
-  else if(pans.length)sound.coinReward(false,pans);
-  else if(gain>0&&view==='mine'&&(!force||credited))sound.coinReward(false);
+  if(pans.length)sound.coinReward(false,pans);
   if(view==='shop')updatePurchase();
   const mergeLink=root.querySelector('[data-merge-link]');
   if(mergeLink)setLevelLock(mergeLink,featureLevel('merge'),playerLevel);
@@ -178,7 +175,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
  function checkpointMine(returning=false){
   if(savingMine)return savingMine;
   const epoch=++refreshId;
-  savingMine=collectMineIncome().then(({wallet:next,receipt})=>{
+  savingMine=collectMineIncome(returning).then(({wallet:next,receipt})=>{
    const away=returning&&receipt.coins>0&&receipt.elapsed>=mineCheckpointMs&&!document.hidden;
    if(away){
     coinMine.reportAway(receipt);
@@ -186,7 +183,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
    }
    if(epoch!==refreshId)return;
    const ticket=away?rewards.reserve('coins',receipt.coins):null;
-   applyWallet(next,{credited:away?receipt.coins:0});
+   applyWallet(next);
    if(ticket)rewards.launch(ticket,rewardOrigin(byId('mineHit')||byId('walletLink')));
   }).catch(()=>{if(!wallet)sync()}).finally(()=>{savingMine=null});
   return savingMine;
@@ -404,7 +401,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
     const title=label+' · '+item.name+(count?' · '+count+' '+(count===1?'level':'levels')+' for '+number(cost)+' gems':'');
     return '<button type="button" class="upgrade-buy" data-upgrade="'+key+'" data-upgrade-mode="'+mode+'" aria-label="'+title+'" title="'+title+'" '+(!affordable||upgrading?'disabled':'')+'>'+label+(count?'<span>'+gem+number(cost)+'</span>':'')+'</button>';
    }).join('');
-   return '<article class="upgrade-card upgrade-'+key+'"><div class="upgrade-title"><span class="up-icon">'+ico(key==='luck'?'spark':'pack')+'</span><span>'+
+   const icon=key==='luck'?'gacha-luck':'extra-card';
+   return '<article class="upgrade-card upgrade-'+key+'"><div class="upgrade-title"><span class="up-icon"><img src="/reward-media/'+icon+'.webp" alt=""></span><span>'+
     (override?'Admin luck override':'Level '+level+' / '+item.max)+'</span></div><h3>'+item.name+'</h3><p>'+details[key]+'</p><div class="up-effect"><b>'+
     pct(effect(level))+'</b><span>'+(override?'Banner cap · +'+number(level)+'% coin pack luck':maxed?'Max level reached':'Next level <strong>'+pct(effect(level+1))+'</strong>')+
     '</span></div><div class="upgrade-meter"><i style="width:'+100*Math.min(level,item.max)/item.max+'%"></i></div><div class="gem-buy-actions">'+buttons+'</div></article>';
@@ -484,7 +482,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   code.innerHTML='<form id="codeForm"><div class="code-head"><h2 id="codeTitle">Enter code</h2><button class="iconbtn" type="button" data-cancel aria-label="Close">'+ico('x')+'</button></div><label for="codeValue">Code</label><input id="codeValue" required type="text" autocomplete="off" autocapitalize="off" maxlength="32"><p id="codeFeedback" role="status"></p><button class="primary" type="submit">Redeem</button></form>';
   if(!code.open)code.showModal();
   byId('codeValue').focus();
-  code.querySelector('[data-cancel]').onclick=()=>code.close();
+  code.querySelector('[data-cancel]').onclick=()=>{code.close();sound.playGameReady('gdQuit',{level:.62})};
   byId('codeForm').onsubmit=async e=>{
    e.preventDefault();
    const submit=e.currentTarget.querySelector('[type="submit"]');
@@ -494,7 +492,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
     const {wallet:next,amount}=await redeemCoinCode(byId('codeValue').value);
     const ticket=rewards.reserve('coins',amount);
     const origin=submit.getBoundingClientRect().width?rewardOrigin(submit):rewardOrigin(byId('walletLink'));
-    applyWallet(next);code.close();rewards.launch(ticket,origin,{front:true});sound.play('extraAccent',{level:.66});
+    applyWallet(next);code.close();rewards.launch(ticket,origin,{front:true});
     announce('Code redeemed · +'+number(amount)+' coins');
    }catch(error){if(submit.isConnected)setText('codeFeedback',error.message)}finally{submit.disabled=false}
   };

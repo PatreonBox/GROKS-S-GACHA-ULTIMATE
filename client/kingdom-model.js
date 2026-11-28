@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {houseEntry,houseSize,towerPlot} from '../web/kingdom-rules.js';
+import {batchStaticParts} from './building-geometry.js';
 
 const vertex=(x,y,z)=>new THREE.Vector3(x,y,z);
 const material=(color,options={})=>new THREE.MeshStandardMaterial({color,roughness:.9,...options});
@@ -401,7 +402,21 @@ function opening(group,stone,wood,iron,light,width,height,y,z,isDoor=false){
  return cluster;
 }
 
-export function makeTower(){
+const towerPennants=['#7ce5d9','#eeb852','#f17e57','#bb81eb','#ffe398'];
+
+export function applyTowerLevel(tower,level){
+ const tier=THREE.MathUtils.clamp(Math.trunc(level)||1,1,towerPennants.length);
+ if(tower.userData.towerLevel===tier)return;
+ tower.scale.y=1+(tier-1)*.115;
+ tower.getObjectByName('tower-upgraded-trim').visible=tier>=2;
+ for(const part of tower.children){
+  if(part.userData.minimumTowerLevel)part.visible=tier>=part.userData.minimumTowerLevel;
+ }
+ tower.getObjectByName('pennant').material.color.set(towerPennants[tier-1]);
+ tower.userData.towerLevel=tier;
+}
+
+export function makeTower(level=1){
  const tower=new THREE.Group();
  tower.position.set(towerPlot.x,0,towerPlot.z);
  const stone=material('#f3ecda',{map:masonry(),roughness:1}),trim=material('#d8c79d'),
@@ -446,9 +461,43 @@ export function makeTower(){
   banner.rotation.y=side*.44;
   meshAt(banner,new THREE.OctahedronGeometry(.10),gold,0,.17,.05,false).scale.set(1,1.3,.28);
  }
+ function addition(tier,name){
+  const group=new THREE.Group();
+  group.userData.minimumTowerLevel=tier;group.name=name;tower.add(group);
+  return group;
+ }
+ const lookout=addition(3,'watch-balcony');
+ cylinder(lookout,1.42,1.15,.21,base,0,4.14,0);
+ cylinder(lookout,1.45,1.44,.10,trim,0,4.28,0);
+ for(let i=0;i<12;i++){
+  const angle=tau*i/12;
+  const merlon=meshAt(lookout,new THREE.BoxGeometry(.28,.21,.18),stone,
+   Math.sin(angle)*1.31,4.42,Math.cos(angle)*1.31);
+  merlon.rotation.y=angle;
+ }
+ const turrets=addition(4,'flanking-turrets');
+ for(const side of [-1,1]){
+  const x=1.14*side,z=.37;
+  cylinder(turrets,.39,.10,.52,base,x,1.68,z);
+  cylinder(turrets,.37,.39,1.36,stone,x,2.61,z);
+  cylinder(turrets,.44,.40,.12,trim,x,3.33,z);
+  meshAt(turrets,new THREE.ConeGeometry(.50,.85,8),teal,x,3.81,z);
+  meshAt(turrets,new THREE.BoxGeometry(.11,.38,.06),iron,x,2.79,z+.35);
+  cylinder(turrets,.07,.055,.15,gold,x,4.24,z);
+ }
+ const crown=addition(5,'lantern-crown');
+ cylinder(crown,.77,.95,.15,gold,0,5.78,0);
+ for(let i=0;i<4;i++){
+  const angle=Math.PI/4+i*Math.PI/2,x=Math.sin(angle)*.79,z=Math.cos(angle)*.79;
+  cylinder(crown,.13,.21,.39,teal,x,5.90,z,6);
+  meshAt(crown,new THREE.OctahedronGeometry(.21),glow,x,6.24,z).scale.y=1.48;
+  meshAt(crown,new THREE.ConeGeometry(.14,.18,6),gold,x,6.53,z);
+ }
+ for(const detail of [lookout,turrets,crown])batchStaticParts(detail);
  for(let i=0;i<3;i++){
   meshAt(tower,new THREE.BoxGeometry(1.31-i*.13,.104,1.24-i*.23),i===0?base:trim,0,.06+i*.10,1.22);
  }
+ applyTowerLevel(tower,level);
  return tower;
 }
 
@@ -475,7 +524,7 @@ function woodGrain(seed,light,shadow){
 
 export function makeHouse(level=1,{cutaway=false}={}){
  const upgraded=level>=2,manor=level===3;
- const house=new THREE.Group(),positions=new Map();
+ const house=new THREE.Group(),positions=new Map(),cutawayBatches=new Map(),walls=new Map();
  const boards=woodGrain(851,'#dfb187','#83573d'),beams=woodGrain(817,'#bd8963','#64412a');
  const timber=material('#a0724c',{map:beams,bumpMap:beams,bumpScale:.018});
  const warm=material(upgraded?'#d3a16c':'#b79572',{map:boards,bumpMap:boards,bumpScale:.012});
@@ -493,13 +542,31 @@ export function makeHouse(level=1,{cutaway=false}={}){
  function add(finish,shape,x,y,z,angle=0){
   if(angle)shape.rotateZ(angle);
   shape.translate(x,y,z);
-  if(!positions.has(finish))positions.set(finish,[]);
-  positions.get(finish).push(shape);
+  let batch=positions;
+  if(cutaway){
+   // Retain the near wall as a removable group, including its window, trim
+   // and medals. Relative depths also preserve the plank layers on Canvas2D.
+   const section=y<=houseEntry.floor?'foundation':y<houseEntry.floor+.024?'floor':z<-.82?'back':'left';
+   const depth=section==='back'?z:section==='left'?x:y;
+   const order=section==='foundation'?-15+y:section==='floor'?-9:-5+Math.round(depth*50)/50;
+   const key=section+'/'+order;
+   let entry=cutawayBatches.get(key);
+   if(!entry){
+    let parent=walls.get(section);
+    if(!parent){parent=new THREE.Group();parent.name='room-'+section;walls.set(section,parent);house.add(parent);}
+    entry={parent,order,parts:new Map()};cutawayBatches.set(key,entry);
+   }
+   batch=entry.parts;
+  }
+  if(!batch.has(finish))batch.set(finish,[]);
+  batch.get(finish).push(shape);
  }
  const block=(finish,x,y,z,w,h,d,angle)=>add(finish,new THREE.BoxGeometry(w,h,d),x,y,z,angle);
  function finishWalls(){
-  for(const [finish,pieces] of positions){
-   meshAt(house,mergeGeometries(pieces),finish,0,0,0);
+  const batches=cutaway?cutawayBatches.values():[{parent:house,order:0,parts:positions}];
+  for(const {parent,order,parts} of batches)for(const [finish,pieces] of parts){
+   const panel=meshAt(parent,mergeGeometries(pieces),finish,0,0,0);
+   if(cutaway)panel.userData.roomOrder=order;
    pieces.forEach(piece=>piece.dispose());
   }
  }

@@ -247,7 +247,7 @@ function webGLRendererFor(canvas){
   gl.bindTexture(gl.TEXTURE_2D,projection);
   gl.bufferData(gl.ARRAY_BUFFER,quad,gl.DYNAMIC_DRAW);gl.drawArrays(gl.TRIANGLES,0,6);
  }
- function render(matrix,meshes,clear=[0,0,0,0]){
+ function render(matrix,meshes,clear=[0,0,0,0],floor,actor){
   if(disposed||gl.isContextLost())return false;
   gl.viewport(0,0,canvas.width,canvas.height);
   gl.clearColor(...clear);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -255,6 +255,11 @@ function webGLRendererFor(canvas){
   gl.bindTexture(gl.TEXTURE_2D,white);
   gl.uniform1i(hasPhoto,0);
   for(const mesh of meshes)geometryStream(mesh,'opaque');
+  if(actor){
+   gl.uniformMatrix4fv(perspective,false,actor.matrix);
+   geometryStream(actor.mesh,'opaque');
+   gl.uniformMatrix4fv(perspective,false,matrix);
+  }
   gl.uniform1i(hasPhoto,1);bind(pictureBuffer);
   for(const mesh of meshes)for(const item of mesh.pictures)if(item.color[3]>=.995)textureFace(item);
   gl.depthMask(false);gl.uniform1i(hasPhoto,0);
@@ -264,10 +269,11 @@ function webGLRendererFor(canvas){
   gl.depthMask(true);
   return true;
  }
- function dispose(){
+ function dispose(releaseContext=false){
   if(disposed)return;disposed=true;
   buffers.forEach(b=>gl.deleteBuffer(b));gl.deleteBuffer(pictureBuffer);
   textures.forEach(t=>gl.deleteTexture(t));gl.deleteTexture(white);gl.deleteProgram(program);
+  if(releaseContext&&!gl.isContextLost())gl.getExtension('WEBGL_lose_context')?.loseContext();
  }
  canvas.dataset.renderer='webgl';
  return {canvas,kind:'webgl',render,imageTexture,dispose};

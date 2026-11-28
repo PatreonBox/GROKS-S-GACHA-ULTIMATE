@@ -369,3 +369,12 @@ body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])) > footer{display:
  .kingdom-room-panel{grid-area:2/1;max-height:46dvh;padding:10px 13px;border-left:0;border-top:1px solid #436475}
  .room-heading{margin-bottom:7px}.kingdom-room-panel select{font-size:16px}
 }
+.room-camera{display:none}
+.kingdom-frame.inside-house>.room-camera{display:flex!important;grid-area:1/1;align-self:end;justify-self:center;position:relative;z-index:2;gap:2px;margin:8px;padding:3px;background:#142332e8;border:1px solid #4f716e;border-radius:9px}
+.room-camera button,.room-inspectors button{padding:5px 9px;min-height:32px}
+.room-inspectors{display:flex;gap:4px;margin:0 0 12px}
+.room-inspectors [aria-pressed=true],.room-camera [aria-pressed=true]{background:#275953;border-color:#7fdac4}
+.kingdom-room-panel [data-pane] p{margin:8px 0;font-size:.91rem}
+.kingdom-room-panel [data-mood]{accent-color:#f6a04f}
+.kingdom-frame.inside-house canvas{touch-action:none;cursor:grab}
+.kingdom-frame.inside-house canvas:active{cursor:grabbing}

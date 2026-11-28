@@ -1,11 +1,11 @@
 import {cubeCatalog,cubeRarities,equippedCube} from './cube-catalog.js';
 import {campaignStages} from './campaign.js';
-import {computerCost,computerHouse,computerPlan,residentBonus,visitorResident} from './kingdom-computer.js';
+import {computerCost,computerHouse,computerPlan,residentRage,residentBonus,visitorResident} from './kingdom-computer.js';
 import {createRoomControls,interiorChooser,interiorControls} from './kingdom-room.js';
 import {ico} from './icons.js';
 import {kingdomAmbience} from './kingdom-ambience.js';
 import {gameCommand,gameRead} from './game-client.js';
-import {buildingSpecs,buildingPlacementError,campfireKind,forgeMinimum,forgePlan,forgeStored,forgeUpgrade,forgeWelcomeMana,gemMine,gemMineBuildError,gemMinePlan,housePlan,houseStars,houseUpgrades,kingdomDaylight,kingdomStats,lastLandLevel,manaIcon,towerExperience,towerSkipCost,visitorSlots,visitorWelcomeMs} from './kingdom-rules.js';
+import {buildingSpecs,buildingPlacementError,buildingLimitError,campfireKind,campfirePlan,forgeLimit,towerRequirements,forgeMinimum,forgePlan,forgeStored,forgeUpgrade,forgeWelcomeMana,gemMine,gemMineBuildError,gemMinePlan,housePlan,houseStars,houseUpgrades,kingdomDaylight,kingdomStats,lastLandLevel,manaIcon,towerExperience,towerSkipCost,visitorSlots,visitorWelcomeMs} from './kingdom-rules.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from './kingdom-suggestions.js';
 import {spikeIcon,spikeKind,spikePlan} from './kingdom-defences.js';
 import {playerProgress} from './player-progression.js';
@@ -26,7 +26,7 @@ const spike='<img src="'+spikeIcon+'" alt="">';
 const upgradeControl='<div class="kingdom-upgrade"><strong data-upgrade-name></strong>'+
  '<div><button type="button" class="outline" data-upgrade-object></button><small data-upgrade-cost></small></div>'+
  '<small data-upgrade-status></small><progress aria-label="Upgrade progress" hidden></progress>'+
- '<button type="button" class="outline" data-skip-tower hidden></button></div>';
+ '<button type="button" class="outline" data-skip-construction hidden></button></div>';
 const cameraButton=(action,icon,label)=>'<button type="button" data-camera="'+action+'" title="'+label+'" aria-label="'+label+'">'+ico(icon)+'</button>';
 const skins=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
 const rarities=[...new Set(visitorSlots.map(slot=>slot.rarity))];
@@ -95,18 +95,22 @@ export function createKingdom(root,sound,applyWallet,rewards){
    plot.mana<computerCost.mana?'Need '+(computerCost.mana-plot.mana)+' more Mana.':''):kind===mineKind?gemMineBuildError(plot)||(plot.mana<gemMine.mana?
   'Need '+readout.format(gemMine.mana-plot.mana)+' more Mana.':''):
   kind===spikeKind&&plot.defenceLots>=plot.tower.defenceLimit?'All defence slots are claimed.':
-  kind==='house'&&plot.houseLots>=plot.tower.limit?'The tower’s house lots are full.':'';
+  kind==='house'&&plot.houseLots>=plot.tower.limit?'The tower’s house lots are full.':buildingLimitError(kind,plot);
  const placementError=spot=>buildingPlacementError(plot.buildings.filter(item=>item.id!==build?.id),spot,plot.land.bounds,plot.trees);
 
  function upgradeOption(id){
   if(id==='tower'){
    const {level,limit,next,construction}=plot.tower,required=towerPlayerLevel(level+1);
-   const unmet=playerProgress(wallet?.playerXp).level<required?'Lvl '+required+'+':
-    plot.houses.length<limit?'Fill all '+limit+' house lots to upgrade.':'';
+   const missing=towerRequirements(plot).filter(r=>r.value<r.goal).map(r=>r.goal>1?r.value+'/'+r.goal+' '+r.unit:r.unit);
+   const unmet=[...(playerProgress(wallet?.playerXp).level<required?['Lvl '+required+'+']:[]),...(missing.length?['Requires '+missing.join(', ')]:[])].join(' · ');
    return {level,construction,unmet,next:next&&{coins:next.price,mana:next.mana,buildMs:next.buildMs,benefit:next.limit+' house lots · +'+next.xp+' XP'}};
   }
   const building=buildingFor(id);
-  if(!building||building.kind===mineKind||building.kind===campfireKind)return null;
+  if(!building||building.kind===mineKind)return null;
+  if(building.kind===campfireKind){
+   const plan=campfirePlan(building,clock()),next=plan.next;
+   return {...plan,unmet:next?.towerLevel>plot.tower.level?'Requires Tower Level '+next.towerLevel+'.':'',next:next&&{...next,benefit:['Stone firepit','Iron brazier','Beacon hearth'][plan.level-1]}};
+  }
   if(building.kind===spikeKind){
    const plan=spikePlan(building,clock()),{next}=plan;
    return {...plan,unmet:next?.towerLevel>plot.tower.level?'Requires Tower Level '+next.towerLevel+'.':'',
@@ -137,7 +141,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const cost=row.querySelector('[data-upgrade-cost]');
   cost.hidden=button.hidden;
   meter.hidden=!construction;
-  const skip=row.querySelector('[data-skip-tower]'),costGems=id==='tower'?towerSkipCost(construction,clock()):0;
+  const skip=row.querySelector('[data-skip-construction]'),costGems=towerSkipCost(construction,clock());
+  skip.dataset.object=id;
   skip.hidden=!costGems;
   if(costGems){
    skip.disabled=upgrading||wallet.gems<costGems;
@@ -195,7 +200,9 @@ export function createKingdom(root,sound,applyWallet,rewards){
    ui.collectGems.textContent='Collect '+plan.stored+(plan.stored===1?' gem':' gems');ui.collectGems.dataset.building=building.id;
   }else{
    unit='Star';progress=pc.progress;remaining=pc.remainingMs;
-   ui.description.textContent=readout.format(pc.rate)+(pc.rate===1?' Star/min':' Stars/min')+' · +'+pc.bonus+'% skill · '+readout.format(pc.stored)+' ready';
+   const machine=home.computer,condition=machine.broken?'Damaged · ':machine.construction?'Building · ':'';
+   ui.description.textContent=condition+readout.format(pc.rate)+(pc.rate===1?' Star/min':' Stars/min')+' · '+readout.format(pc.stored)+' ready'+
+    (home.resident?' · Rage '+residentRage(wallet,home.resident,clock())+'%':'');
    ui.collectStars.disabled=!pc.stored;ui.collectStars.textContent='Collect '+readout.format(pc.stored)+(pc.stored===1?' Star':' Stars');
   }
   bar.max=1;bar.value=progress;bar.setAttribute('aria-label',forge?'Mana storage':'Next '+unit+' progress');
@@ -239,7 +246,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    defence?option.damage+' damage per shot':fire?'Lights the grass at night and gives awake cubes a spot to warm up.':
    building?'':guest?'Moved in after your Kingdom reached '+guest.stars+' rating.':tree?'Clear this tree to free up its space.':'Your equipped cube roams the grounds.';
   const computer=pcHome(selection),assigned=housingForResident(selection),context=house?building:computer||assigned;
-  ui.editRoom.hidden=!context;ui.playResident.hidden=!(assigned?.computer||computer?.resident);
+  ui.editRoom.hidden=!context;ui.playResident.hidden=!(assigned?.computer||computer?.resident)||Boolean(context?.computer?.broken||context?.computer?.construction);
   if(context){
    ui.editRoom.dataset.house=context.id;
    ui.editRoom.textContent='Edit GD House '+(plot.houses.indexOf(context)+1);
@@ -248,13 +255,17 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }
   if(computer)ui.state.textContent='Level '+computer.computer.level+' · '+(computer.computer.level===1?'30':'60')+' Hz';
   if(guest)ui.description.textContent=(guest.feat?guest.feat+' · ':'')+'+'+guest.skillBonus+'% Star production';
+  if(guest||selection==='cube'){
+   const resident=guest?visitorResident(guest.slot):'cube',rage=residentRage(wallet,resident,clock());
+   ui.description.textContent+=(ui.description.textContent?' · ':'')+'Rage '+rage+'%'+(assigned?' · GD House '+(plot.houses.indexOf(assigned)+1):' · No home assigned');
+  }
   if(house)ui.description.textContent='+'+readout.format(houseStars(option.level))+' Kingdom rating · '+(building.computer?'Computer installed':'No computer');
   ui.spikeTest.hidden=!defence;
   ui.fire.disabled=!world;
   ui.shotResult.textContent=defence&&shotReport?.id===building.id?shotReport.message:'';
   ui.changeCube.hidden=selection!=='cube';
   ui.manage.hidden=!building;
-  ui.move.disabled=ui.store.disabled=Boolean(build||editing||building?.upgrade||!world);
+  ui.move.disabled=ui.store.disabled=Boolean(build||editing||building?.upgrade||building?.computer?.construction||!world);
   ui.clearTree.hidden=!tree;
   if(tree){
    ui.clearTree.disabled=Boolean(build||editing||plot.mana<tree.price);
@@ -324,6 +335,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.welcomeName.textContent=arrived.length===1?arrived[0].name+' moved in':arrived.length+' visitors moved in';
   ui.welcome.hidden=false;
   welcomeUntil=clock()+7200;
+  sound.playGameReady('gdUnlocked',{level:.62},()=>Boolean(ui)&&!document.hidden);
  }
  function paintPlot(){
   if(!ui)return;
@@ -358,6 +370,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const wasBuilding=Boolean(plot.tower.construction);
   const pendingHouses=new Set(plot.houses.filter(house=>house.upgrade).map(house=>house.id));
   const pendingForges=new Set(plot.forges.filter(forge=>forge.upgrade).map(forge=>forge.id));
+  const pendingFurniture=new Set(plot.houses.filter(h=>h.computer?.construction).map(h=>h.id));
+  const pendingFires=new Set(plot.campfires.filter(f=>f.upgrade).map(f=>f.id));
   const pendingDefences=new Set(plot.defences.filter(defence=>defence.upgrade).map(defence=>defence.id));
   const serverTime=next.kingdomClock??next.towerClock;
   if(Number.isFinite(serverTime))clockOffset=serverTime-Date.now();
@@ -384,19 +398,21 @@ export function createKingdom(root,sound,applyWallet,rewards){
    const ready=plot.houses.filter(house=>!house.upgrade&&pendingHouses.has(house.id));
    if(wasBuilding&&!plot.tower.construction){
     announce('Tower Level '+plot.tower.level+' complete · '+plot.tower.limit+' house lots · +'+towerExperience(plot.tower.level)+' XP');
-    sound.play('bonus',{level:.61});
+    sound.playGameReady('gdUnlocked',{level:.61},()=>Boolean(ui)&&!document.hidden);
    }else if(plot.forges.some(forge=>forge.level===2&&pendingForges.has(forge.id))){
     announce('Mana Forge Level 2 complete · 3 Mana/s');
-    sound.play('bonus',{level:.61});
+    sound.playGameReady('gdUnlocked',{level:.61},()=>Boolean(ui)&&!document.hidden);
    }else if(plot.defences.some(defence=>!defence.upgrade&&pendingDefences.has(defence.id))){
     const completed=plot.defences.filter(defence=>!defence.upgrade&&pendingDefences.has(defence.id));
     const plan=spikePlan(completed[0]);
     announce(completed.length===1?'Spike Shooter Level '+plan.level+' complete · '+plan.damage+' damage':completed.length+' defence upgrades complete');
-    sound.play('bonus',{level:.61});
+    sound.playGameReady('gdUnlocked',{level:.61},()=>Boolean(ui)&&!document.hidden);
+   }else if(plot.houses.some(h=>pendingFurniture.has(h.id)&&h.computer&&!h.computer.construction)||plot.campfires.some(f=>pendingFires.has(f.id)&&!f.upgrade)){
+    sound.playGameReady('gdUnlocked',{level:.61},()=>Boolean(ui)&&!document.hidden);
    }else if(ready.length){
     const level=ready[0].level;
     announce(ready.length===1?'GD House Level '+level+' complete · +'+readout.format(houseUpgrades[level-2].stars)+' Kingdom rating':ready.length+' house upgrades complete');
-    sound.play('bonus',{level:.61});
+    sound.playGameReady('gdUnlocked',{level:.61},()=>Boolean(ui)&&!document.hidden);
    }
   }
   paintStats();paintBuild();room?.refresh();
@@ -445,9 +461,15 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(ui.buildDialog.open)paintBuildMenu();
   const now=clock(),tower=wallet?.kingdom?.towerConstruction;
   if(!ui.welcome.hidden&&welcomeUntil<=now)ui.welcome.hidden=true;
+  for(const [id,pending] of retryEntry){
+   if(pending.at>Date.now())continue;
+   retryEntry.delete(id);
+   if(world?.insideHouse(id)===pending.resident)claimOnEntry(id,pending.resident,pending.delay);
+  }
   if(visitorDue&&visitorDue<=now&&!refreshingVisitors)refreshVisitors();
   if(finishing||Date.now()<finishRetryAt)return;
-  if(tower?.endsAt<=now||plot.buildings.some(item=>item.upgrade?.endsAt<=now))finishConstruction();
+  if(tower?.endsAt<=now||plot.buildings.some(item=>item.upgrade?.endsAt<=now||item.computer?.construction?.endsAt<=now||
+   item.computer?.playing&&item.computer.since+item.computer.safeMs<=now))finishConstruction();
  }
  async function collectProduction(kind,id,point){
   const forge=kind==='forge',currency=forge?'mana':'gems';
@@ -463,11 +485,24 @@ export function createKingdom(root,sound,applyWallet,rewards){
    applyWallet(next);
    if(epoch!==visit)return;
    world?.popProduction(id);
-   if(forge)sound.coinReward(false,[0]);
    rewards.launch(ticket,origin);
    ui.kingdomNotice.textContent='+'+readout.format(result.earned)+' '+(forge?'mana':result.earned===1?'gem':'gems')+' collected';
   }catch(error){if(epoch===visit)ui.kingdomNotice.textContent=error.message}
   finally{collecting.delete(id);if(epoch===visit)paintProduction()}
+ }
+ const entering=new Set(),retryEntry=new Map();
+ async function claimOnEntry(houseId,resident,delay=1500){
+  const epoch=visit,house=plot.houses.find(h=>h.id===houseId);
+  if(!house||house.resident||entering.has(houseId)||plot.houses.some(h=>h.resident===resident))return;
+  entering.add(houseId);
+  try{
+   const {wallet:next}=await gameCommand('kingdom.house.enter',{houseId,resident});
+   if(epoch===visit)applyWallet(next);
+  }catch(error){if(epoch===visit){
+   retryEntry.set(houseId,{resident,at:Date.now()+delay,delay:Math.min(delay*2,30_000)});
+   announce(error.message);
+  }}
+  finally{entering.delete(houseId);}
  }
  function reset(){
   world?.reset();
@@ -542,7 +577,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }else{
    buildingKind=kind;
    if(kind==='forge'||kind===mineKind||kind==='computer')productionKind=kind;
-   if(ui.buildDialog.open&&task.ready)startBuild();
+   if(kind==='computer'&&task.ready){if(ui.buildDialog.open)ui.buildDialog.close();room.choose();}
+   else if(ui.buildDialog.open&&task.ready)startBuild();
    else openBuildMenu();
   }
  }
@@ -551,12 +587,12 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const defence=buildingKind===spikeKind,limit=defence?tower.defenceLimit:tower.limit,lots=defence?defenceLots:houseLots;
   const pc=buildingKind==='computer';
   const free=Math.max(0,limit-lots),full=free===0;
-  const storedKey=storage.map(item=>item.id).join('/');
+  const storedKey=[tower.level,forges.length,plot.campfires.length,...storage.map(item=>item.id)].join('/');
   if(ui.storage.dataset.items!==storedKey){
    ui.storage.dataset.items=storedKey;
    ui.storage.innerHTML=storage.length?storage.map(item=>{
     const spec=buildingSpecs[item.kind||'house'];
-    return '<div><span>'+spec.name+([mineKind,campfireKind].includes(item.kind)?'':' · Level '+(item.level||1))+'</span><button type="button" class="outline" data-restore-building="'+escape(item.id)+'">Place back</button></div>';
+    return '<div><span>'+spec.name+([mineKind,campfireKind].includes(item.kind)?'':' · Level '+(item.level||1))+'</span><button type="button" class="outline" data-restore-building="'+escape(item.id)+'" '+(buildingLimitError(item.kind,plot,true)?'disabled title="'+escape(buildingLimitError(item.kind,plot,true))+'"':'')+'>Place back</button></div>';
    }).join(''):'<p>No stored buildings.</p>';
   }
   ui.storageCount.textContent=storage.length?' ('+storage.length+')':'';
@@ -569,6 +605,12 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.lotMeter.max=limit;
   ui.lotMeter.value=lots;
   ui.lotMeter.setAttribute('aria-label',defence?'Defence slots claimed':'House lots claimed');
+  if(buildingKind==='forge'||buildingKind===campfireKind){
+   const forge=buildingKind==='forge',cap=forge?forgeLimit(tower.level):tower.level>=2?1:0,used=forge?forges.length:plot.campfires.length;
+   ui.capacityLabel.textContent=forge?'Mana Forge slots':'Campfire slots';ui.limits.textContent=used+' / '+cap+' placed';
+   ui.available.textContent=Math.max(0,cap-used)+' available';ui.lotMeter.max=Math.max(1,cap);ui.lotMeter.value=used;
+   ui.lotMeter.setAttribute('aria-label',ui.capacityLabel.textContent);
+  }
   if(pc){
    const used=Number(Boolean(computerHouse(wallet)));ui.capacityLabel.textContent='Computer slots';
    ui.limits.textContent=used+' / 1 claimed';ui.available.textContent=(1-used)+' available';ui.lotMeter.max=1;ui.lotMeter.value=used;
@@ -587,7 +629,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.followTrail.disabled=trailBusy;
   ui.drawTrail.disabled=!world||trailBusy;
   ui.resetTrail.disabled=!plot.trail.custom||trailBusy;
-  const rows=[['tower',towerName],...(house?houses:defence?defences:forges).map((item,i)=>[buildingKey(item),nameOf(buildingKey(item))+' '+(i+1)])];
+  const rows=[['tower',towerName],...(house?houses:defence?defences:buildingKind===campfireKind?plot.campfires:buildingKind==='forge'?forges:[]).map((item,i)=>[buildingKey(item),nameOf(buildingKey(item))+' '+(i+1)])];
   const key=rows.map(([id])=>id).join('/');
   if(ui.buildUpgrades.dataset.rows!==key){
    ui.buildUpgrades.dataset.rows=key;
@@ -600,7 +642,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.landPrice.textContent=land.nextPrice===null?'':readout.format(land.nextPrice);
   let hint='';
   if(house&&full)hint=houses.length<tower.limit?'Place your stored houses to unlock the next tower upgrade.':!tower.next?'All house lots are full.':playerLevel<required?'Reach player Level '+required+' to expand your tower.':
-   'Upgrade your tower to open '+(tower.next.limit-tower.limit)+' more house lots.';
+   tower.next.limit===tower.limit?'Complete the Tower Level 2 buildings to advance.':'Upgrade your tower to open '+(tower.next.limit-tower.limit)+' more house lots.';
   else if(problem)hint=problem;
   else if(short)hint='Need '+readout.format(short)+' more coins.';
   else if(!world)hint='The 3D plot is unavailable.';
@@ -722,7 +764,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  function startBuild(mode='new',item){
   const kind=item?(item.kind||'house'):buildingKind,cost=mode==='new'?priceFor(kind):0;
   if(!wallet||!world||placing||upgrading||expanding||editing||item?.upgrade||
-    mode==='new'&&purchaseProblem(kind)||coins<cost)return;
+    item?.computer?.construction||mode==='restore'&&buildingLimitError(kind,plot,true)||mode==='new'&&purchaseProblem(kind)||coins<cost)return;
   if(ui.buildDialog.open)ui.buildDialog.close();
   shotReport=null;
   build={mode,id:item?.id,kind,cost,rotation:item?.rotation||0,point:null,spot:null,locked:false,error:''};
@@ -776,16 +818,19 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }catch(error){if(epoch===visit)announce(error.message);}
   finally{if(epoch===visit){editing=false;paintSelection();}}
  }
- async function finishTowerNow(){
+ async function finishBuildingNow(id){
   if(upgrading||!wallet)return;
-  const maxGems=towerSkipCost(plot.tower.construction,clock());
+  const site=upgradeOption(id)?.construction,maxGems=towerSkipCost(site,clock());
   if(!maxGems||wallet.gems<maxGems)return;
+  const item=buildingFor(id),args={maxGems,startedAt:site.startedAt};
+  if(item)Object.assign(args,{kind:item.kind||'house',id:item.id});
   upgrading=true;paintBuild();
   const epoch=visit;
   try{
-   const {wallet:next,result}=await gameCommand('kingdom.tower.skip',{maxGems});
+   const {wallet:next,result}=await gameCommand(id==='tower'?'kingdom.tower.skip':'kingdom.building.skip',args);
    applyWallet(next);
-   if(epoch===visit)announce('Tower Level '+result.tower.level+' complete'+(result.tower.gems?' · '+result.tower.gems+' gems used':''));
+   const gems=result.tower?.gems??result.gems??0;
+   if(epoch===visit)announce(nameOf(id)+' complete'+(gems?' · '+gems+(gems===1?' gem used':' gems used'):''));
   }catch(error){if(epoch===visit)announce(error.message);}
   finally{if(epoch===visit){upgrading=false;paintBuild();}}
  }
@@ -953,7 +998,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    visitors:get('[data-visitor-index]'),guestDialog:get('.kingdom-guest-index'),guestRows:get('[data-visitor-rows]'),
    discoveries:get('[data-visitor-count]'),indexProgress:get('.visitor-collection progress')
   };
-  room=createRoomControls(root,{getState:()=>({wallet,plot,world,cube,visitors}),applyWallet,select,clock});
+  room=createRoomControls(root,{getState:()=>({wallet,plot,world,cube,visitors}),applyWallet,select,clock,sound});
   ui.objects.addEventListener('change',()=>select(ui.objects.value));
   ambience=kingdomAmbience(sound,ui.canvas);ui.ambient.setAttribute('aria-pressed',String(!ambience.muted));
   const buildMenu=ui.buildDialog;
@@ -970,7 +1015,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    const button=event.target.closest('button');
    if(!button)return;
    if(room.handleClick(button))return;
-   if(button===ui.editRoom){room.open(button.dataset.house);return;}
+   if(button===ui.editRoom){room.open(button.dataset.house,false,null,pcHome(selection)?'computer':housingForResident(selection)?'resident':'house');return;}
    if(button===ui.playResident){const house=plot.houses.find(h=>h.id===button.dataset.house);if(house){room.open(house.id);room.togglePlay(house);}return;}
    if(button===ui.collectStars){const house=pcHome(selection);if(house){room.open(house.id);room.handleClick(root.querySelector('[data-furnish="collect"]'));}return;}
    if(button===ui.detailToggle){inspectOpen=!inspectOpen;paintPicker();return}
@@ -998,7 +1043,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    if(button===ui.move){startBuild('move',buildingFor(selection));return}
    if(button===ui.store){editPlot('kingdom.building.store',buildingFor(selection)?.id);return}
    if(button===ui.clearTree){editPlot('kingdom.tree.clear',treeFor(selection)?.id);return}
-   if(button.hasAttribute('data-skip-tower')){finishTowerNow();return}
+   if(button.hasAttribute('data-skip-construction')){finishBuildingNow(button.dataset.object);return}
    if(button===ui.ambient){
     ambience.toggle();ui.ambient.setAttribute('aria-pressed',String(!ambience.muted));
     ui.ambient.innerHTML=ico(ambience.muted?'muted':'volume');return;
@@ -1040,7 +1085,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(!on){
    if(root.hidden)return;
    root.hidden=true;visit++;
-   room?.dispose();room=null;keys?.abort();ambience?.dispose();ambience=null;editing=false;world?.dispose();world=null;ui=null;build=null;
+   room?.dispose();room=null;retryEntry.clear();keys?.abort();ambience?.dispose();ambience=null;editing=false;world?.dispose();world=null;ui=null;build=null;
    placing=false;upgrading=false;expanding=false;inspectOpen=false;shotReport=null;trailDraft=null;trailBusy=false;root.replaceChildren();
    return;
   }
@@ -1052,8 +1097,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    const {createKingdomWorld}=await import('/kingdom-world.js');
    if(visit!==route)return;
    world=createKingdomWorld({canvas:ui.canvas,cube,clock,onSelect:select,onHover:hover,onPlot:pointOnPlot,onTrailDraw,
-    onCollect:collectProduction,onSpikeHit:recordSpikeHit,onInteriorPick:hit=>room?.pick(hit)});
-   world.select(selection);paintPlot();paintBuild();
+    onCollect:collectProduction,onSpikeHit:recordSpikeHit,onInteriorPick:hit=>room?.pick(hit),onHouseEntry:claimOnEntry,onOccupancy:()=>room?.refresh()});
+   world.select(selection);paintPlot();paintBuild();room?.refresh();
    ui.loading.hidden=true;
   }catch(error){
    if(visit!==route)return;

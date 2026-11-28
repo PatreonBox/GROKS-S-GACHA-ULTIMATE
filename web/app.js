@@ -45,15 +45,8 @@ const archiveRefresh=rankingRefresh(180_000,()=>gameVisible()&&isArchiveBoard(),
 const demonRefresh=rankingRefresh(180_000,()=>gameVisible()&&isExtremeList(),refreshDemons);
 const sound=createPackSound();
 sound.listenForUiTaps();
-const rewardFlights=createRewardFlight(sound);
-let keyBalance=null,keyRevision=-1,achievementKeys=0;
-document.addEventListener('gdlb-key-balance',({detail:{keys,paid,revision}})=>{
- if(keys===null){keyBalance=null;keyRevision=-1;achievementKeys=0;return}
- if(revision<keyRevision)return;
- if(keyBalance!==null&&keys-keyBalance>Math.max(0,paid-achievementKeys))sound.keyReward();
- keyBalance=keys;keyRevision=revision;achievementKeys=paid;
-});
-document.addEventListener('gdlb-discord-key-bonus',()=>sound.keyReward());
+const rewardFlights=createRewardFlight();
+document.addEventListener('gdlb-reward-claimed',event=>sound.claimReward(event.detail));
 function paintSoundControl(){
  const button=$('gameSound');if(!button)return;
  button.innerHTML=ico(sound.enabled?'volume':'muted');

@@ -1,4 +1,4 @@
-import {stopHouseSession,computerCost,computerUpgradeCost} from './kingdom-computer.js';
+import {settleHouseComputers,stopHouseSession,computerCost,computerUpgradeCost} from './kingdom-computer.js';
 export {visitorSlots} from './kingdom-visitor-catalog.js';
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
 import {achievementBoost} from './achievement-boosts.js';
@@ -24,6 +24,34 @@ export const towerUpgradeMana=500;
 const forgeTiers=[{rate:1,capacity:300},{rate:3,capacity:1200}];
 export const manaIcon='/assets/kingdom/mana-orbs.webp';
 export const campfireKind='campfire',campfirePrice=2500;
+export const campfireUpgrades=[
+ {towerLevel:2,coins:5000,mana:35,buildMs:10_000},
+ {towerLevel:3,coins:12_500,mana:80,buildMs:20_000},
+ {towerLevel:4,coins:25_000,mana:160,buildMs:40_000}
+];
+export const forgeLimit=level=>level>=4?2:1;
+export function campfirePlan(fire,now=Date.now()){
+ const site=fire.upgrade,construction=site&&site.endsAt>now?site:null;
+ const level=site&&!construction?site.level:fire.level||1;
+ return {level,construction,next:campfireUpgrades[level-1]??null};
+}
+export function buildingLimitError(kind,plot,restore=false){
+ if(kind!=='forge'&&kind!==campfireKind)return '';
+ if(kind===campfireKind&&plot.tower.level<2)return 'Campfire requires Tower Level 2.';
+ const placed=kind==='forge'?plot.forges.length:plot.campfires.length,limit=kind==='forge'?forgeLimit(plot.tower.level):1;
+ if(placed>=limit)return kind==='forge'&&limit===1?'One Mana Forge allowed. A second unlocks at Tower Level 4.':
+  kind==='forge'?'Both Mana Forge slots are filled.':'Your Kingdom already has its Campfire.';
+ if(!restore&&plot.storage.filter(item=>item.kind===kind).length+placed>=limit)return 'Place your stored '+(kind==='forge'?'Mana Forge':'Campfire')+' back on the plot.';
+ return '';
+}
+export function towerRequirements({tower,houses,forges,gemMines,defences,campfires}){
+ const requirements=[{value:houses.length,goal:tower.limit,unit:'GD Houses'}];
+ if(tower.level===2)requirements.push(...[
+  [forges.length,'Mana Forge'],[gemMines.length,'Gem Mine'],[defences.length,'Spike Shooter'],
+  [campfires.length,'Campfire'],[houses.filter(h=>h.computer&&!h.computer.construction).length,'finished Computer']
+ ].map(([value,unit])=>({value,goal:1,unit})));
+ return requirements;
+}
 export const buildingSpecs={
  house:{name:'GD House',size:houseSize,height:houseHeight,price:housePrice},
  forge:{name:'The Mana Forge',size:{width:3.20,depth:3.20},height:3.65,price:forgePrice},
@@ -68,11 +96,11 @@ export function updateKingdomTrail(wallet,{points,follow}){
  kingdom.trail=trail;
  return {trail:kingdomTrail(wallet)};
 }
-export const maxTowerLevel=3;
+export const maxTowerLevel=4;
 const towerTiers=[
  {limit:2,price:0,hp:1000},{limit:3,price:coinPrice(50_000),mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
- {limit:4,price:coinPrice(100_000),mana:2_500,buildMs:180_000,xp:600,hp:2200},
- {limit:13,price:coinPrice(1_000_000),mana:towerUpgradeMana,hp:3000},{limit:17,price:coinPrice(7_500_000),mana:towerUpgradeMana,hp:4000}
+ {limit:3,price:coinPrice(100_000),mana:2_500,buildMs:180_000,xp:600,hp:2200},
+ {limit:4,price:coinPrice(1_000_000),mana:5000,buildMs:300_000,xp:1000,hp:3000},{limit:17,price:coinPrice(7_500_000),mana:towerUpgradeMana,hp:4000}
 ];
 export const towerExperience=level=>towerTiers[level-1]?.xp||0;
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
@@ -154,7 +182,7 @@ export function kingdomStats(wallet,now=Date.now()){
   const upgrade=kind===spikeKind?spikeInvestment(building):building.upgradeCoinInvestment??(
    (kind==='forge'&&(building.level===2||building.upgrade)?previousCoinPrice(forgeUpgrade.coins):0)+
    (kind==='house'&&(building.level===3||building.upgrade?.level===3)?previousCoinPrice(houseUpgrades[1].coins):0));
-  const furniture=building.computer?computerCost.coins+(building.computer.level===2?computerUpgradeCost.coins:0):0;
+  const furniture=building.computer?computerCost.coins+((building.computer.level===2||building.computer.construction?.level===2)?computerUpgradeCost.coins:0):0;
   return sum+base+upgrade+furniture;
  },0)+towerInvestment(wallet?.kingdom,tower.construction?.level??tower.level)+landInvestment(wallet?.kingdom,land.level);
  return {houses,forges,gemMines,defences,campfires,storage,buildings,tower,land,stars,value,houseLots,defenceLots,removedTrees,trail:kingdomTrail(wallet),
@@ -205,15 +233,29 @@ export function settleForgeUpgrades(wallet,now){
 }
 export function settleKingdomConstruction(wallet,now){
  const tower=settleTower(wallet,now),houses=settleHouseUpgrades(wallet,now),forges=settleForgeUpgrades(wallet,now);
- const defences=[];
- for(const defence of kingdomDefences(wallet)){
+ const defences=[],campfires=[];
+ for(const defence of [...kingdomDefences(wallet),...kingdomCampfires(wallet)]){
   if(!defence.upgrade||now<defence.upgrade.endsAt)continue;
   defence.level=defence.upgrade.level;
   delete defence.upgrade;
-  defences.push(defence.id);
+  (defence.kind===campfireKind?campfires:defences).push(defence.id);
  }
  if(tower)awardPlayerXp(wallet,towerExperience(tower.level));
- return {tower,houses,forges,defences};
+ return {tower,houses,forges,defences,campfires,...settleKingdomHouseLife(wallet,now)};
+}
+export function settleKingdomHouseLife(wallet,now){
+ const computers=settleHouseComputers(wallet,now),stored=[];
+ // Retain investments and bank production if an older layout exceeds the new placed limits.
+ if(wallet.kingdom){
+  const level=towerPlan(wallet,now).level;
+  for(const [records,limit] of [[kingdomForges(wallet),forgeLimit(level)],[kingdomCampfires(wallet),level>=2?1:0]]){
+   for(const building of records.slice(limit)){
+    if(building.upgrade)continue;
+    storeKingdomBuilding(wallet,building.id,now);stored.push(building.id);
+   }
+  }
+ }
+ return {computers,stored};
 }
 
 export const towerSkipCost=(site,now=Date.now())=>site?Math.max(0,Math.ceil((site.endsAt-now)/15_000)):0;
@@ -227,6 +269,19 @@ export function skipTower(wallet,maxGems,now){
  return {...settleTower(wallet,now),gems:cost};
 }
 
+export function skipBuilding(wallet,{id,kind,startedAt,maxGems},now){
+ const plot=kingdomStats(wallet,now),building=plot.buildings.find(item=>item.id===id);
+ if(!building)throw Error('Choose a building on your plot.');
+ const site=kind==='computer'?building.computer?.construction:(building.kind||'house')===kind?building.upgrade:null;
+ if(!site)return {id,gems:0,completed:true};
+ if(site.startedAt!==startedAt)throw Error('Construction changed. Review the new timer.');
+ const cost=towerSkipCost(site,now);
+ if(!Number.isSafeInteger(maxGems)||maxGems<cost)throw Error('Check the new skip price.');
+ if(gemTenths(wallet.gems)<cost*10)throw Error('You need '+cost+' gems to finish construction.');
+ wallet.gems=(gemTenths(wallet.gems)-cost*10)/10;
+ site.endsAt=now;settleKingdomConstruction(wallet,now);
+ return {id,gems:cost,completed:true};
+}
 function payUpgrade(wallet,mana,coins=0){
  if(wallet.coins<coins)throw Error('You need '+coins.toLocaleString('en-US')+' coins to upgrade.');
  const balance=wallet.kingdom?.mana||0;
@@ -241,6 +296,8 @@ export function upgradeTower(wallet,expectedLevel,now){
  if(level!==expectedLevel)throw Error('Your tower level changed. Check its new upgrade.');
  if(!next)throw Error('Your tower is at its highest level.');
  if(houses.length<limit)throw Error('Fill the current house lots before upgrading.');
+ const missing=towerRequirements(kingdomStats(wallet,now)).filter(item=>item.value<item.goal);
+ if(missing.length)throw Error('Place each Tower Level 2 building first. Still needed: '+missing.map(item=>item.unit).join(', ')+'.');
  payUpgrade(wallet,next.mana,next.price);
  wallet.kingdom.towerInvestment=towerInvestment(wallet.kingdom,level)+next.price;
  if(next.buildMs){
@@ -256,7 +313,7 @@ export function upgradeHouse(wallet,id,expectedLevel,now){
  const house=kingdomHouses(wallet).find(item=>item.id===id);
  if(!house)throw Error('Choose one of your houses.');
  const {level,construction,next}=housePlan(house,now);
- if(construction)throw Error('This house is already under construction.');
+ if(construction||house.computer?.construction)throw Error('Finish construction in this house first.');
  if(!next)throw Error('This house is at its highest level.');
  if(level!==expectedLevel)throw Error('Your house level changed. Check its new upgrade.');
  if(next.towerLevel&&towerPlan(wallet,now).level<next.towerLevel)throw Error('Requires Tower Level '+next.towerLevel+'.');
@@ -323,15 +380,30 @@ export function buildHouse(wallet,args,now=Date.now()){
  return house;
 }
 export function buildForge(wallet,args,now){
- const plot=kingdomStats(wallet,now),forge=buildAt(wallet,plot,args,'forge',forgePrice);
+ const plot=kingdomStats(wallet,now),problem=buildingLimitError('forge',plot);
+ if(problem)throw Error(problem);
+ const forge=buildAt(wallet,plot,args,'forge',forgePrice);
  forge.collectedAt=now;
  wallet.kingdom={...wallet.kingdom,forges:[...plot.forges,forge],mana:plot.mana+forgeWelcomeMana};
  return forge;
 }
 export function buildCampfire(wallet,args,now){
- const plot=kingdomStats(wallet,now),building=buildAt(wallet,plot,args,campfireKind,campfirePrice);
+ const plot=kingdomStats(wallet,now),problem=buildingLimitError(campfireKind,plot);
+ if(problem)throw Error(problem);
+ const building={...buildAt(wallet,plot,args,campfireKind,campfirePrice),level:1};
  wallet.kingdom={...wallet.kingdom,campfires:[...plot.campfires,building]};
  return building;
+}
+export function upgradeCampfire(wallet,id,expectedLevel,now){
+ const fire=kingdomCampfires(wallet).find(item=>item.id===id);
+ if(!fire)throw Error('Choose the Campfire on your plot.');
+ const {level,next,construction}=campfirePlan(fire,now);
+ if(construction||level!==expectedLevel||!next)throw Error('Check the current Campfire level.');
+ if(towerPlan(wallet,now).level<next.towerLevel)throw Error('Requires Tower Level '+next.towerLevel+'.');
+ payUpgrade(wallet,next.mana,next.coins);
+ fire.upgradeCoinInvestment=(fire.upgradeCoinInvestment||0)+next.coins;
+ fire.upgrade={level:level+1,startedAt:now,endsAt:now+next.buildMs};
+ return {id,level:level+1,construction:fire.upgrade};
 }
 export function buildSpikeShooter(wallet,args,now){
  const plot=kingdomStats(wallet,now);
@@ -431,9 +503,9 @@ function buildingRecords(kingdom,kind){
 export function storeKingdomBuilding(wallet,id,now){
  const plot=kingdomStats(wallet,now),item=plot.buildings.find(building=>building.id===id);
  if(!item)throw Error('Choose a building on your plot.');
- if(item.upgrade)throw Error('Finish construction before storing this building.');
+ if(item.upgrade||item.computer?.construction)throw Error('Finish construction before storing this building.');
  const kind=item.kind||'house';
- if(kind==='house'){stopHouseSession(item,now);delete item.resident;}
+ if(kind==='house'){stopHouseSession(item,now,wallet);delete item.resident;}
  const stored={...item,kind};
  if(kind==='forge')Object.assign(stored,{storedMana:forgeStored(item,now),collectedAt:now});
  if(kind==='gem-mine'){
@@ -451,8 +523,9 @@ export function placeKingdomBuilding(wallet,args,now){
  if(!['move','restore'].includes(mode))throw Error('Choose how to place your building.');
  const source=mode==='move'?plot.buildings:plot.storage,item=source.find(building=>building.id===id);
  if(!item)throw Error('This building is no longer available.');
- if(item.upgrade)throw Error('Finish construction before moving this building.');
+ if(item.upgrade||item.computer?.construction)throw Error('Finish construction before moving this building.');
  const kind=item.kind||'house',spot={x:Math.round(x*100)/100,z:Math.round(z*100)/100,rotation,kind};
+ if(mode==='restore'){const blocked=buildingLimitError(kind,plot,true);if(blocked)throw Error(blocked);}
  if(typeof x!=='number'||typeof z!=='number')throw Error('Choose a position on your plot.');
  const problem=buildingPlacementError(plot.buildings.filter(entry=>entry.id!==id),spot,plot.land.bounds,plot.trees);
  if(problem)throw Error(problem);

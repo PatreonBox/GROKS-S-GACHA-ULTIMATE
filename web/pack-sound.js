@@ -23,12 +23,17 @@ export function revealSpacing(tier,rank,odds,id){
 const asset='/assets/audio/arcade-v3.mp3';
 const gameSamples={gdPlay:'/assets/audio/gd-play.mp3',gdDeath:'/assets/audio/gd-death.mp3?v=2',gdAchievement:'/assets/audio/gd-achievement.mp3',arcade:'/assets/audio/gd-minigames.mp3',mint:'/assets/audio/gd-mint.mp3',ui:'/assets/audio/soft-ui-tap.mp3',
  coin:'/assets/audio/mine-coin.mp3',coinDrop:'/assets/audio/coin-drop.mp3',
- keys:'/reveal-media/demon-key-pickup.mp3',
+ keys:'/reveal-media/demon-key-pickup.mp3',gdBonus:'/reward-media/bonus-sound-effect.mp3',
+ gdQuit:'/reward-media/quit-sound-effect.mp3',gdUnlocked:'/reward-media/unlocked-sfx.mp3',
  levelSingle:'/assets/audio/player-level-up.mp3',levelMulti:'/assets/audio/player-level-multi.mp3',levelMilestone:'/assets/audio/player-level-milestone.mp3'};
 const gameCues={
  gdPlay:[[0,1.02],'stack','gamePortal','gdPlay'],
  gdDeath:[[.04,1.26],'injury','impact','gdDeath'],
  gdAchievement:[[0,1.82],'victory','achievement','gdAchievement'],
+ gdBonus:[[.13,1.57],'bonus','claim','gdBonus'],
+ gdDemonKey:[[.112,1.388],'extraAccent','keys','keys'],
+ gdQuit:[[.27,1.13],'select','quit','gdQuit'],
+ gdUnlocked:[[.198,1.302],'victory','unlock','gdUnlocked'],
  jump:[[.05,.26],'sweep','gameMove'],
  orb:[[.55,.36],'charged','gameMove'],
  portal:[[1.05,.76],'miniPortal','gamePortal'],
@@ -71,12 +76,12 @@ const channels={
  ...Object.fromEntries(Object.keys(memeCues).map(n=>[n,'meme'])),
  attack:'attack',charged:'attack',guard:'attack',enemyHit:'impact',knockout:'bonus',injury:'impact',victory:'reward',loss:'reward',heal:'reward',mineAccent:'coin',luckAccent:'bonus',extraAccent:'bonus'
 };
-const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,keys:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,navigation:1,rareMusic:1,rareBed:1,chest:1,chestEffect:3};
+const limits={menu:1,pack:1,paper:2,land:2,accent:2,bonus:2,reward:1,achievement:1,claim:1,keys:1,quit:1,unlock:1,coin:2,coinTap:5,coinDrop:1,level:1,attack:2,impact:2,stinger:1,meme:1,gameMove:2,gamePortal:1,ui:1,navigation:1,rareMusic:1,rareBed:1,chest:1,chestEffect:3};
 
 export function createPackSound(){
  let enabled=true,ctx=null,master=null,buffer=null,bytes=null,decoding=null,resuming=null;
  const gameBuffers=new Map(),gameLoading=new Map(),gameFiles=new Map();
- let stopRare=null,chestVersion=0,keyPending=false,keyVersion=0;
+ let stopRare=null,chestVersion=0,audioEpoch=0;
  let mineCount=0,generation=0,lastMine=-Infinity,lastMint=-Infinity,failedAt=-Infinity,cueSerial=0;
  const synths=new Set(),voices=new Set(),waiting=new Map(),accents=new Set();
  try{enabled=localStorage.getItem('gdlb.packSound')!=='off'}catch{}
@@ -132,10 +137,10 @@ export function createPackSound(){
   chestVersion++;
   accents.forEach(clearTimeout);accents.clear();waiting.clear();
   for(const v of synths)v.stop();
-  synths.clear();for(const voice of voices)if(!keepPageCues||!['achievement','keys','navigation'].includes(voice.lane))fadeOut(voice);
+  synths.clear();for(const voice of voices)if(!keepPageCues||!['achievement','claim','keys','quit','unlock','navigation'].includes(voice.lane))fadeOut(voice);
  }
  function stop(){generation++;silence(true)}
- function stopAll(){generation++;silence()}
+ function stopAll(){generation++;audioEpoch++;silence()}
  function emitClip(track,[offset,length],lane,rate,pan,level,loopLength=0){
   const active=[...voices].filter(v=>v.lane===lane&&!v.stopping);
   if(active.length>=limits[lane])fadeOut(active[0]);
@@ -264,26 +269,25 @@ export function createPackSound(){
   if(gameBuffer&&ctx.state==='running'){cueSerial++;emitClip(gameBuffer,clip,lane,rate,pan,level);}
   else play(fallback,{rate,pan,level});
  }
- function playGameReady(name,options,isCurrent){
+ function playGameReady(name,options={},isCurrent=()=>true){
   if(!enabled)return;
-  const loading=prepareGame(gameCues[name][3]);
-  const playReady=()=>{if(isCurrent())playGame(name,options);};
+  const epoch=audioEpoch,loading=prepareGame(gameCues[name][3]);
+  const playReady=()=>{if(epoch===audioEpoch&&isCurrent())playGame(name,options);};
   if(loading||resuming)Promise.all([loading,resuming]).then(playReady);
   else playReady();
  }
- function flushKeyReward(){
-  if(!enabled||!keyPending||document.hidden)return;
-  const version=++keyVersion,loading=prepareRevealTrack(gameSamples.keys);
-  const ready=()=>{
-   if(!enabled||!keyPending||document.hidden||ctx?.state!=='running'||keyVersion!==version)return;
-   keyPending=false;
-   const track=gameBuffers.get(gameSamples.keys);
-   if(track)emitClip(track,[0,track.duration],'keys',1,0,.76);
-   else play('extraAccent',{level:.72});
-  };
-  if(loading)loading.then(ready);else ready();
+ function claimReward({bonus=false,keys=false}={}){
+  if(!enabled||document.hidden||(!bonus&&!keys))return;
+  const epoch=audioEpoch;
+  const tracks=[bonus&&prepareGame('gdBonus'),keys&&prepareGame('keys'),resuming];
+  // Both clips start in the same audio quantum, even on the first download.
+  Promise.all(tracks).then(()=>{
+   if(epoch!==audioEpoch||!enabled||document.hidden||ctx?.state!=='running')return;
+   if(bonus)playGame('gdBonus',{level:.7});
+   if(keys)playGame('gdDemonKey',{level:.82});
+  });
  }
- function keyReward(){if(enabled){keyPending=true;flushKeyReward()}}
+ function keyReward(){claimReward({keys:true})}
  function coinReward(large,pans=[0]){
   if(!enabled||document.hidden)return;
   const cue=large?'coinDrop':'coin',epoch=generation;
@@ -351,7 +355,7 @@ export function createPackSound(){
  function toggle(){
   enabled=!enabled;
   try{localStorage.setItem('gdlb.packSound',enabled?'on':'off')}catch{}
-  if(enabled){unlock();play('select')}else{keyPending=false;silence()}
+  if(enabled){unlock();play('select')}else{stopAll()}
   document.dispatchEvent(new Event('gdlb-game-sound'));
  }
  function listenForUiTaps(){
@@ -359,10 +363,10 @@ export function createPackSound(){
   const uiControl=target=>target.closest?.(controls)&&!target.closest('#mineHit,.turn-handle,[data-tear]');
   const primeAchievement=()=>{
    if(!gameBuffers.has('gdAchievement'))prepareGame('gdAchievement');
-   if(keyPending)flushKeyReward();
   };
   preloadGame('gdAchievement');
-  preloadGame(gameSamples.keys,gameSamples.keys);
+  preloadGame('keys');
+  preloadGame('gdBonus');
   document.addEventListener('keydown',primeAchievement,true);
   document.addEventListener('pointerup',event=>{if(event.pointerType!=='mouse')primeAchievement();},true);
   document.addEventListener('pointerdown',event=>{
@@ -394,7 +398,7 @@ export function createPackSound(){
    },0);
   },true);
  }
- document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll();else flushKeyReward()});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll()});
  window.addEventListener('pagehide',stopAll);
- return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,keyReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed,preloadChestEffects,prepareChestEffects,playChestEffect,prepareChestRarity,playChestRarity,stopChestAudio};
+ return {get enabled(){return enabled},get generation(){return generation},preload,unlock,stop,toggle,play,prepareGame,playGame,playGameReady,coinReward,keyReward,claimReward,listenForUiTaps,sweep,land,score,stopScore,prepareRevealTrack,playRevealTrack,playRevealBed,preloadChestEffects,prepareChestEffects,playChestEffect,prepareChestRarity,playChestRarity,stopChestAudio};
 }

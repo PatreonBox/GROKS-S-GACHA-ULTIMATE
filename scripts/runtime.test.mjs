@@ -18,6 +18,7 @@ import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
+import {beforeReward,commandReward} from '../server/reward-cues.mjs';
 import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalShoreY,tidalStart,tidalStep,tidalVideoVersion,tidalWaveCeiling,tidalWaveFloor} from '../web/tidal-video-rules.js';
 import {replayTidalVideo} from '../web/game-replay.js';
 import {keepWavePoint,waveVerticalOffsets} from '../web/remix-wave.js';
@@ -241,6 +242,33 @@ test('The versioned death cue serves the uploaded MP3 through the game media rou
  assert.equal(response.status,200);
  assert.equal(response.headers.get('Content-Type'),'audio/mpeg');
  assert.deepEqual(Buffer.from(await response.arrayBuffer()),file);
+});
+
+test('Reward receipts distinguish a fresh payout, a combined key drop and an Army receipt replay',()=>{
+ const wallet={achievementKeysPaid:3},before=beforeReward(wallet);
+ const star=()=>commandReward('kingdom.computer.collect',{}, {earned:1},wallet,before);
+ assert.deepEqual(star(),{bonus:true,keys:false});
+ wallet.achievementKeysPaid++;
+ assert.deepEqual(star(),{bonus:true,keys:true});
+ const army={id:'battle-1'},prize={coins:28,gems:1,demonKeys:2};
+ assert.deepEqual(commandReward('army.finish',army,prize,wallet,beforeReward(wallet)),{bonus:true,keys:true});
+ wallet.armyReceipt={id:army.id};
+ assert.equal(commandReward('army.finish',army,prize,wallet,beforeReward(wallet)),undefined);
+ assert.equal(commandReward('kingdom.computer.collect',{}, {earned:0},wallet,beforeReward(wallet)),undefined);
+ assert.equal(commandReward('mine.tap',{}, {gain:100},wallet,beforeReward(wallet)),undefined);
+ const away={receipt:{elapsed:30000,coins:85}};
+ assert.equal(commandReward('mine.collect',{returning:false},away,wallet,beforeReward(wallet)),undefined);
+ assert.deepEqual(commandReward('mine.collect',{returning:true},away,wallet,beforeReward(wallet)),{bonus:true,keys:false});
+ assert.equal(commandReward('remix.finish',{}, {cleared:false,playerXpEarned:5},wallet,beforeReward(wallet)),undefined);
+});
+
+test('Reward sounds and Gacha upgrade icons survive the production asset build',async()=>{
+ for(const name of ['bonus-sound-effect.mp3','quit-sound-effect.mp3','unlocked-sfx.mp3','gacha-luck.webp','extra-card.webp']){
+  const path='/reward-media/'+name,response=await worker.fetch(new Request(publicOrigin+path));
+  assert.equal(response.status,200,name);
+  assert.equal(response.headers.get('content-type'),name.endsWith('.mp3')?'audio/mpeg':'image/webp');
+  assert.deepEqual(Buffer.from(await response.arrayBuffer()),readFileSync(new URL('../web'+path,import.meta.url)));
+ }
 });
 
 test('Demon chest openings select the uploaded sound at the correct rarity boundaries',async()=>{
@@ -629,7 +657,7 @@ test('owner save adjustments are idempotent and private on player rankings',asyn
   assert.equal(funded.wallet.kingdom.mana,2600);
   const staged=await (await command(adminId,'admin.adjust',{field:'tower',mode:'set',amount:2})).json();
   assert.equal(staged.wallet.kingdom.towerLevel,2);
-  assert.equal((await command(adminId,'admin.adjust',{field:'tower',mode:'set',amount:4})).status,400);
+  assert.equal((await command(adminId,'admin.adjust',{field:'tower',mode:'set',amount:5})).status,400);
   const state=staged.wallet,now=Date.now();
   state.kingdom.towerConstruction={level:3,startedAt:now,endsAt:now+180_000};
   sqlite.prepare('UPDATE game_profiles SET wallet=? WHERE player_id=?').run(JSON.stringify(state),owner);

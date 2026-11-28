@@ -262,6 +262,13 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set(),
   hit.position.copy(model.resident.position);hit.position.y+=model.body.position.y*scale;
   return visit&&!hidden?visit.home.id:null;
  }
+ function seatAt(home){
+  if(!home)return;
+  if(visit?.home===home&&visit.phase==='rest')return;
+  releaseHome();heldHome=home;occupied.add(home.id);
+  x=home.inside.x;z=home.inside.z;route=[];goal=null;sleeping=false;asleepAtHome=false;
+  visit={home,phase:'rest',points:[]};waiting=4;mode='rest';time=0;
+ }
  function setSkin(id){skinSeed=Array.from(id||'').reduce((sum,char)=>((sum*31+char.charCodeAt(0))>>>0),seed);}
- return {update,releaseHome,setSkin,get position(){return {x,z,hidden:visit?.phase==='rest',sleeping:sleeping||asleepAtHome&&visit?.phase==='rest'};}};
+ return {update,releaseHome,seatAt,setSkin,get insideHouse(){return visit?.phase==='rest'?visit.home.id:null;},get position(){return {x,z,hidden:visit?.phase==='rest',sleeping:sleeping||asleepAtHome&&visit?.phase==='rest'};}};
 }

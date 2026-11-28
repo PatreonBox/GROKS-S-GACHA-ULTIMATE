@@ -76,7 +76,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
      wallet=result.wallet;
      if(stamp===visit)ticket=rewards.reserve('gems',result.gems);
      applyWallet(wallet);
-     if(ticket){sound.play('extraAccent',{level:.65});rewards.launch(ticket,origin);announce('Claimed '+result.gems+' gems from '+result.count+(result.count===1?' level':' levels'))}
+     if(ticket){rewards.launch(ticket,origin);announce('Claimed '+result.gems+' gems from '+result.count+(result.count===1?' level':' levels'))}
     }else{
      const bulk=el.dataset.fuse==='confirm',source=own.get(selected);
      if(bulk)el.closest('dialog').close();

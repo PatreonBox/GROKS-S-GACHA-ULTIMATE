@@ -1,4 +1,5 @@
-import {buildingSpecs,forgePlan,forgeUpgrade,gemMine,housePlan} from './kingdom-rules.js';
+import {computerCost} from './kingdom-computer.js';
+import {campfirePlan,forgeLimit,towerRequirements,buildingSpecs,forgePlan,forgeUpgrade,gemMine,housePlan} from './kingdom-rules.js';
 import {towerPlayerLevel} from './level-access.js';
 import {spikeKind,spikePlan,spikePrice} from './kingdom-defences.js';
 
@@ -24,16 +25,25 @@ export function kingdomSuggestions(plot,coins,playerLevel,now){
  }
  const fillHousing=houses.length<tower.limit&&(houseLots<tower.limit||storage.some(item=>(item.kind||'house')==='house'));
  if(!houses.length&&fillHousing)build('house',plot.houseCost);
- if(!forges.length)build('forge',buildingSpecs.forge.price);
+ if(forges.length<forgeLimit(tower.level))build('forge',buildingSpecs.forge.price);
  if(houses.length&&fillHousing)build('house',plot.houseCost);
  if(tower.next){
   const target=tower.level+1,level=towerPlayerLevel(target);
   add('tower:'+target,'Upgrade tower to Lv. '+target,{object:'tower'},[
-   need(playerLevel,level,'player level'),need(houses.length,tower.limit,'houses'),
+   need(playerLevel,level,'player level'),...towerRequirements(plot),
    ...budget(tower.next.price,tower.next.mana)
   ],tower.construction);
  }
  if(tower.level>=gemMine.towerLevel&&!gemMines.length)build('gem-mine',gemMine.coins,gemMine.mana);
+ if(tower.level>=2&&!plot.campfires.length)build('campfire',buildingSpecs.campfire.price);
+ if(tower.level>=2&&houses.some(h=>!h.upgrade)&&![...houses,...storage].some(h=>h.computer))
+  add('build:computer','Build a Computer',{kind:'computer',mode:'new'},budget(computerCost.coins,computerCost.mana));
+ const fire=plot.campfires[0];
+ if(fire){
+  const {level,next,construction}=campfirePlan(fire,now);
+  if(next)add('campfire:'+fire.id,'Upgrade Campfire to Lv. '+(level+1),{object:'campfire:'+fire.id},
+   [need(tower.level,next.towerLevel,'tower level'),...budget(next.coins,next.mana)],construction);
+ }
  const home=houses.find(item=>housePlan(item,now).construction)||houses.find(item=>housePlan(item,now).next);
  if(home){
   const {level,construction,next}=housePlan(home,now),target=level+1;

@@ -80,7 +80,7 @@ export async function visitKingdom(root,plot,alias){
   const extras=building?.kind==='forge'?' · '+forgePlan(building,clock()).rate+' Mana/s':
    mine?' · 1 gem every '+gemMine.interval/60_000+' min':building?.kind===spikeKind?' · '+spikePlan(building).damage+' damage per shot':'';
   const status=upgrading?' · Upgrading to Level '+(tower?(construction.level??2):(building.upgradeLevel??2)):'';
-  selection.textContent=name(id)+(tower||building&&!mine&&building.kind!==campfireKind?' · Level '+(tower?towerLevel:building.level):'')+extras+status;
+  selection.textContent=name(id)+(tower||building&&!mine?' · Level '+(tower?towerLevel:building.level):'')+extras+status;
   world.select(id);
  }
  const world=createKingdomWorld({canvas,cube,clock,onSelect:inspect,onHover(id,point){
@@ -107,7 +107,7 @@ export async function visitKingdom(root,plot,alias){
    if(!(building.upgradeEndsAt<=now))continue;
    const previous=building.level;
    building.level=building.upgradeLevel??2;
-   delete building.upgradeEndsAt;
+   delete building.upgrade;delete building.upgradeEndsAt;
    delete building.upgradeLevel;
    if(building.kind==='house')stars=Math.min(5,Math.round((stars+houseStars(building.level)-houseStars(previous))*100)/100);
    changed=true;

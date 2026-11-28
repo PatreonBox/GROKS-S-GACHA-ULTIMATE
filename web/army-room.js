@@ -328,7 +328,6 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
    payoutState='paid';receipt=earned;drawReceipt();patchControl();
    if(animate){
     for(const [kind,ticket] of tickets)rewards.launch(ticket,el('result').querySelector('[data-currency="'+kind+'"]'),{front:true});
-    if(earned.gems)sound.play('extraAccent',{level:.65});
    }
   }catch(error){
    if(match===battle){payoutState='error';drawReceipt();patchControl()}
@@ -340,7 +339,8 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   el('result').innerHTML='<strong>'+resultText[status]+'</strong><small>'+defeated+' / '+currentChapter().count+
    ' rivals defeated · '+timeText(battle.time/armySpeed)+'</small><div class="army-result-loot"></div>';
   payoutState='saving';setPhase('done');
-  sound.play(status==='won'?'victory':status==='lost'?'loss':'guard',{level:.85});
+  if(status==='retreated')sound.playGameReady('gdQuit',{level:.69});
+  else sound.play(status==='won'?'victory':status==='lost'?'loss':'guard',{level:.85});
   credit(battle);
  }
  function play(cue,unit,level,duration=.10){

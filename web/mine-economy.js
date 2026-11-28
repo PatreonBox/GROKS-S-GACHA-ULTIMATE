@@ -2,10 +2,12 @@ import {achievementBoost} from './achievement-boosts.js';
 import {changeCoins,coinDivisor,coinLimit,coinPrice,roundCoins} from './coin-economy.js';
 
 export const mineRateCap=1_000_000_000;
+export const mineCheckpointMs=20_000;
 export const mineAwayLimit=5*60*60*1000;
 export const mineLevelCap=200;
 export const mineMilestone=20;
 export const mineTapBatch=24;
+const minePrice=base=>Math.ceil(coinPrice(base)*13/10);
 
 export const mineMachines=[
  {id:'cursor',name:'Auto Cursor',price:1.5,rate:0.1,color:'#8deef1',art:'/assets/mine/pointer.png',action:'Clicks the coin while you play.'},
@@ -52,7 +54,7 @@ export const mineSkills=[
  {id:'parallel',name:'Parallel Foundry',x:77,y:74,art:icons.foundry,color:forge,parents:['fusion','prismdies'],price:47500000,requires:['foundry',25],doubles:['foundry'],description:'2× Demon Foundry output'},
  {id:'archive',name:'Golden Archive',x:49,y:85,art:icons.key,color:core,parents:['pulsedriver','refraction','parallel'],price:250000000,requires:['foundry',45],tap:1000,rate:250,description:'+1,000 coins per tap and +250% passive income'},
  {id:'vaultseal',name:'Royal Reserve',x:49,y:95,art:icons.key,color:core,parents:['archive'],price:1200000000,requires:['foundry',60],tap:600,rate:200,description:'+600 coins per tap and +200% passive income'}
-].map(skill=>({...skill,price:coinPrice(skill.price),purchaseXp:10+Math.floor(6*Math.log10(skill.price*coinDivisor))}));
+].map(skill=>({...skill,price:minePrice(skill.price),purchaseXp:10+Math.floor(6*Math.log10(skill.price*coinDivisor))}));
 
 const skillsById=new Map(mineSkills.map(node=>[node.id,node]));
 export const mineSkill=id=>skillsById.get(id);
@@ -123,7 +125,7 @@ export function quoteMachine(wallet,id,mode=1){
  const limit=Math.min(mineLevelCap-owned,mode==='max'?mineLevelCap:mode);
  let count=0,cost=0;
  for(;count<limit;count++){
-  const price=coinPrice(Math.ceil(machine.price*1.13**(owned+count)));
+  const price=minePrice(Math.ceil(machine.price*1.13**(owned+count)));
   if(mode==='max'&&price>wallet.coins-cost)break;
   cost+=price;
  }

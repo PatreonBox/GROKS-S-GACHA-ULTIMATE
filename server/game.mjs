@@ -14,6 +14,7 @@ import {kingdomDefences,kingdomForges,kingdomHouses,kingdomStats,maxTowerLevel,s
 import {impossibleCover} from '../web/impossible-cards.js';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
+import {beforeReward,commandReward} from './reward-cues.mjs';
 import {trading} from './trading.mjs';
 import {trainingLevels} from '../web/progression-rules.js';
 import {achievementActionEvents,achievementStatistics,refreshAchievementWallet,seedAchievements,updateAchievements} from './progression.mjs';
@@ -137,7 +138,7 @@ async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,adm
   campaignClears:campaignStages.reduce((count,stage)=>count+Number(stageCleared(wallet,stage.id)),0)};
 }
 
-async function commit(db,{owner,record,wallet,changes,requestId,result,now,power,transferId,admin=false,reset=false,editions=[]}){
+async function commit(db,{owner,record,wallet,changes,requestId,result,reward,now,power,transferId,admin=false,reset=false,editions=[]}){
  const id=record.player_id,version=record.revision+1;
  // Concurrent retries share a request ID. Only the winning write may update cards.
  const writeId=crypto.randomUUID();
@@ -171,7 +172,7 @@ async function commit(db,{owner,record,wallet,changes,requestId,result,now,power
  }
  statements.push(
   db.prepare(`INSERT OR IGNORE INTO game_requests(player_id,request_id,result,created_at)
-   SELECT ?,?,?,? WHERE ${guard}`).bind(id,requestId,JSON.stringify({coinEconomyVersion,result}),now,id,version,writeId),
+   SELECT ?,?,?,? WHERE ${guard}`).bind(id,requestId,JSON.stringify({coinEconomyVersion,result,reward}),now,id,version,writeId),
   db.prepare('DELETE FROM game_requests WHERE player_id=? AND created_at<?').bind(id,now-receiptLifetime)
  );
  const [change]=await db.batch(statements);
@@ -217,7 +218,7 @@ function adjustAdminWallet(wallet,args){
 }
 
 function finishAdminConstruction(wallet,now){
- const sites=[wallet.kingdom?.towerConstruction,...[...kingdomHouses(wallet),...kingdomForges(wallet),...kingdomDefences(wallet)].map(item=>item.upgrade)].filter(Boolean);
+ const sites=[wallet.kingdom?.towerConstruction,...[...kingdomHouses(wallet),...kingdomForges(wallet),...kingdomDefences(wallet),...(wallet.kingdom?.campfires||[])].flatMap(item=>[item.upgrade,item.computer?.construction])].filter(Boolean);
  if(!sites.length)reject('Start a Kingdom upgrade first.');
  for(const site of sites)site.endsAt=Math.min(site.endsAt,now);
  return settleKingdomConstruction(wallet,now);
@@ -261,9 +262,9 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
    const saved=await refreshAchievementWallet(db,current);
    const receipt=JSON.parse(previous.result);
    const result=receipt?.coinEconomyVersion===coinEconomyVersion?receipt.result:normalizeCoinReceipt(action,receipt);
-   return {...saved,wallet:visibleWallet(saved.wallet),result};
+   return {...saved,wallet:visibleWallet(saved.wallet),result,reward:receipt?.reward};
   }
-  const changes=new Map(),now=Date.now();
+  const changes=new Map(),now=Date.now(),priorRewards=beforeReward(wallet);
   const trainingVersion=wallet.trainingRevision,battleWasActive=wallet.battle?.status==='active',trainingAction=['card.feed','drill.finish'].includes(action);
   const editionDraft=administrator?null:draftCardEditions();
   let result,records;
@@ -316,8 +317,9 @@ async function play(db,session,{action,args,requestId},getPool,hasArt,administra
   }
   const editions=await editionDraft?.resolve(db,changes,['pack.buy','demon.pull'].includes(action)?wallet.pending:null,
    action==='card.merge'?wallet.lastMerge:null);
-  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId,result,now,power,admin,reset,editions})){
-   return {wallet:visibleWallet(wallet),saveRevision:record.revision+1,result};
+  const reward=admin?undefined:commandReward(action,args,result,wallet,priorRewards);
+  if(await commit(db,{owner:session.owner,record,wallet,changes,requestId,result,reward,now,power,admin,reset,editions})){
+   return {wallet:visibleWallet(wallet),saveRevision:record.revision+1,result,reward};
   }
  }
  reject('Your save changed in another tab. Please try again.',409);
