@@ -1,18 +1,7 @@
 import {kingdomHouses,kingdomRating,visitorSlots} from '../web/kingdom-rules.js';
 
-// Names and skins are only sent to players whose Kingdom meets the slot's rating.
-const creators=[
- ['gamer-vibes','Gamer Vibes','Gamer_vibes-p1r','215','06'],
- ['jfrozy','JFrozy Creator [GD]','JFrozyGD0','230','56'],
- ['unbreakable','Unbreakable','unbreakable5205','983','39'],
- ['trqp-kun','Trqp_kun','trqp_kun','1K','22'],
- ['flamewall','Flamewall','FlamewallGeometryDash','1.02K','90'],
- ['wootdog','Wootdog23','Wootdog23','4.7K','199'],
- ['jesse-gaming','JesseGaming GD','JesseGamingGD','5.08K','75'],
- ['bgram','BGram','BGram','31.5K','134'],
- ['quasar','Quasar','GDQuasar','35.5K','170'],
- ['serponge','Serponge','SerpongeDash','67.4K','402']
-];
+import {kingdomCreators} from './kingdom-creator-catalog.mjs';
+import {visitorEligible} from '../web/kingdom-visitor-catalog.js';
 
 const visitWindow=300_000;
 function hash(value){
@@ -34,17 +23,19 @@ function arrivalSchedule(wallet,now,newEligibility){
  const schedule=prior?.slice()??[],stars=kingdomRating(houses,now);
  const residences=houses.toSorted((a,b)=>(a.builtAt||0)-(b.builtAt||0));
  const seed=residences[0]?.id||'kingdom';
- for(const {slot,stars:required} of visitorSlots){
+ for(const spec of visitorSlots){
+  const {slot,stars:required}=spec;
+  const eligible=visitorEligible(spec,stars,wallet.kingdom?.earnedStars||0);
   const known=schedule[slot];
   // A completed arrival remains in the save even if a house is later stored.
-  if(known!=null&&(known<=now||stars>=required))continue;
-  if(stars<required){
+  if(known!=null&&(known<=now||eligible))continue;
+  if(!eligible){
    if(known!=null)schedule[slot]=null;
    continue;
   }
-  if(prior||newEligibility){schedule[slot]=firstArrival(seed,slot,now);continue;}
+  if(prior||newEligibility||spec.earnedStars&&stars<(spec.legacyStars??Infinity)){schedule[slot]=firstArrival(seed,slot,now);continue;}
   // Carry over arrivals from the old visiting windows for existing Kingdoms.
-  const home=residences[Math.min(residences.length-1,Math.ceil(required/.30-1e-6)-1)];
+  const home=residences[Math.min(residences.length-1,Math.ceil((spec.legacyStars??required)/.30-1e-6)-1)];
   schedule[slot]=home.builtAt?firstArrival(seed,slot,home.builtAt):0;
  }
  return schedule;
@@ -64,8 +55,7 @@ export function kingdomVisitors(wallet,now=Date.now()){
    if(nextAt===null||arrivedAt<nextAt)nextAt=arrivedAt;
    continue;
   }
-  const [id,name,channel,audience,cube]=creators[slot];
-  visitors.push({slot,id,name,channel,audience,cube,arrivedAt,visiting:true});
+  visitors.push({...kingdomCreators[slot],slot,skillBonus:visitorSlots[slot].skillBonus,arrivedAt,visiting:true});
  }
  return {discoveredVisitors:visitors,visitorRefreshAt:nextAt};
 }

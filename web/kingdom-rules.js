@@ -1,3 +1,5 @@
+import {stopHouseSession,computerCost,computerUpgradeCost} from './kingdom-computer.js';
+export {visitorSlots} from './kingdom-visitor-catalog.js';
 import {kingdomForest,treeWithin} from './kingdom-forest.js';
 import {achievementBoost} from './achievement-boosts.js';
 import {changeCoins,coinPrice,previousCoinPrice} from './coin-economy.js';
@@ -66,10 +68,6 @@ export function updateKingdomTrail(wallet,{points,follow}){
  kingdom.trail=trail;
  return {trail:kingdomTrail(wallet)};
 }
-export const visitorSlots=[
- ['Common',.3],['Common',.6],['Uncommon',.9],['Uncommon',1.2],['Uncommon',1.5],
- ['Rare',1.8],['Rare',2.4],['Epic',3],['Epic',3.6],['Legendary',4.5]
-].map(([rarity,stars],slot)=>({slot,rarity,stars}));
 export const maxTowerLevel=3;
 const towerTiers=[
  {limit:2,price:0,hp:1000},{limit:3,price:coinPrice(50_000),mana:towerUpgradeMana,buildMs:60_000,xp:150,hp:1500},
@@ -156,7 +154,8 @@ export function kingdomStats(wallet,now=Date.now()){
   const upgrade=kind===spikeKind?spikeInvestment(building):building.upgradeCoinInvestment??(
    (kind==='forge'&&(building.level===2||building.upgrade)?previousCoinPrice(forgeUpgrade.coins):0)+
    (kind==='house'&&(building.level===3||building.upgrade?.level===3)?previousCoinPrice(houseUpgrades[1].coins):0));
-  return sum+base+upgrade;
+  const furniture=building.computer?computerCost.coins+(building.computer.level===2?computerUpgradeCost.coins:0):0;
+  return sum+base+upgrade+furniture;
  },0)+towerInvestment(wallet?.kingdom,tower.construction?.level??tower.level)+landInvestment(wallet?.kingdom,land.level);
  return {houses,forges,gemMines,defences,campfires,storage,buildings,tower,land,stars,value,houseLots,defenceLots,removedTrees,trail:kingdomTrail(wallet),
   trees:plotTrees(buildings,removedTrees,land.bounds),mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houseLots};
@@ -433,7 +432,9 @@ export function storeKingdomBuilding(wallet,id,now){
  const plot=kingdomStats(wallet,now),item=plot.buildings.find(building=>building.id===id);
  if(!item)throw Error('Choose a building on your plot.');
  if(item.upgrade)throw Error('Finish construction before storing this building.');
- const kind=item.kind||'house',stored={...item,kind};
+ const kind=item.kind||'house';
+ if(kind==='house'){stopHouseSession(item,now);delete item.resident;}
+ const stored={...item,kind};
  if(kind==='forge')Object.assign(stored,{storedMana:forgeStored(item,now),collectedAt:now});
  if(kind==='gem-mine'){
   const plan=gemMinePlan(item,now);

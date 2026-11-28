@@ -259,7 +259,8 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const action=owned.length<4?'<a href="#gacha" class="bt-primary">Open packs</a>':ready?
    '<button class="bt-primary" data-start '+(busy?'disabled':'')+'>'+(campaign?'Enter stage':'Enter battle')+'</button>':
    '<button class="bt-primary" data-edit>Choose squad</button>';
-  const activeStage=campaignTier||Math.min(campaignStages.length,1+campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length);
+  const activeStage=campaignTier&&stageUnlocked(wallet,campaignTier)?campaignTier:
+   (campaignStages.find(stage=>stageUnlocked(wallet,stage.id)&&!stageCleared(wallet,stage.id))||campaignStages.at(-1)).id;
   if(campaign)campaignTier=activeStage;
   const front=campaign?campaignView(wallet,activeStage,{action,coverSource,face,enc,colors}):poster;
   const squadStatus=ready?'4 / 4 ready':owned.length<4?'Collect four different cards to enter.':'Equip four cards that are ready to battle.';
@@ -317,7 +318,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const done=b.status!=='active',actor=activeActor(b),remix=findRemix(b.remix);
   const stage=stageFor(b.campaign);
   const title=stage?.name||remix?.name||difficulties[b.tier]+' arena';
-  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+arenaActivities(playerLevel)+'<a class="outline leave-field" href="#gacha">Packs</a></div></div>';
+  const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+stage.number+' · '+stage.variant:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+arenaActivities(playerLevel)+'<a class="outline leave-field" href="#gacha">Packs</a></div></div>';
   const side=(units,key,title,tip)=>'<div class="battle-side"><h3><span>'+title+'</span><small>'+enc(tip)+'</small></h3><div class="formation">'+units.map((u,i)=>tile(u,i,key,b)).join('')+'</div></div>';
   const relayWait=Math.max(0,(b.relayAt||0)-b.seq);
   const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span></div>';
@@ -325,9 +326,9 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const earnings='<div class="arena-earnings" aria-label="Battle earnings" aria-live="polite">'+
    '<span class="arena-coins"><img src="/assets/packs/coin.png" alt=""><b>'+fmt(b.earned)+'</b> <span>coins earned</span></span>'+
    '<span class="arena-xp">'+ico('spark')+'<b>'+fmt(arenaPlayerXp(b))+'</b> <span>XP earned</span></span></div>';
-  const next=b.status==='won'&&stage&&stageFor(b.campaign+1);
+  const next=b.status==='won'&&stage&&campaignStages[stage.number];
   const controls=done?'<section class="live-console outcome"><div><small>'+b.kills+' / 4 DEFEATED</small><h2>'+(b.status==='won'?'Victory':b.status==='lost'?'Squad defeated':'Retreated')+'</h2>'+campaignOutcome(b)+'</div><div class="outcome-actions">'+
-   (next?'<button class="bt-primary" data-next-stage="'+(b.campaign+1)+'">Next stage</button>':'')+
+   (next?'<button class="bt-primary" data-next-stage="'+(next.id)+'">Next stage</button>':'')+
    '<button class="'+(next?'outline':'bt-primary')+'" data-finish>'+(stage?'Return to campaign':'Return to arenas')+'</button></div></section>':consoleView(b,actor,target,enc);
   const intel=done?'<div class="arena-closed">Battle complete</div>':intentView(b,actor,target,enc);
   const tools='<div class="console-toolbar">'+cameraTools+(!done&&!playback?'<button class="outline" data-orders>'+ico('list')+' Tactics &amp; log</button>':'')+'</div>';

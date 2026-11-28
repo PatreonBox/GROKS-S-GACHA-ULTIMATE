@@ -377,7 +377,15 @@ export function makeKingdomCube(cube){
  return build.finish();
 }
 
-export function makeResident(){
+function makeMapCube(cube){
+ const group=new THREE.Group(),loader=new THREE.TextureLoader();
+ const body=new THREE.Mesh(new THREE.BoxGeometry(.99,.99,.99),new THREE.MeshStandardMaterial({color:cube.color}));
+ const face=new THREE.Mesh(new THREE.PlaneGeometry(.96,.96),new THREE.MeshBasicMaterial({map:loader.load(cube.icon),transparent:true}));
+ face.position.z=.5;face.material.userData.cpuTexture=true;group.add(body,face);
+ group.userData.cubeId=cube.id;return group;
+}
+
+export function makeResident(software=false){
  const resident=new THREE.Group(),body=new THREE.Group();
  resident.add(body);
  let active;
@@ -385,9 +393,9 @@ export function makeResident(){
   if(active?.userData.cubeId===cube.id)return;
   if(active){
    active.removeFromParent();
-   for(const mesh of active.children){mesh.geometry.dispose();mesh.material.dispose()}
+   for(const mesh of active.children){mesh.geometry.dispose();mesh.material.map?.dispose();mesh.material.dispose()}
   }
-  active=makeKingdomCube(cube);body.add(active);
+  active=software?makeMapCube(cube):makeKingdomCube(cube);body.add(active);
  }
  return {resident,body,setCube};
 }

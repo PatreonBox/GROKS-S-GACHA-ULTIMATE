@@ -219,7 +219,7 @@ export function achievementProgress(wallet,now=Date.now()){
  const forges=[...kingdomForges(wallet),...storage.filter(building=>building.kind==='forge')];
  const defences=[...kingdomDefences(wallet),...storage.filter(building=>building.kind===spikeKind)];
  const training=Object.values(wallet.training||{});
- const campaign=campaignStages.map((_,i)=>wallet.campaign?.[i+1]);
+ const campaign=campaignStages.map(stage=>wallet.campaign?.[stage.id]);
  const gemMines=Boolean(kingdom?.gemMines?.length||storage.some(building=>building.kind==='gem-mine'));
  const arcadeModes=new Set(remixes.filter(remix=>wallet.remixBest?.[remix.id]===100&&
   (remix.id!==86084399||wallet.limboKeysCleared)).map(remix=>
@@ -229,7 +229,7 @@ export function achievementProgress(wallet,now=Date.now()){
   houses:homes.length,tower:towerPlan(wallet,now).level,land:landPlan(wallet).level,
   limbo:wallet.limboKeysCleared?100:Math.min(99,wallet.remixBest?.[86084399]||0),trades:progress.trades||0,
   cubes:cubeCatalog.filter(cube=>ownsCube(wallet,cube.id)).length,
-  campaign:campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length,
+  campaign:campaignStages.filter(stage=>stageCleared(wallet,stage.id)).length,
   masteries:campaign.filter(record=>medalCount(record)===3).length,
   remixes:Object.values(wallet.remixBest||{}).filter(score=>score===100).length,
   trainedCards:training.filter(card=>cardGrowth(card).level>1||drills.some(key=>card[key]>0)).length,

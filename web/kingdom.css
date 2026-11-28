@@ -337,3 +337,35 @@ body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])) > footer{display:
 }
 .build-suggestions button[aria-pressed=true]{color:#aef4ce;border-color:#6caf89;background:#243e3f}
 @media(max-width:420px){.build-suggestions article{grid-template-columns:1fr 1fr}.build-suggestions article div{grid-column:1/-1}}
+
+.kingdom-star-currency img{height:17px;width:17px;object-fit:contain}
+.kingdom-star-currency b{color:#ffdf83;font-variant-numeric:tabular-nums}
+.kingdom-detail [data-production-time]{display:block;margin:3px 0;color:#b9dce3;font-variant-numeric:tabular-nums}
+.kingdom-frame.inside-house{display:grid;grid-template-columns:minmax(0,1fr) minmax(255px,320px);background:#131c29}
+.kingdom-frame.inside-house>canvas{grid-area:1/1;min-width:0;min-height:0;cursor:pointer}
+.kingdom-frame.inside-house>:not(canvas,.kingdom-room-panel){display:none!important}
+.kingdom-room-panel{grid-area:1/2;padding:clamp(12px,1.6vw,22px);min-width:0;min-height:0;overflow:auto;color:#eff7f8;background:linear-gradient(155deg,#22343f,#151c2b 65%);border-left:1px solid #436475}
+.kingdom-room-panel h2,.kingdom-room-chooser h2{font:800 clamp(20px,2vw,29px)/1.05 Cond,sans-serif;margin:0}
+.kingdom-room-panel h3{margin:12px 0 2px;font-size:1rem}
+.room-heading,.kingdom-room-chooser header{display:flex;justify-content:space-between;align-items:center;gap:9px;margin-bottom:14px}
+.kingdom-room-panel label{display:grid;gap:5px;color:#c5d5e1;font-size:.87rem}
+.kingdom-room-panel select{width:100%;padding:7px;background:#142032;color:#f5fbff;border:1px solid #4e687d;border-radius:6px}
+.kingdom-room-panel progress,.kingdom-detail .gem-production{width:100%;height:9px;accent-color:#77dbc8}
+.kingdom-room-panel [data-room-time]{display:block;margin-top:5px;color:#abc8d3;font-variant-numeric:tabular-nums}
+.room-actions,.room-cells{display:flex;gap:6px;flex-wrap:wrap}
+.room-actions:not(:empty){margin:8px 0}
+.room-actions button,.room-heading button,.room-cells button{min-height:34px;padding:5px 9px}
+.room-cells{display:grid;grid-template-columns:repeat(3,1fr);margin:9px 0}
+.room-cells [aria-pressed="true"]{background:#285f57;border-color:#a2eed7;color:#e0fff1}
+.room-feedback{font-size:.85rem;color:#badbd5;margin:7px 0}
+.room-feedback:empty{display:none}
+.kingdom-room-chooser{padding:20px;width:min(390px,calc(100vw - 24px));color:#eef9f7;background:#1a2837;border:1px solid #578578;border-radius:12px}
+.kingdom-room-chooser::backdrop{background:#090e17bc}
+[data-room-houses]{display:grid;gap:8px}
+[data-room-houses] button{text-align:left;min-height:42px}
+.visitor-locked{white-space:normal;justify-content:end;text-align:right}
+@media(max-width:700px) and (orientation:portrait){
+ .kingdom-frame.inside-house{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(100px,1fr) auto}
+ .kingdom-room-panel{grid-area:2/1;max-height:46dvh;padding:10px 13px;border-left:0;border-top:1px solid #436475}
+ .room-heading{margin-bottom:7px}.kingdom-room-panel select{font-size:16px}
+}

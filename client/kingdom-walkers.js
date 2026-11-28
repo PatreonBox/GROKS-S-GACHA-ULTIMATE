@@ -67,6 +67,7 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set(),
  let x=spawn.x,z=spawn.z,heading=0,turnIndex=seed,stepIndex=seed,choiceIndex=seed,seen;
  let route=[],goal,mode='look',time=0,waiting=.2+(seed%6)*.18,visit,heldHome,jammed=0,avoiding=false;
  let skinSeed=seed,sleeping=false,seekingRest=false,asleepAtHome=false,wasNight=false,patrolNext=null,patrolDirection=1;
+ const residentId=seed?'visitor:'+(seed-1):'cube';
  let openStep=()=>true;
  const face=target=>{
   const dx=target.x-x,dz=target.z-z;
@@ -124,7 +125,11 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set(),
   const start=tired?0:turnIndex++;
   for(let i=0;i<options.length;i++){
    const category=options[(start+i)%options.length];
-   const stops=category==='grass'?nav.targets.meadow:nav.targets[category];
+   let stops=category==='grass'?nav.targets.meadow:nav.targets[category];
+   if(category==='housing'){
+    const own=stops.find(target=>target.home.building.resident===residentId);
+    stops=own?[own]:stops.filter(target=>!target.home.building.resident);
+   }
    if(!stops.length&&!(category==='trail'&&nav.trail))continue;
    let target,path;
    if(category==='housing'){
@@ -202,7 +207,7 @@ export function createKingdomWalker(model,spawn,seed,scale=1,occupied=new Set(),
    route=[];goal=null;seen=nav;patrolNext=null;
    if(sleeping&&!nav.passable({x,z})){sleeping=false;seekingRest=false;waiting=0;}
    if(visit&&!nav.targets.housing.some(target=>target.home.id===visit.home.id&&target.home.building.x===visit.home.building.x&&
-      target.home.building.z===visit.home.building.z&&target.home.building.rotation===visit.home.building.rotation)){
+      (!target.home.building.resident||target.home.building.resident===residentId)&&target.home.building.z===visit.home.building.z&&target.home.building.rotation===visit.home.building.rotation)){
     visit=null;waiting=0;
    }
    if(!visit)releaseHome();

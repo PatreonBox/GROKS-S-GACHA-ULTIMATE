@@ -124,5 +124,11 @@ export function kingdomNavigation(bounds,buildings,trees,construction){
   path.points.push(approach);
   return path;
  }
- return {route,homeRoute,targets,clear,passable};
+ function spawnPoint(point){
+  const index=nearest(point,true);
+  if(index>=0)return position(index);
+  const open=blocked.indexOf(0);
+  return open>=0?position(open):point;
+ }
+ return {route,homeRoute,targets,clear,passable,spawnPoint};
 }

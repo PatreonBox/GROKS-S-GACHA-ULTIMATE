@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import {kingdomRenderer} from './kingdom-renderer.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {groundHeight,makeHouse,makeKingdomTrail,makeLandscape,makeSky,makeTower} from './kingdom-model.js';
+import {makeKingdomComputer} from '../web/kingdom-computer-art.js';
+import {createHouseInterior} from './kingdom-interior.js';
 import {makeResident} from './kingdom-cubes.js';
 import {createBuildingPreview} from './building-preview.js';
 import {makeResourceBubble,makeManaForge} from './mana-forge-model.js';
@@ -85,8 +88,8 @@ function release(root){
  parts.forEach(item=>item.dispose());
 }
 
-export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect,onSpikeHit,onTrailDraw}){
- const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'low-power'});
+export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,onPlot,onCollect,onSpikeHit,onTrailDraw,onInteriorPick}){
+ const renderer=kingdomRenderer(canvas);
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.6));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
  renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -97,6 +100,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  scene.fog=new THREE.Fog(frameColor,26,98);
  const camera=new THREE.PerspectiveCamera(52,1,.12,240);
  const sky=makeSky(),birds=skyBirds();
+ if(renderer.software)sky.visible=false;
  const ambient=new THREE.HemisphereLight('#e3fcff','#8e7757',2.07);
  scene.add(sky,ambient,birds.flock);
  const sun=new THREE.DirectionalLight('#ffe5bd',2.48);
@@ -110,10 +114,12 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  const lightColors=[ambient.color,ambient.groundColor,sun.color,scene.fog.color];
  let lastLight=-1;
  const loader=new THREE.TextureLoader();
- const tower=makeTower(),owner=makeResident(),trailMesh=makeKingdomTrail();
+ const tower=makeTower(),owner=makeResident(renderer.software),trailMesh=makeKingdomTrail();
  const spikeTexture=loader.load(spikeIcon);spikeTexture.colorSpace=THREE.SRGBColorSpace;
  const defences=[1,2,3,4].map(level=>makeSpikeShooter(level,spikeTexture));
  const models={house:makeHouse(),forge:makeManaForge(),'gem-mine':makeGemMine(),[spikeKind]:defences[0],[campfireKind]:makeCampfire()};
+ let workstationPreview,interior,interiorActive=false;
+ const playingResidents=new Set();
  const fireLights=Array.from({length:3},()=>{
   const light=new THREE.PointLight('#ffab55',0,9,1.55);
   scene.add(light);return light;
@@ -136,7 +142,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  scene.add(projectile,testTarget);
  let testShot=null;
  let land=0,bounds=kingdomBounds(),forest=plotTrees([]),forestKey=forest.map(tree=>tree.id).join('/');
- let landscape=makeLandscape(loader,bounds,forest),grid=buildGrid(bounds);
+ let landscape=makeLandscape(loader,bounds,forest,renderer.software),grid=buildGrid(bounds);
  let nav,navKey='',worksite;
  let savedTrail=[],trailMode=false,trailDraft=[],trailPointer=null,trailDirty=false;
  const foundationMaterial=new THREE.MeshStandardMaterial({color:'#475761',roughness:.95,side:THREE.DoubleSide});
@@ -189,7 +195,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   forest=nextForest;forestKey=key;
   land=next;bounds=kingdomBounds(land);
   landscape.ground.removeFromParent();release(landscape.ground);
-  landscape=makeLandscape(loader,bounds,forest);scene.add(landscape.ground);
+  landscape=makeLandscape(loader,bounds,forest,renderer.software);scene.add(landscape.ground);
   editTrees();
   if(!expanded)return;
   grid.grid.removeFromParent();release(grid.grid);
@@ -241,7 +247,9 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  function setPlot(buildings,visitors,towerLevel,landLevel=0,construction=null,removedTrees=[],trail=kingdomTrail()){
   setLand(landLevel,plotTrees(buildings,removedTrees));
   setWorksite(construction,towerLevel);
-  const key=[landLevel,Boolean(construction),forestKey,JSON.stringify(trail),...buildings.map(item=>[item.id,item.x,item.z,item.rotation].join(':'))].join('/');
+  playingResidents.clear();
+  for(const house of buildings)if(house.resident&&house.computer?.playing)playingResidents.add(house.resident);
+  const key=[landLevel,Boolean(construction),forestKey,JSON.stringify(trail),...buildings.map(item=>[item.id,item.x,item.z,item.rotation,item.resident].join(':'))].join('/');
   if(navKey!==key){
    nav=kingdomNavigation(bounds,buildings,forest.map(tree=>[tree.x,tree.z]),construction);navKey=key;
    savedTrail=routeKingdomTrail(trail,nav,bounds);
@@ -304,18 +312,21 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
    walker.resident.removeFromParent();release(walker.resident);
    removePicker('visitor:'+id);guests.delete(id);
   }
+  const waypoints=trailPatrol(savedTrail)?.points??[];
   for(const visitor of visitors){
    if(guests.has(visitor.id))continue;
-   const walker=makeResident();
+   const walker=makeResident(renderer.software);
    walker.resident.scale.setScalar(.81);walker.setCube(visitor.skin);
    walker.hit=hitBox('visitor:'+visitor.id,1.25,1.25,1.25,.86);
    const recent=visitor.arrivedAt>0&&clock()-visitor.arrivedAt<visitorWelcomeMs;
-   const spawn=recent?{x:(visitor.slot-4.5)*1.9,z:bounds.front+1.8}:
-    path.getPointAt((.21+(visitor.slot+1)/(visitorSlots.length+1))%1);
+   const entranceX=bounds.left+(visitor.slot+1)/(visitorSlots.length+1)*(bounds.right-bounds.left);
+   const trailFraction=(.21+(visitor.slot+1)/(visitorSlots.length+1))%1;
+   const spawn=recent?{x:entranceX,z:bounds.front+1.8}:
+    waypoints[Math.floor(trailFraction*waypoints.length)]??nav.spawnPoint({x:entranceX,z:bounds.front*.7});
    const trailX=(visitor.slot%5-2)*1.25;
    const entrance=recent?{x:trailX,z:4.25,look:{x:trailX,z:bounds.front}}:null;
    walker.walk=createKingdomWalker(walker,spawn,visitor.slot+1,.81,occupiedHomes,entrance);
-   walker.walk.setSkin(visitor.skin?.id);
+   walker.slot=visitor.slot;walker.walk.setSkin(visitor.skin?.id);
    scene.add(walker.resident);guests.set(visitor.id,walker);
   }
   cameraMotion.setBuildings([...structures.values()].map(({building,level})=>({...building,level})),7.35*towerScale,construction);
@@ -393,6 +404,18 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   ray.setFromCamera(pointer,camera);
   return {x,y};
  }
+ function setInterior(state){
+  if(state&&!interior)interior=createHouseInterior(renderer);
+  interiorActive=Boolean(state);
+  if(state)interior.set(state);
+  controls.enabled=!state&&!trailMode;
+  canvas.dataset.room=String(interiorActive);
+  hover(null);wake();
+ }
+ function pickInterior(event){
+  const box=canvas.getBoundingClientRect();
+  return interior.pick((event.clientX-box.left)/box.width*2-1,1-(event.clientY-box.top)/box.height*2);
+ }
  function pick(event){
   const point=aim(event);
   if(!point)return null;
@@ -431,6 +454,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   onHover(hovered,hit);
  }
  canvas.addEventListener('pointerdown',event=>{
+  if(interiorActive){candidate=event.button===0?{id:event.pointerId,x:event.clientX,y:event.clientY}:null;return;}
   if(trailMode){
    if(trailPointer===null&&event.button===0){
     trailPointer=event.pointerId;trailDraft=[];trailDirty=true;
@@ -443,6 +467,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   fingers.add(event.pointerId);hover(null);
  },{signal});
  canvas.addEventListener('pointermove',event=>{
+  if(interiorActive)return;
   if(trailMode){if(trailPointer===event.pointerId)recordTrail(event);return;}
   if(fingers.size){
    if(!candidate||Math.hypot(event.clientX-candidate.x,event.clientY-candidate.y)>5){
@@ -456,6 +481,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  },{signal});
  canvas.addEventListener('pointerleave',()=>{if(trailMode)return;if(build)plot(null,false);else hover(null)},{signal});
  canvas.addEventListener('pointerup',event=>{
+  if(interiorActive){
+   if(candidate?.id===event.pointerId&&Math.hypot(event.clientX-candidate.x,event.clientY-candidate.y)<=6)onInteriorPick?.(pickInterior(event));
+   candidate=null;return;
+  }
   if(trailMode){
    if(trailPointer!==event.pointerId)return;
    recordTrail(event);trailPointer=null;
@@ -484,6 +513,7 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
   fingers.delete(event.pointerId);candidate=null;canvas.dataset.dragging='false';hover(null);
  },{signal});
  canvas.addEventListener('keydown',event=>{
+  if(interiorActive)return;
   if(event.key==='+'||event.key==='='){event.preventDefault();zoom(.79)}
   if(event.key==='-'){event.preventDefault();zoom(1.26)}
   if(event.key==='Home'){event.preventDefault();reset()}
@@ -639,7 +669,14 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  }
  function animateCubes(delta,night,nightAge){
   openDoors.clear();
-  const actors=[{walk:residentWalk,hit:cubeHit,radius:.68},...[...guests.values()].map(guest=>({walk:guest.walk,hit:guest.hit,radius:.57}))];
+  const roster=[{id:'cube',model:owner.resident,walk:residentWalk,hit:cubeHit,radius:.68},
+   ...[...guests.values()].map(g=>({id:'visitor:'+g.slot,model:g.resident,walk:g.walk,hit:g.hit,radius:.57}))];
+  const actors=roster.filter(actor=>{
+   if(!playingResidents.has(actor.id))return true;
+   if(actor.model.visible)actor.walk.releaseHome();
+   actor.model.visible=false;actor.hit.userData.inactive=true;
+   return false;
+  });
   for(const actor of actors){
    const stay=actor.walk.position;
    const canStep=point=>actors.every(other=>{
@@ -685,8 +722,13 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  function render(now){
   frame=0;
   if(document.hidden||!inView||disposed||previewOpen)return;
-  const delta=last?Math.min(.05,(now-last)/1000):0;
+  if(renderer.software&&last&&now-last<80){frame=requestAnimationFrame(render);return;}
+  const delta=last?Math.min(renderer.software ? .16 : .05,(now-last)/1000):0;
   last=now;elapsed+=delta;
+  if(interiorActive){
+   interior.render(canvas.clientWidth,canvas.clientHeight,elapsed,motion);
+   frame=requestAnimationFrame(render);return;
+  }
   controls.update(delta);
   if(!testShot)cameraMotion.step(delta);
   animateSpike();
@@ -713,8 +755,10 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  }
  function setBuildingPreview(canvas,kind){
   if(canvas){
-   if(!preview)preview=createBuildingPreview(canvas,models[kind]);
-   else {preview.setModel(models[kind]);preview.resize()}
+   if(kind==='computer'&&!workstationPreview){workstationPreview=makeKingdomComputer(1);workstationPreview.scale.setScalar(2.75);}
+   const template=kind==='computer'?workstationPreview:models[kind];
+   if(!preview)preview=createBuildingPreview(canvas,template);
+   else {preview.setModel(template);preview.resize()}
   }
   previewOpen=Boolean(canvas);
   wake();
@@ -723,20 +767,19 @@ export function createKingdomWorld({canvas,cube,clock=Date.now,onSelect,onHover,
  viewport.observe(canvas);
  document.addEventListener('visibilitychange',wake,{signal});
  reset();
- canvas.dataset.renderer='webgl';
  wake();
 
  function dispose(){
   disposed=true;
   cancelAnimationFrame(frame);
   size.disconnect();viewport.disconnect();listeners.abort();controls.dispose();
-  preview?.dispose();
+  preview?.dispose();interior?.dispose();if(workstationPreview)release(workstationPreview);
   scene.add(...Object.values(models),...Object.values(improvedModels),manor,...defences,...Object.values(resources).map(resource=>resource.bubble));
   release(scene);foundationMaterial.dispose();
   sun.shadow.dispose();
-  renderer.dispose();renderer.forceContextLoss();
+  renderer.dispose();renderer.forceContextLoss?.();
  }
- return {select,setCube,setPlot,setBuild,setTrailMode,setBuildingPreview,productionOrigin,popProduction,fireSpike,panMode,zoom,reset,dispose};
+ return {select,setCube,setPlot,setInterior,setBuild,setTrailMode,setBuildingPreview,productionOrigin,popProduction,fireSpike,panMode,zoom,reset,dispose};
 }
 
 export {createCubePortraitRenderer} from './cube-shop-preview.js';

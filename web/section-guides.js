@@ -63,12 +63,13 @@ export const sectionGuides={
    ['Place a building','Open Build Mode to preview a building and check its cost. Choose a clear spot, then press E or Place. Press R to rotate and Q to cancel.'],
    ['Draw a trail','In Build Mode, choose Draw trail and drag across the ground. Save it to replace the existing pavement. Follow trail controls how residents roam.'],
    ['Collect mana','Build a Mana Forge and wait for the blue bubble. Click the bubble to add its stored mana to your Kingdom.'],
-  ['Attract visitors','Your first tower holds two houses. Upgrade it to add more lots and raise your Kingdom’s rating. The Visitor index reveals creators as you reach their star requirements.']
+  ['Furnish a house','Choose Computer under Production in Build Mode. Pick a GD House and a floor tile for the desk. Assign a resident and press Play GD to start earning Stars.'],
+  ['Attract visitors','The Visitor index shows the house rating and lifetime Stars each creator needs to move in.']
  ]},
  'battle-campaign':{title:'Battle campaign',art:'/assets/faces/demon-extreme.webp',steps:[
   ['Build a squad of four','Choose four different cards from your collection. Start at the earliest unlocked campaign stage.'],
   ['Plan your moves','Read enemy intent. Basic attacks build charge. Spend it on signature moves or interrupt a dangerous cast.'],
-  ['Clear the objectives','Win to unlock the next stage and receive 10 Demon Keys on the first clear. Each stage shows its medal goals and rewards.']
+  ['Clear the objectives','Each of the ten chapters has an Easy, Medium and Hard encounter. Win to unlock the next fight and earn 10 Demon Keys on its first clear.']
  ]},
  'battle-arenas':{title:'Battle arenas',art:'/assets/faces/demon-hard.webp',steps:[
   ['Choose a difficulty','Equip four cards and choose an arena. Stronger opponents award more coins.'],

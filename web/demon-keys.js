@@ -11,7 +11,7 @@ export const demonKeyDiscordBonus=15;
 
 export function initDemonKeys(wallet,now=Date.now()){
  if(wallet.demonBanner)return false;
- const cleared=campaignStages.filter((_,i)=>stageCleared(wallet,i+1)).length;
+ const cleared=campaignStages.filter(stage=>stageCleared(wallet,stage.id)).length;
  wallet.demonKeys=starterDemonKeys+cleared*campaignKeyReward;
  wallet.demonBanner={offerEndsAt:now+bannerUnlockDelay};
  return true;

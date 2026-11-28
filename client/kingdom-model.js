@@ -93,15 +93,15 @@ function grainMap(width,height,draw){
  return texture;
 }
 
-function makeGround(loader,bounds){
+function makeGround(loader,bounds,software){
  const texture=loader.load('/assets/kingdom/grass.webp');
  texture.colorSpace=THREE.SRGBColorSpace;
  texture.wrapS=texture.wrapT=THREE.MirroredRepeatWrapping;
  texture.repeat.set(17,28);texture.anisotropy=8;
- const geometry=new THREE.PlaneGeometry(174,174,128,128);
+ const geometry=new THREE.PlaneGeometry(174,174,software?32:128,software?32:128);
  geometry.rotateX(-Math.PI/2);
  const positions=geometry.getAttribute('position'),colors=new Float32Array(positions.count*3);
- const a=new THREE.Color('#d8e8ae'),b=new THREE.Color('#b9cf82'),mix=new THREE.Color();
+ const a=new THREE.Color(software?'#7b9b54':'#d8e8ae'),b=new THREE.Color(software?'#688647':'#b9cf82'),mix=new THREE.Color();
  for(let i=0;i<positions.count;i++){
   const x=positions.getX(i),z=positions.getZ(i);
   positions.setY(i,groundHeight(x,z));
@@ -311,11 +311,20 @@ function vegetation(group,trees,bounds){
  group.add(grass);
 }
 
-export function makeLandscape(loader,bounds,trees){
+export function makeLandscape(loader,bounds,trees,software=false){
  const ground=new THREE.Group();
- const surface=makeGround(loader,bounds);
+ const surface=makeGround(loader,bounds,software);
  ground.add(surface);
- vegetation(ground,trees,bounds);
+ if(software){
+  surface.renderOrder=-4;
+  const trunk=new THREE.CylinderGeometry(.15,.22,1,5),leaf=new THREE.IcosahedronGeometry(1,0);
+  const bark=material('#826745'),foliage=['#507b50','#759256','#4d8467','#376f65'].map(c=>material(c));
+  for(const tree of trees){
+   const {x,z,height,shade}=tree,y=groundHeight(x,z);
+   meshAt(ground,trunk,bark,x,y+height*.25,z).scale.y=height*.5;
+   meshAt(ground,leaf,foliage[shade],x,y+height*.69,z).scale.set(height*.27,height*.38,height*.25);
+  }
+ }else vegetation(ground,trees,bounds);
  const random=randomFor(371),hills=['#6f9f99','#6e9b97','#7a9e96','#89adab'].map(color=>material(color,{flatShading:true}));
  const geometry=new THREE.IcosahedronGeometry(1,2);
  for(let i=0;i<20;i++){
@@ -464,7 +473,7 @@ function woodGrain(seed,light,shadow){
  return map;
 }
 
-export function makeHouse(level=1){
+export function makeHouse(level=1,{cutaway=false}={}){
  const upgraded=level>=2,manor=level===3;
  const house=new THREE.Group(),positions=new Map();
  const boards=woodGrain(851,'#dfb187','#83573d'),beams=woodGrain(817,'#bd8963','#64412a');
@@ -488,6 +497,12 @@ export function makeHouse(level=1){
   positions.get(finish).push(shape);
  }
  const block=(finish,x,y,z,w,h,d,angle)=>add(finish,new THREE.BoxGeometry(w,h,d),x,y,z,angle);
+ function finishWalls(){
+  for(const [finish,pieces] of positions){
+   meshAt(house,mergeGeometries(pieces),finish,0,0,0);
+   pieces.forEach(piece=>piece.dispose());
+  }
+ }
  const {width,depth}=houseSize;
  const {front:doorZ,width:doorWidth,height:doorHeight,floor}=houseEntry;
  const doorTop=floor+doorHeight,wallTop=1.709,pierWidth=(2.77-doorWidth)/2;
@@ -495,20 +510,19 @@ export function makeHouse(level=1){
  block(mortar,0,.068,0,3.06,.079,2.63);
  block(stepStone,0,.129,0,2.94,.07,2.53);
  block(warm,0,.955,-1.136,2.77,1.57,.18);
- for(const side of [-1,1]){
-  block(warm,side*1.295,.955,0,.18,1.57,2.32);
-  block(warm,side*(doorWidth/2+pierWidth/2),.955,doorZ-.085,pierWidth,1.57,.17);
+ const sideWalls=cutaway?[-1]:[-1,1];
+ for(const side of sideWalls)block(warm,side*1.295,.955,0,.18,1.57,2.32);
+ if(!cutaway){
+  for(const side of [-1,1])block(warm,side*(doorWidth/2+pierWidth/2),.955,doorZ-.085,pierWidth,1.57,.17);
+  block(timber,0,(wallTop+doorTop)/2,doorZ-.05,doorWidth,wallTop-doorTop,.22);
  }
- block(timber,0,(wallTop+doorTop)/2,doorZ-.05,doorWidth,wallTop-doorTop,.22);
  for(let i=0;i<8;i++){
   const y=.26+i*.185,finish=i%3===1?pale:warm;
   block(finish,0,y,-1.226,2.71,.170,.034);
-  for(const side of [-1,1]){
-   block(finish,side*(doorWidth/2+pierWidth/2),y,doorZ,pierWidth,.170,.034);
-   block(finish,side*1.397,y,-.032,.044,.168,2.38);
-  }
+  if(!cutaway)for(const side of [-1,1])block(finish,side*(doorWidth/2+pierWidth/2),y,doorZ,pierWidth,.170,.034);
+  for(const side of sideWalls)block(finish,side*1.397,y,-.032,.044,.168,2.38);
  }
- for(const z of [-1.212,1.14]){
+ for(const z of cutaway?[-1.212]:[-1.212,1.14]){
   for(const x of [-1.30,1.30]){
    block(timber,x,.971,z,.20,1.68,.22);
    if(upgraded)block(copper,x,1.43,z+(z>0?.12:-.12),.064,.067,.021);
@@ -516,9 +530,51 @@ export function makeHouse(level=1){
   block(timber,0,1.67,z,2.79,.105,.15);
   if(z<0)block(timber,0,.26,z,2.79,.14,.15);
  }
- for(const x of [-1.387,1.387]){
+ for(const side of sideWalls){
+  const x=side*1.387;
   for(const y of [.26,1.65])block(timber,x,y,-.035,.145,.14,2.45);
   block(timber,x,.96,-.039,.13,1.51,.16);
+ }
+ block(stepStone,0,.103,1.34,doorWidth+.19,.12,.43);
+ block(mortar,0,.042,1.46,doorWidth+.32,.076,.40);
+ if(cutaway){
+  // The room uses the outdoor house's foundation, porch, back wall and far side.
+  // Expose their inside faces and leave a clear sight line to every furniture cell.
+  block(timber,-1.30,.971,1.14,.20,1.68,.22);
+  for(const y of [.255,1.64]){
+   block(timber,.01,y,-1.023,2.66,.108,.058);
+   block(timber,-1.183,y,-.02,.059,.108,2.31);
+  }
+  const floorBoards=[0xa37854,0xac815d,0xb08761,0x9c7454,0xb58c67].map(color=>material(color,{map:boards}));
+  const grain=randomFor(777);
+  for(let row=0;row<12;row++){
+   const z=-1.0875+.195*row,joint=(row%2?.42:-.55)+(grain()-.5)*.30;
+   for(const [from,to] of [[-1.406,joint],[joint,1.406]]){
+    block(floorBoards[Math.floor(grain()*floorBoards.length)],(from+to)/2,floor+.019,z,to-from-.009,.038,.190);
+   }
+  }
+  const skyGlass=material(manor?'#7ec6bd':'#acd4cf',{emissive:'#5f9397',emissiveIntensity:.18,roughness:.48});
+  const w=upgraded?.96:.73,x=-.45,y=1.10;
+  block(timber,x,y,-1.005,w+.10,.62,.085);
+  block(skyGlass,x,y,-.955,w,.51,.025);
+  block(sash,x,y,-.935,.030,.51,.024);
+  block(sash,x,y+.02,-.934,w,.029,.026);
+  block(warm,x,.792,-.927,w+.15,.068,.16);
+  if(upgraded)for(const side of [-1,1])block(sash,x+side*w*.27,y,-.933,.023,.51,.026);
+  // A framed eight-point level medal gives the back wall a GD detail at room scale.
+  block(timber,.66,1.13,-1.013,.427,.457,.076);
+  block(manor?skyGlass:dark,.66,1.13,-.966,.362,.391,.026);
+  const medal=upgraded?copper:pale;
+  block(medal,.66,1.14,-.943,.134,.134,.027,Math.PI/4);
+  block(medal,.66,1.14,-.94,.110,.110,.027);
+  block(sash,.66,1.005,-.947,.119,.016,.011);
+  if(upgraded){
+   const rail=manor?material('#2b6869',{map:boards}):warm;
+   for(const z of [-.76,-.22,.32,.86])block(rail,-1.182,.55,z,.047,.40,.45);
+   block(timber,-1.147,.772,.005,.088,.057,2.26);
+  }
+  finishWalls();
+  return house;
  }
  const ridge=manor?3.06:upgraded?2.80:2.50,rise=ridge-1.66,slope=rise/1.53;
  function gable(z,back){
@@ -556,8 +612,6 @@ export function makeHouse(level=1){
  for(const x of [-doorWidth/2-.052,doorWidth/2+.052]){
   block(timber,x,floor+doorHeight/2,doorZ+.024,.103,doorHeight,.15);
  }
- block(stepStone,0,.103,1.34,doorWidth+.19,.12,.43);
- block(mortar,0,.042,1.46,doorWidth+.32,.076,.40);
  for(const x of [-.984,.984]){
   block(timber,x,1.09,1.208,.51,.57,.112);
   block(glass,x,1.09,1.274,.394,.43,.026);
@@ -606,10 +660,7 @@ export function makeHouse(level=1){
   block(trim,0,3.265,.14,.075,.39,.079);
   block(copper,0,3.53,.14,.19,.19,.19,Math.PI/4);
  }
- for(const [finish,pieces] of positions){
-  meshAt(house,mergeGeometries(pieces),finish,0,0,0);
-  pieces.forEach(piece=>piece.dispose());
- }
+ finishWalls();
  const door=new THREE.Group(),leafWidth=doorWidth-.052,leafHeight=doorHeight-.035;
  door.name='house-door';door.position.set(-doorWidth/2+.021,floor+.016,doorZ+.02);house.add(door);
  const doorBlock=(finish,x,y,z,w,h,d)=>meshAt(door,new THREE.BoxGeometry(w,h,d),finish,x,y,z);

@@ -134,7 +134,7 @@ async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,adm
   level:playerProgress(wallet.playerXp).level,rank,privateRank,
   power:powerIsCurrent(record)?record.collection_power:collectionPower(await inventory(db,record.player_id),wallet),
   campaignTotal:campaignStages.length,
-  campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(wallet,i+1)),0)};
+  campaignClears:campaignStages.reduce((count,stage)=>count+Number(stageCleared(wallet,stage.id)),0)};
 }
 
 async function commit(db,{owner,record,wallet,changes,requestId,result,now,power,transferId,admin=false,reset=false,editions=[]}){
@@ -374,7 +374,7 @@ export function gameRoutes(readJson,hasArt){
 
   const level=playerProgress(saved.playerXp).level;
   const stats={level,...await collectionCounts(db,record.player_id,await getCollectibleIds()),
-   campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(saved,i+1)),0),
+   campaignClears:campaignStages.reduce((count,stage)=>count+Number(stageCleared(saved,stage.id)),0),
    campaignTotal:campaignStages.length};
   const best=saved.shareBestCard===false?null:bestCardShowcase(await inventory(db,record.player_id),saved);
   const plot=saved.shareKingdom!==false&&level>=featureLevel('kingdom')?kingdomStats(saved):null;

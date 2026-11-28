@@ -18,6 +18,7 @@ import {endlessKeyInterval,endlessKeyStatus,endlessMilestones,rewardEndlessRemix
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
 import {buildCampfire,buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,updateKingdomTrail,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
+import {placeHouseComputer,assignHouseResident,playHouseComputer,upgradeHouseComputer,collectHouseStars} from './kingdom-computer.js';
 import {validTradeMinimum} from './trade-rules.js';
 import {achievementBoost} from './achievement-boosts.js';
 import {bannerPrice,demonBanners,maxBannerDraws,prepareDemonPull,rollDemonBanner} from './demon-banner.js';
@@ -40,6 +41,8 @@ const gatedActions={
  'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
  'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom','kingdom.campfire':'kingdom','kingdom.trail':'kingdom',
+ 'kingdom.computer.place':'kingdom','kingdom.house.assign':'kingdom','kingdom.computer.play':'kingdom',
+ 'kingdom.computer.upgrade':'kingdom','kingdom.computer.collect':'kingdom',
  'kingdom.gem-mine':'kingdom','kingdom.gem-mine.collect':'kingdom',
  'kingdom.spike-shooter':'kingdom','kingdom.spike-shooter.upgrade':'kingdom',
  'kingdom.house.upgrade':'kingdom','kingdom.forge.upgrade':'kingdom','kingdom.construction.finish':'kingdom',
@@ -122,10 +125,10 @@ function saveOpening(wallet,records,changes,pull,now,mintSerial){
 }
 
 async function arenaSetup({tier,remixId,campaign},getPool) {
- requireRule(within(tier,1,10)&&typeof campaign==='boolean','Choose a battle difficulty.');
+ requireRule(typeof campaign==='boolean'&&Number.isSafeInteger(tier)&&(campaign?stageFor(tier):within(tier,1,10)),'Choose a battle difficulty.');
  const remix=findRemix(remixId);
  requireRule(remixId==null||remix&&remix.tier===tier&&!campaign,'Choose a valid remix arena.');
- const byId=new Map((await getPool(difficulties[tier])).map(row=>[row[0],row]));
+ const byId=new Map((await getPool(difficulties[campaign?stageFor(tier).tier:tier])).map(row=>[row[0],row]));
  if(campaign) return {enemies:stageFor(tier).team.map(id=>byId.get(id)),remix};
  const boss=remix&&byId.get(remix.id);
  requireRule(!remix||boss,'The featured level could not load.');
@@ -205,6 +208,11 @@ const rules={
   awardPlayerXp(w,55);
   return {house};
  }},
+ 'kingdom.computer.place':{run:({w,args,now})=>placeHouseComputer(w,args,now)},
+ 'kingdom.house.assign':{run:({w,args,now})=>assignHouseResident(w,args,now)},
+ 'kingdom.computer.play':{run:({w,args,now})=>playHouseComputer(w,args,now)},
+ 'kingdom.computer.upgrade':{run:({w,args,now})=>upgradeHouseComputer(w,args,now)},
+ 'kingdom.computer.collect':{run:({w,args,now})=>collectHouseStars(w,args,now)},
  'kingdom.forge':{run:({w,args,now})=>({forge:buildForge(w,args,now)})},
  'kingdom.campfire':{run:({w,args,now})=>({building:buildCampfire(w,args,now)})},
  'kingdom.trail':{run:({w,args})=>updateKingdomTrail(w,args)},
@@ -325,10 +333,10 @@ const rules={
   requireRule(!campaign||stageUnlocked(w,tier),'Clear the previous campaign stage first.');
   requireRule(enemies.length===4&&enemies.every(Boolean),'The opposing squad could not load.');
   w.squad=[...ids];
-  w.battle=makeBattle(allies,enemies,tier,randomUnit,w.training||{});
+  w.battle=makeBattle(allies,enemies,campaign?stageFor(tier).tier:tier,randomUnit,w.training||{});
   const hpBoost=achievementBoost(w,'battle');
   for(const ally of w.battle.allies)ally.hp=ally.maxHp+=Math.floor(ally.maxHp*hpBoost/100);
-  if(campaign)configureCampaignBattle(w.battle);
+  if(campaign)configureCampaignBattle(w.battle,tier);
   if(remix){
    w.battle.remix=remix.id;
    w.battle.charge=(remix.id===6508283?2:1)+Number(w.remixBest?.[remix.id]===100);

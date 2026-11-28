@@ -10,25 +10,29 @@ export function campaignView(w,tier,{action,coverSource,face,enc,colors}){
  const stage=stageFor(tier),record=w.campaign?.[tier],cleared=stageCleared(w,tier),mastered=medalCount(record)===3;
  const clearPrize=cleared?record.clearPrize??campaignFirstCoins(stage,true):campaignFirstCoins(stage);
  const masteryPrize=mastered?(record.masteryPrize??stage.master):campaignMasterCoins(stage,!cleared);
- const medals=campaignStages.reduce((n,_,i)=>n+medalCount(w.campaign?.[i+1]),0);
- const stages=campaignStages.filter((_,i)=>stageCleared(w,i+1)).length;
+ const medals=campaignStages.reduce((n,entry)=>n+medalCount(w.campaign?.[entry.id]),0);
+ const stages=campaignStages.filter(entry=>stageCleared(w,entry.id)).length;
  const goals=[
   [cleared,'Win the battle'],
   [record?.tempo,'Clear in '+stage.turns+' turns or fewer'],
   [record?.squad,'Keep at least 3 allies standing']
  ];
- const map=campaignStages.map((entry,i)=>{
-  const next=i+1,unlocked=stageUnlocked(w,next),earned=medalCount(w.campaign?.[next]);
-  const state=unlocked?(earned?earned+' / 3 stars':'Ready'):'Locked';
-  return '<button class="stage-tile" data-stage="'+next+'" '+(unlocked?'':'disabled ')+'aria-pressed="'+(next===tier)+'">'+
-   '<span class="stage-number">'+String(next).padStart(2,'0')+'</span><span><strong>'+entry.name+'</strong><small>'+difficulties[next]+'</small></span>'+
-   '<span class="stage-tile-state">'+(unlocked?(earned?ratingIcon():ico('battle')):ico('lock'))+state+'</span></button>';
+ const chapters=campaignStages.filter(entry=>entry.variant==='Easy');
+ const map=chapters.map(chapter=>{
+  const fights=campaignStages.filter(entry=>entry.tier===chapter.tier).map(entry=>{
+   const unlocked=stageUnlocked(w,entry.id),earned=medalCount(w.campaign?.[entry.id]);
+   const state=unlocked?(earned?earned+' / 3 stars':'Ready'):'Locked';
+   return '<button class="stage-tile" data-stage="'+entry.id+'" '+(unlocked?'':'disabled ')+'aria-pressed="'+(entry.id===tier)+'">'+
+    '<span class="stage-number">'+String(entry.number).padStart(2,'0')+'</span><span><strong>'+entry.name+'</strong><small>'+entry.variant+'</small></span>'+
+    '<span class="stage-tile-state">'+(unlocked?(earned?ratingIcon():ico('battle')):ico('lock'))+state+'</span></button>';
+  }).join('');
+  return '<section class="campaign-chapter"><h3><img src="'+face(difficulties[chapter.tier])+'" alt="">'+chapter.name+' <small>'+difficulties[chapter.tier]+'</small></h3>'+fights+'</section>';
  }).join('');
  const rules=stageRules(stage);
  return '<section class="campaign" aria-label="Battle campaign"><header class="campaign-heading"><h2>Campaign</h2>'+
   '<div><span><b>'+stages+' / '+campaignStages.length+'</b> cleared</span><span>'+ratingIcon()+' <b>'+medals+' / '+campaignStages.length*3+'</b></span></div></header>'+
-  '<div class="campaign-layout"><article class="campaign-focus" style="--chapter:'+colors[tier]+'"><img class="campaign-art" src="'+enc(coverSource(stage.team.at(-1)))+'" alt="">'+
-  '<div class="campaign-focus-body"><small class="campaign-tier"><img src="'+face(difficulties[tier])+'" alt=""> Stage '+tier+' · '+difficulties[tier]+'</small>'+
+  '<div class="campaign-layout"><article class="campaign-focus" style="--chapter:'+colors[stage.tier]+'"><img class="campaign-art" src="'+enc(coverSource(stage.team.at(-1)))+'" alt="">'+
+  '<div class="campaign-focus-body"><small class="campaign-tier"><img src="'+face(difficulties[stage.tier])+'" alt=""> Stage '+stage.number+' · '+difficulties[stage.tier]+' · '+stage.variant+'</small>'+
   '<h3>'+stage.name+'</h3><p class="campaign-captain">Captain <b>'+stage.captain+'</b></p>'+
   '<ul class="campaign-rules">'+rules.map(rule=>'<li>'+rule+'</li>').join('')+'</ul>'+
   '<ul class="campaign-goals">'+goals.map(([done,label])=>'<li class="'+(done?'earned':'')+'">'+ratingIcon()+

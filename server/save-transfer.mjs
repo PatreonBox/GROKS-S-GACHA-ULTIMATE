@@ -10,7 +10,7 @@ import {oldCoinAmount} from '../web/coin-economy.js';
 const record=value=>value&&typeof value==='object'&&!Array.isArray(value)?value:{};
 const count=(value,limit=Number.MAX_SAFE_INTEGER)=>Number.isSafeInteger(value)&&value>0?Math.min(value,limit):0;
 const copiesLimit=Math.floor(Number.MAX_SAFE_INTEGER/3);
-const tierIds=campaignStages.map((_,index)=>index+1);
+const tierIds=campaignStages.map(stage=>stage.id);
 const drillKeys=Object.keys(drillTypes);
 
 export async function prepareSaveTransfer(args,getPool){
@@ -99,6 +99,7 @@ function transferCampaign(wallet,old){
   const clearPrize=Math.max(current?.clearPrize||0,oldCoinAmount(count(saved.clearPrize)));
   const masteryPrize=Math.max(current?.masteryPrize||0,oldCoinAmount(count(saved.masteryPrize)));
   campaign[tier]={
+   ...(current?.firstVersion!=null?{firstVersion:current.firstVersion}:!current&&saved.firstVersion===3?{firstVersion:3}:{}),
    turns:Math.min(current?.turns??Infinity,count(saved.turns,100000)||current?.turns||100000),
    survivors:Math.max(current?.survivors||0,count(saved.survivors,4)),
    tempo:current?.tempo===true||saved.tempo===true,squad:current?.squad===true||saved.squad===true,
@@ -106,7 +107,7 @@ function transferCampaign(wallet,old){
   };
  }
  const chapters=record(old.armyTrilogy),series=record(old.armySeries);
- for(const tier of tierIds)if(count(chapters[tier],7)){
+ for(let tier=1;tier<=10;tier++)if(count(chapters[tier],7)){
   const progress=wallet.armyTrilogy??={};
   progress[tier]=(progress[tier]||0)|count(chapters[tier],7);
  }

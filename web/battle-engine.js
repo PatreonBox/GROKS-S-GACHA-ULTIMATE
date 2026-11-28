@@ -159,7 +159,7 @@ export function playTurn(wallet,id,seq,move,target,now=Date.now(),random=Math.ra
   const source=b[attackingSide][extra.from],credit=source?{sourceId:source.id,sourceName:source.name}:{};
   if(!u.hp){
    if(side==='enemies'){
-    const bounty=b.campaign?campaignBounty(u.bounty,false,b.campaignRewardVersion!==2):u.bounty;
+    const bounty=b.campaign?campaignBounty(u.bounty,false,b.campaignRewardVersion??1):u.bounty;
     b.kills++;b.earned+=bounty;changeCoins(wallet,bounty);
     if(source){
      b.takedowns??={};b.takedowns[source.id]=(b.takedowns[source.id]||0)+1;

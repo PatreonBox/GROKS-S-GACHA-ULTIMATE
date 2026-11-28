@@ -354,7 +354,7 @@ test('Discord PKCE sign-in claims the online guest save once',async()=>{
   insert.run(player_id,6508283,JSON.stringify({copies:0}));
   const stats=request('/api/game?view=profile',sessionCookie);
   assert.deepEqual((await (await worker.fetch(stats,configure(stats))).json()).profile,
-   {coins:150,gems:10,unique:2,copies:3,level:0,rank:1,privateRank:false,power:0,collectible:catalog.size,campaignClears:0,campaignTotal:10});
+   {coins:150,gems:10,unique:2,copies:3,level:0,rank:1,privateRank:false,power:0,collectible:catalog.size,campaignClears:0,campaignTotal:30});
   assert.equal((await (await game(sessionCookie)).json()).wallet.coins,150);
   for(let i=0;i<2;i++){
    const guide=new Request(to('/api/game'),{method:'POST',headers:{Cookie:sessionCookie,

@@ -1,5 +1,7 @@
 import {cubeCatalog,cubeRarities,equippedCube} from './cube-catalog.js';
 import {campaignStages} from './campaign.js';
+import {computerCost,computerHouse,computerPlan,residentBonus,visitorResident} from './kingdom-computer.js';
+import {createRoomControls,interiorChooser,interiorControls} from './kingdom-room.js';
 import {ico} from './icons.js';
 import {kingdomAmbience} from './kingdom-ambience.js';
 import {gameCommand,gameRead} from './game-client.js';
@@ -28,21 +30,27 @@ const upgradeControl='<div class="kingdom-upgrade"><strong data-upgrade-name></s
 const cameraButton=(action,icon,label)=>'<button type="button" data-camera="'+action+'" title="'+label+'" aria-label="'+label+'">'+ico(icon)+'</button>';
 const skins=new Map(cubeCatalog.map(cube=>[cube.id,cube]));
 const rarities=[...new Set(visitorSlots.map(slot=>slot.rarity))];
+const computerSpec={name:'Computer',price:computerCost.coins};
 const visitorsFrom=wallet=>(wallet.discoveredVisitors||[]).map(guest=>({...guest,...visitorSlots[guest.slot],skin:skins.get(guest.cube)}));
 
 function visitorCard(slot,guest){
- if(!guest)return '<article class="visitor-card visitor-mystery"><div class="visitor-unknown" aria-hidden="true">?</div>'+
-  '<div class="visitor-name"><strong>???</strong><small>Undiscovered</small></div>'+
-  '<span class="visitor-locked" aria-label="Unlocks at '+slot.stars+' stars">'+ico('lock')+slot.stars+' '+star+'</span></article>';
+ if(!guest){
+  const gate=slot.stars+' rating'+(slot.earnedStars?' + '+slot.earnedStars+' lifetime Stars':'');
+  return '<article class="visitor-card visitor-mystery"><div class="visitor-unknown" aria-hidden="true">?</div>'+
+   '<div class="visitor-name"><strong>???</strong><small>Undiscovered</small></div>'+
+   '<span class="visitor-locked">'+ico('lock')+gate+'</span></article>';
+ }
  const channel='https://www.youtube.com/@'+encodeURIComponent(guest.channel);
+ const feat=guest.feat?(guest.video?'<a href="'+escape(guest.video)+'" target="_blank" rel="noopener">'+escape(guest.feat)+'</a>':escape(guest.feat)):
+  escape(guest.audience)+' subscribers';
  return '<article class="visitor-card"><img class="visitor-skin" src="'+guest.skin.icon+'" alt="" title="Preview cube">'+
   '<div class="visitor-name"><a href="'+channel+'" target="_blank" rel="noopener">'+escape(guest.name)+' '+ico('external')+'</a>'+
-  '<small>'+escape(guest.audience)+' subscribers</small></div>'+
+  '<small>'+feat+' · +'+guest.skillBonus+'% Stars</small></div>'+
   '<button type="button" class="outline" data-visit="'+escape(guest.id)+'" aria-label="Inspect '+escape(guest.name)+'">Staying</button></article>';
 }
 
 export function createKingdom(root,sound,applyWallet,rewards){
- let wallet,world,ui,coins=0,cube,selection='tower',visit=0,pan=false,keys;
+ let room,wallet,world,ui,coins=0,cube,selection='tower',visit=0,pan=false,keys;
  let plot=kingdomStats(),visitors=[],plotSignature='',snap=true,build=null,placing=false,upgrading=false;
  let buildingKind='house',productionKind='forge',expanding=false,editing=false,ambience,visitorDue,refreshingVisitors=false;
  let clockOffset=0,finishing=false,finishRetryAt=0;
@@ -60,6 +68,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  function nameOf(id){
   if(id==='tower')return towerName;
   if(id==='cube')return cube.name;
+  const roomHouse=pcHome(id);if(roomHouse)return 'Computer · GD House '+(plot.houses.indexOf(roomHouse)+1);
   if(id?.startsWith('mana:')){
    const forge=plot.forges.find(item=>item.id===id.slice(5));
    return forge?'Collect '+readout.format(forgeStored(forge,clock()))+' mana':null;
@@ -75,8 +84,15 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const building=buildingFor(id);
   return building?buildingSpecs[building.kind||'house'].name:guestFor(id)?.name;
  }
- const priceFor=kind=>kind==='house'?plot.houseCost:buildingSpecs[kind].price;
- const purchaseProblem=kind=>kind===mineKind?gemMineBuildError(plot)||(plot.mana<gemMine.mana?
+ const pcHome=id=>id?.startsWith('computer:')?plot.houses.find(h=>h.computer&&h.id===id.slice(9)):null;
+ const housingForResident=id=>{
+  const token=id==='cube'?'cube':guestFor(id)?visitorResident(guestFor(id).slot):null;
+  return token?plot.houses.find(h=>h.resident===token):null;
+ };
+ const priceFor=kind=>kind==='computer'?computerCost.coins:kind==='house'?plot.houseCost:buildingSpecs[kind].price;
+ const purchaseProblem=kind=>kind==='computer'?
+  (computerHouse(wallet)?'Your Kingdom already owns its one computer.':!plot.houses.some(h=>!h.upgrade)?'Build an available GD House first.':
+   plot.mana<computerCost.mana?'Need '+(computerCost.mana-plot.mana)+' more Mana.':''):kind===mineKind?gemMineBuildError(plot)||(plot.mana<gemMine.mana?
   'Need '+readout.format(gemMine.mana-plot.mana)+' more Mana.':''):
   kind===spikeKind&&plot.defenceLots>=plot.tower.defenceLimit?'All defence slots are claimed.':
   kind==='house'&&plot.houseLots>=plot.tower.limit?'The tower’s house lots are full.':'';
@@ -100,7 +116,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(building.kind==='forge')return {level,construction:building.upgrade,unmet:plot.tower.level<forgeUpgrade.towerLevel?'Requires Tower Level 2.':'',next:level===1?{...forgeUpgrade,benefit:'3 Mana/s · 1,200 capacity'}:null};
   const plan=housePlan(building,clock());
   return {...plan,unmet:plan.next?.towerLevel>plot.tower.level?'Requires Tower Level '+plan.next.towerLevel+'.':'',
-   next:plan.next&&{...plan.next,benefit:'+'+readout.format(plan.next.stars)+' stars'}};
+   next:plan.next&&{...plan.next,benefit:'+'+readout.format(plan.next.stars)+' Kingdom rating'}};
  }
  function upgradeProblem(option){
   if(option.unmet)return option.unmet;
@@ -154,38 +170,45 @@ export function createKingdom(root,sound,applyWallet,rewards){
  }
  function paintProduction(){
   const building=buildingFor(selection),forge=building?.kind==='forge',mine=building?.kind===mineKind;
-  if(!forge)ui.collectMana.hidden=true;
-  if(!mine)ui.collectGems.hidden=ui.mineProgress.hidden=true;
+  const home=pcHome(selection),pc=home&&computerPlan(home,clock());
+  ui.collectMana.hidden=!forge;ui.collectGems.hidden=!mine;ui.collectStars.hidden=!pc;
+  const bar=ui.mineProgress,note=ui.productionTime;
+  bar.hidden=note.hidden=!forge&&!mine&&!pc;
+  if(bar.hidden)return;
+  let progress=0,remaining=0,unit='',full=false;
+  const now=clock();
   if(forge){
-   const {stored,capacity,rate}=forgePlan(building,clock());
-   ui.description.textContent=readout.format(stored)+' / '+readout.format(capacity)+' Mana stored · '+rate+' Mana/s'+
-    (stored===capacity?' · Full':stored<forgeMinimum?' · Collect at '+forgeMinimum:'');
-   ui.collectMana.hidden=stored<forgeMinimum;
-   ui.collectMana.disabled=collecting.has(building.id);
-   ui.collectMana.textContent='Collect '+readout.format(stored)+' mana';
-   ui.collectMana.dataset.building=building.id;
+   const {stored,capacity,rate}=forgePlan(building,now);
+   full=stored>=capacity;unit='Mana';
+   progress=stored/capacity;
+   const fraction=Math.max(0,now-(building.collectedAt??now))%1000;
+   remaining=Math.max(0,Math.ceil((capacity-stored)/rate)*1000-fraction);
+   ui.description.textContent=numberStored(stored,capacity)+' Mana stored · '+rate+' Mana/s'+(stored<forgeMinimum?' · Collect at '+forgeMinimum:'');
+   ui.collectMana.hidden=stored<forgeMinimum;ui.collectMana.disabled=collecting.has(building.id);
+   ui.collectMana.textContent='Collect '+readout.format(stored)+' mana';ui.collectMana.dataset.building=building.id;
   }else if(mine){
-   const {stored,capacity,progress}=gemMinePlan(building,clock());
-   const full=stored===capacity;
-   ui.description.textContent=stored+' / '+capacity+' gems stored · '+(full?'Full':'Next gem in '+duration(Math.ceil((gemMine.interval-progress)/1000)));
-   ui.mineProgress.hidden=full;
-   ui.mineProgress.value=progress;
-   ui.collectGems.hidden=stored===0;
-   ui.collectGems.disabled=collecting.has(building.id);
-   if(ui.collectGems.dataset.amount!==String(stored)){
-    ui.collectGems.dataset.amount=stored;
-    ui.collectGems.innerHTML=gem+'Collect '+stored+(stored===1?' gem':' gems');
-   }
-   ui.collectGems.dataset.building=building.id;
+   const plan=gemMinePlan(building,now);
+   full=plan.stored===plan.capacity;unit='gem';
+   progress=full?1:plan.progress/gemMine.interval;remaining=gemMine.interval-plan.progress;
+   ui.description.textContent=numberStored(plan.stored,plan.capacity)+' gems stored · 1 gem every 5 min';
+   ui.collectGems.hidden=!plan.stored;ui.collectGems.disabled=collecting.has(building.id);
+   ui.collectGems.textContent='Collect '+plan.stored+(plan.stored===1?' gem':' gems');ui.collectGems.dataset.building=building.id;
+  }else{
+   unit='Star';progress=pc.progress;remaining=pc.remainingMs;
+   ui.description.textContent=readout.format(pc.rate)+(pc.rate===1?' Star/min':' Stars/min')+' · +'+pc.bonus+'% skill · '+readout.format(pc.stored)+' ready';
+   ui.collectStars.disabled=!pc.stored;ui.collectStars.textContent='Collect '+readout.format(pc.stored)+(pc.stored===1?' Star':' Stars');
   }
+  bar.max=1;bar.value=progress;bar.setAttribute('aria-label',forge?'Mana storage':'Next '+unit+' progress');
+  note.textContent=full?'Storage full':remaining===null?'Paused':(forge?'Storage full in ':'Next '+unit+' in ')+Math.ceil(remaining/1000)+'s';
  }
+ function numberStored(stored,capacity){return readout.format(stored)+' / '+readout.format(capacity);}
 
  function paintPicker(){
   const {houses,forges,gemMines,defences,campfires}=plot;
   const entries=items=>items.map((item,index)=>[buildingKey(item),nameOf(buildingKey(item))+(items.length>1?' '+(index+1):'')]);
   const groups=[
    ['Kingdom',[['tower',towerName],['cube',cube.name]]],
-   ['Housing',entries(houses)],['Production',[...entries(forges),...entries(gemMines)]],['Defences',entries(defences)],['Outdoor',entries(campfires)],
+   ['Housing',entries(houses)],['Production',[...entries(forges),...entries(gemMines),...houses.filter(h=>h.computer).map(h=>['computer:'+h.id,nameOf('computer:'+h.id)])]],['Defences',entries(defences)],['Outdoor',entries(campfires)],
    ['Visitors',visitors.map(guest=>['visitor:'+guest.id,guest.name])]
   ];
   if(treeFor(selection))groups.push(['Landscape',[[selection,nameOf(selection)]]]);
@@ -212,9 +235,20 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const option=upgradeOption(selection);
   ui.state.textContent=option?'Level '+option.level:mine?'Production':fire?'Outdoor':guest?guest.rarity+' resident':tree?'Landscape':cube.rarity+' cube';
   ui.description.textContent=tower?houses.length+' / '+plot.tower.limit+' houses · '+plot.defenceLots+' / '+plot.tower.defenceLimit+' defences':
-   house?'+'+readout.format(houseStars(option.level))+' stars':
+   house?'+'+readout.format(houseStars(option.level))+' Kingdom rating':
    defence?option.damage+' damage per shot':fire?'Lights the grass at night and gives awake cubes a spot to warm up.':
-   building?'':guest?'Moved in after your Kingdom reached '+guest.stars+' stars.':tree?'Clear this tree to free up its space.':'Your equipped cube roams the grounds.';
+   building?'':guest?'Moved in after your Kingdom reached '+guest.stars+' rating.':tree?'Clear this tree to free up its space.':'Your equipped cube roams the grounds.';
+  const computer=pcHome(selection),assigned=housingForResident(selection),context=house?building:computer||assigned;
+  ui.editRoom.hidden=!context;ui.playResident.hidden=!(assigned?.computer||computer?.resident);
+  if(context){
+   ui.editRoom.dataset.house=context.id;
+   ui.editRoom.textContent='Edit GD House '+(plot.houses.indexOf(context)+1);
+   ui.playResident.dataset.house=context.id;
+   ui.playResident.textContent=context.computer?.playing?'Stop playing GD':'Play GD';
+  }
+  if(computer)ui.state.textContent='Level '+computer.computer.level+' · '+(computer.computer.level===1?'30':'60')+' Hz';
+  if(guest)ui.description.textContent=(guest.feat?guest.feat+' · ':'')+'+'+guest.skillBonus+'% Star production';
+  if(house)ui.description.textContent='+'+readout.format(houseStars(option.level))+' Kingdom rating · '+(building.computer?'Computer installed':'No computer');
   ui.spikeTest.hidden=!defence;
   ui.fire.disabled=!world;
   ui.shotResult.textContent=defence&&shotReport?.id===building.id?shotReport.message:'';
@@ -272,6 +306,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.coins.textContent=wallet?amount(coins):'…';
   if(wallet)ui.coins.title=readout.format(coins)+' coins';
   ui.gems.textContent=wallet?readout.format(wallet.gems):'…';
+  ui.starBalance.textContent=amount(wallet?.kingdom?.stars||0);
   rewards.paint('mana');
   ui.clears.textContent=wallet?Object.keys(wallet.campaign||{}).length+' / '+campaignStages.length:'…';
  }
@@ -279,7 +314,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const remaining=visitorDue-clock();
   ui.guestHint.textContent=!plot.houses.length?'Build a home to attract a visitor.':visitorDue&&remaining<=180_000?
    (remaining<=0?'A visitor is arriving…':'Next visitor in '+duration(Math.ceil(remaining/1000))+'.'):
-   'More stars attract rarer visitors. Visitors who arrive become residents.';
+   'House rating and lifetime Stars attract rarer residents. Lifetime Stars: '+readout.format(wallet?.kingdom?.earnedStars||0)+'.';
  }
  function welcomeVisitors(){
   const arrived=visitors.filter(guest=>guest.arrivedAt>0&&clock()-guest.arrivedAt<visitorWelcomeMs&&!welcomed.has(guest.id));
@@ -296,9 +331,9 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.value.textContent=amount(value);
   ui.value.title=readout.format(value)+' coins';
   ui.starValue.textContent=readout.format(stars)+' / 5';
-  ui.stars.setAttribute('aria-label',stars+' out of 5 stars');
+  ui.stars.setAttribute('aria-label','Kingdom rating '+stars+' out of 5');
   ui.starFills.forEach((fill,i)=>fill.style.width=Math.max(0,Math.min(100,Math.round((stars-i)*100)))+'%');
-  ui.buildings.textContent=(buildings.length+1)+' '+(buildings.length?'buildings':'building');
+  ui.buildings.textContent=(buildings.length+1+plot.houses.filter(h=>h.computer).length)+' '+(buildings.length?'buildings':'building');
   ui.residents.textContent=(1+visitors.length)+(visitors.length?' residents':' resident');
   ui.visitors.setAttribute('aria-label','Visitor index · '+visitors.length+' staying');
   paintVisitorHint();
@@ -335,12 +370,13 @@ export function createKingdom(root,sound,applyWallet,rewards){
   plot=kingdomStats(wallet,clock());
   visitors=visitorsFrom(wallet);visitorDue=wallet.visitorRefreshAt;
   const signature=[plot.tower.level,plot.tower.construction?.endsAt,plot.land.level,JSON.stringify(plot.trail),
-   ...plot.buildings.map(building=>[building.id,building.x,building.z,building.rotation,building.level,building.upgrade?.endsAt,building.collectedAt,building.storedMana,building.storedGems,building.productionMs].join('@')),
+   ...plot.buildings.map(building=>[building.id,building.x,building.z,building.rotation,building.level,building.upgrade?.endsAt,building.collectedAt,building.storedMana,building.storedGems,building.productionMs,building.resident,JSON.stringify(building.computer)].join('@')),
    ...plot.storage.map(item=>item.id),...plot.removedTrees,...visitors.map(guest=>guest.id)].join('/');
   if(signature!==plotSignature){
    plotSignature=signature;
    if(Object.hasOwn(buildingSpecs,selection.split(':')[0])&&!buildingFor(selection))selection='tower';
    if(selection.startsWith('visitor:')&&!guestFor(selection)||selection.startsWith('tree-')&&!treeFor(selection))selection='tower';
+   if(selection.startsWith('computer:')&&!pcHome(selection))selection='tower';
    paintPlot();world?.select(selection);
    if(build?.spot)build.error=placementError(build.spot);
   }
@@ -359,11 +395,11 @@ export function createKingdom(root,sound,applyWallet,rewards){
     sound.play('bonus',{level:.61});
    }else if(ready.length){
     const level=ready[0].level;
-    announce(ready.length===1?'GD House Level '+level+' complete · +'+readout.format(houseUpgrades[level-2].stars)+' stars':ready.length+' house upgrades complete');
+    announce(ready.length===1?'GD House Level '+level+' complete · +'+readout.format(houseUpgrades[level-2].stars)+' Kingdom rating':ready.length+' house upgrades complete');
     sound.play('bonus',{level:.61});
    }
   }
-  paintStats();paintBuild();
+  paintStats();paintBuild();room?.refresh();
  }
  function setCoins(amount){
   coins=amount;
@@ -401,7 +437,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  function tick(){
   if(!ui)return;
   paintDaylight();
-  paintProduction();
+  paintProduction();room?.tick();
   if(ui.guestDialog.open)paintVisitorHint();
   paintConstruction();
   paintUpgrade(ui.inspectUpgrade,selection);
@@ -505,7 +541,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    startBuild(mode,plot.storage.find(item=>item.id===buildingId));
   }else{
    buildingKind=kind;
-   if(kind==='forge'||kind===mineKind)productionKind=kind;
+   if(kind==='forge'||kind===mineKind||kind==='computer')productionKind=kind;
    if(ui.buildDialog.open&&task.ready)startBuild();
    else openBuildMenu();
   }
@@ -513,6 +549,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  function paintBuildMenu(){
   const {houses,forges,gemMines,defences,tower,land,houseLots,defenceLots,storage}=plot;
   const defence=buildingKind===spikeKind,limit=defence?tower.defenceLimit:tower.limit,lots=defence?defenceLots:houseLots;
+  const pc=buildingKind==='computer';
   const free=Math.max(0,limit-lots),full=free===0;
   const storedKey=storage.map(item=>item.id).join('/');
   if(ui.storage.dataset.items!==storedKey){
@@ -532,13 +569,19 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.lotMeter.max=limit;
   ui.lotMeter.value=lots;
   ui.lotMeter.setAttribute('aria-label',defence?'Defence slots claimed':'House lots claimed');
-  ui.productionCount.textContent=(forges.length+gemMines.length)+' built';
+  if(pc){
+   const used=Number(Boolean(computerHouse(wallet)));ui.capacityLabel.textContent='Computer slots';
+   ui.limits.textContent=used+' / 1 claimed';ui.available.textContent=(1-used)+' available';ui.lotMeter.max=1;ui.lotMeter.value=used;
+   ui.lotMeter.setAttribute('aria-label','Computer slots claimed');
+  }
+  ui.productionCount.textContent=(forges.length+gemMines.length+houses.filter(h=>h.computer).length)+' built';
   ui.defenceCount.textContent=defences.length+' built';
   ui.price.textContent=price?readout.format(price)+' coins':'Free to build';
   ui.priceLine.firstElementChild.hidden=!price;
   ui.priceLine.hidden=house&&full&&!tower.next;
-  ui.priceMana.hidden=buildingKind!==mineKind;
-  ui.choose.disabled=!world||!wallet||upgrading||expanding||Boolean(problem)||short>0;
+  ui.priceMana.hidden=buildingKind!==mineKind&&!pc;
+  ui.priceMana.querySelector('b').textContent=readout.format(pc?computerCost.mana:gemMine.mana)+' Mana';
+  ui.choose.disabled=(!world&&!pc)||!wallet||upgrading||expanding||Boolean(problem)||short>0;
   ui.followTrail.setAttribute('aria-pressed',String(plot.trail.follow));
   ui.followTrail.textContent='Follow trail '+(plot.trail.follow?'on':'off');
   ui.followTrail.disabled=trailBusy;
@@ -565,14 +608,14 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(ui.buildNotice.textContent!==notice)ui.buildNotice.textContent=notice;
  }
  function previewBuilding(){
-  const spec=buildingSpecs[buildingKind];
+  const spec=buildingKind==='computer'?computerSpec:buildingSpecs[buildingKind];
   ui.optionName.textContent=spec.name;
   ui.preview.setAttribute('aria-label',spec.name+' 3D preview');
   const house=buildingKind==='house',defence=buildingKind===spikeKind,fire=buildingKind===campfireKind;
-  ui.buildEffect.innerHTML=house?star+'+0.3 stars':buildingKind==='forge'?mana+'1 mana/s · +'+forgeWelcomeMana+' on placement':
+  ui.buildEffect.innerHTML=buildingKind==='computer'?star+'Level 1 (30 Hz) · 1 Star/min while a resident plays GD':house?star+'+0.3 Kingdom rating':buildingKind==='forge'?mana+'1 mana/s · +'+forgeWelcomeMana+' on placement':
    defence?spike+spikePlan({level:1}).damage+' damage per shot':fire?ico('flame')+' Warm light for your Kingdom at night':
    gem+'1 gem every '+gemMine.interval/60_000+' minutes · Stores '+gemMine.capacity;
-  ui.choose.textContent='Build '+(buildingKind==='forge'?'Mana Forge':spec.name);
+  ui.choose.textContent=buildingKind==='computer'?'Choose a house':'Build '+(buildingKind==='forge'?'Mana Forge':spec.name);
   ui.productionPicker.hidden=house||defence||fire;
   for(const button of ui.kindButtons)button.setAttribute('aria-pressed',String(button.dataset.buildKind===(!ui.productionPicker.hidden?'forge':buildingKind)));
   for(const button of ui.productionButtons)button.setAttribute('aria-pressed',String(button.dataset.productionKind===buildingKind));
@@ -787,9 +830,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="kingdom-loading">'+loadingMarkup('Loading your Kingdom…')+'</div>'+
    '<div class="kingdom-heading"><h1>Your Kingdom</h1><div class="kingdom-summary">'+
    '<span class="kingdom-value">'+coin+'<span>Kingdom value <b data-plot-value>0</b></span></span>'+
-   '<span class="kingdom-quality"><span class="kingdom-stars" role="img" aria-label="0 out of 5 stars">'+
+   '<span class="kingdom-quality"><span class="kingdom-stars" role="img" aria-label="Kingdom rating 0 out of 5">'+
    Array.from({length:5},()=>'<span>'+star+'<i>'+star+'</i></span>').join('')+
    '</span><b data-plot-rating>0 / 5</b></span>'+
+   '<span class="kingdom-star-currency" title="Stars earned by playing GD">'+star+'<span>Stars <b data-earned-stars>0</b></span></span>'+
    '<span class="kingdom-mana" id="kingdomManaBadge">'+mana+'<span>Mana <b data-plot-mana id="kingdomManaCount">0</b></span></span></div></div>'+
    '<div class="kingdom-plot-stats"><span>'+ico('tower')+'<b data-plot-buildings>1 building</b></span>'+
    '<button type="button" data-visitor-index aria-label="Visitor index" aria-haspopup="dialog" title="Visit the visitor index">'+ico('box')+'<b data-residents>1 resident</b></button>'+
@@ -807,7 +851,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="kingdom-detail" id="kingdomObjectDetail" aria-labelledby="kingdomObjectName" hidden>'+
    '<div class="kingdom-detail-heading"><h2 id="kingdomObjectName"></h2><span data-plot-state></span></div><p data-object-description></p>'+
    '<a href="#gacha/cubes" data-change-cube hidden>Change cube '+ico('right')+'</a>'+
+   '<div class="room-actions"><button type="button" class="outline" data-edit-room hidden>Edit house</button>'+
+   '<button type="button" class="outline" data-resident-play hidden>Play GD</button></div>'+
    '<progress class="gem-production" aria-label="Next gem progress" max="'+gemMine.interval+'" value="0" hidden></progress>'+
+   '<small data-production-time hidden></small><button type="button" class="outline" data-collect-stars hidden>Collect Stars</button>'+
    '<button class="outline mana-claim" type="button" data-collect-mana hidden></button>'+
    '<button class="outline gem-claim" type="button" data-collect-gems hidden></button>'+
    '<div class="spike-test" data-spike-test hidden><button class="outline" type="button" data-fire-spike>'+spike+'Test fire</button>'+
@@ -830,10 +877,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="kingdom-trail-tools" data-trail-tools hidden><div><strong>Walking trail</strong><p data-trail-status role="status"></p></div>'+
    '<div class="kingdom-build-controls"><button class="outline" type="button" data-trail-cancel>Cancel</button>'+
    '<button class="primary" type="button" data-trail-save>Save trail</button></div></div></div>'+
-   '<details class="kingdom-player-stats"><summary>Stats</summary><dl class="kingdom-stats" aria-label="Player stats"><div><dt>'+coin+'Coins</dt><dd data-plot-coins></dd></div>'+
+   interiorControls+'<details class="kingdom-player-stats"><summary>Stats</summary><dl class="kingdom-stats" aria-label="Player stats"><div><dt>'+coin+'Coins</dt><dd data-plot-coins></dd></div>'+
    '<div><dt><img src="/assets/packs/gem.png" alt="">Gems</dt><dd data-plot-gems></dd></div>'+
    '<div><dt>'+ico('battle')+'Campaign clears</dt><dd data-plot-clears></dd></div></dl></details></div>'+
-   '<dialog class="kingdom-guest-index" aria-labelledby="guestTitle"><div class="guest-index-heading"><h2 id="guestTitle">Visitor index</h2>'+
+   interiorChooser+'<dialog class="kingdom-guest-index" aria-labelledby="guestTitle"><div class="guest-index-heading"><h2 id="guestTitle">Visitor index</h2>'+
    '<button type="button" class="iconbtn" data-close-visitors aria-label="Close visitor index">'+ico('x')+'</button></div>'+
    '<div class="visitor-collection"><b data-visitor-count></b><progress aria-label="Visitors discovered" max="'+visitorSlots.length+'" value="0"></progress></div>'+
    '<p data-guest-hint></p><div class="visitor-list" data-visitor-rows></div></dialog>'+
@@ -847,11 +894,12 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<button type="button" class="outline" data-build-kind="'+campfireKind+'" aria-pressed="false">'+ico('flame')+'Campfire</button></div>'+
    '<div class="build-catalog build-production" role="group" aria-label="Production buildings" hidden>'+
    '<button class="outline" type="button" data-production-kind="forge" aria-pressed="true">'+mana+'Mana Forge</button>'+
-   '<button class="outline" type="button" data-production-kind="gem-mine" aria-pressed="false">'+gem+mineName+'</button></div>'+
+   '<button class="outline" type="button" data-production-kind="gem-mine" aria-pressed="false">'+gem+mineName+'</button>'+
+   '<button class="outline" type="button" data-production-kind="computer" aria-pressed="false">'+star+'Computer</button></div>'+
    '<article class="build-option"><div class="build-viewport"><canvas tabindex="0" aria-label="GD House 3D preview" aria-describedby="housePreviewControls"></canvas>'+
    '<p data-preview-status role="status" hidden>3D preview unavailable.</p>'+
    '<span id="housePreviewControls">Drag or use arrow keys to rotate</span></div>'+
-   '<div class="build-option-info"><h3 data-build-name>'+houseName+'</h3><span class="build-rating" data-build-effect>'+star+'+0.3 stars</span>'+
+   '<div class="build-option-info"><h3 data-build-name>'+houseName+'</h3><span class="build-rating" data-build-effect>'+star+'+0.3 Kingdom rating</span>'+
    '<small class="build-price" data-house-price-line>'+coin+'<b data-house-price></b></small>'+
    '<small class="build-price" data-build-mana hidden>'+mana+'<b>'+readout.format(gemMine.mana)+' Mana</b></small>'+
    '<button class="primary" type="button" data-build="choose">Build GD House</button></div></article>'+
@@ -882,6 +930,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    name:get('.kingdom-detail h2'),state:get('[data-plot-state]'),description:get('[data-object-description]'),changeCube:get('[data-change-cube]'),
    spikeTest:get('[data-spike-test]'),fire:get('[data-fire-spike]'),shotResult:get('[data-spike-result]'),
    coins:get('[data-plot-coins]'),gems:get('[data-plot-gems]'),clears:get('[data-plot-clears]'),
+   starBalance:get('[data-earned-stars]'),editRoom:get('[data-edit-room]'),playResident:get('[data-resident-play]'),
+   collectStars:get('[data-collect-stars]'),productionTime:get('[data-production-time]'),
    collectMana:get('[data-collect-mana]'),collectGems:get('[data-collect-gems]'),mineProgress:get('.gem-production'),kingdomNotice:get('[data-kingdom-notice]'),
    value:get('[data-plot-value]'),buildings:get('[data-plot-buildings]'),starValue:get('[data-plot-rating]'),
    stars:get('.kingdom-stars'),starFills:[...root.querySelectorAll('.kingdom-stars i')],
@@ -903,6 +953,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    visitors:get('[data-visitor-index]'),guestDialog:get('.kingdom-guest-index'),guestRows:get('[data-visitor-rows]'),
    discoveries:get('[data-visitor-count]'),indexProgress:get('.visitor-collection progress')
   };
+  room=createRoomControls(root,{getState:()=>({wallet,plot,world,cube,visitors}),applyWallet,select,clock});
   ui.objects.addEventListener('change',()=>select(ui.objects.value));
   ambience=kingdomAmbience(sound,ui.canvas);ui.ambient.setAttribute('aria-pressed',String(!ambience.muted));
   const buildMenu=ui.buildDialog;
@@ -918,6 +969,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
    }
    const button=event.target.closest('button');
    if(!button)return;
+   if(room.handleClick(button))return;
+   if(button===ui.editRoom){room.open(button.dataset.house);return;}
+   if(button===ui.playResident){const house=plot.houses.find(h=>h.id===button.dataset.house);if(house){room.open(house.id);room.togglePlay(house);}return;}
+   if(button===ui.collectStars){const house=pcHome(selection);if(house){room.open(house.id);room.handleClick(root.querySelector('[data-furnish="collect"]'));}return;}
    if(button===ui.detailToggle){inspectOpen=!inspectOpen;paintPicker();return}
    if(button===ui.fire){testSpike();return}
    if(button===ui.visitors){paintVisitorHint();ui.guestDialog.showModal();return}
@@ -938,7 +993,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
     buildingKind=kind&&kind!=='forge'?kind:productionKind;
     delete ui.buildNotice.dataset.notice;paintBuildMenu();previewBuilding();return;
    }
-   if(button===ui.choose){startBuild();return}
+   if(button===ui.choose){if(buildingKind==='computer'){ui.buildDialog.close();room.choose();}else startBuild();return}
    if(button.dataset.restoreBuilding){startBuild('restore',plot.storage.find(item=>item.id===button.dataset.restoreBuilding));return}
    if(button===ui.move){startBuild('move',buildingFor(selection));return}
    if(button===ui.store){editPlot('kingdom.building.store',buildingFor(selection)?.id);return}
@@ -965,6 +1020,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   };
   keys=new AbortController();
   document.addEventListener('keydown',event=>{
+   if(room.active&&event.key==='Escape'&&!document.querySelector('dialog[open]')){event.preventDefault();room.close();return;}
    if(trailDraft&&!trailBusy&&['Escape','q'].includes(event.key)){event.preventDefault();stopTrail();return}
    if(event.key==='Escape'&&!build&&inspectOpen&&!document.querySelector('dialog[open]')){
     inspectOpen=false;paintPicker();ui.detailToggle.focus({preventScroll:true});return;
@@ -984,7 +1040,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(!on){
    if(root.hidden)return;
    root.hidden=true;visit++;
-   keys?.abort();ambience?.dispose();ambience=null;editing=false;world?.dispose();world=null;ui=null;build=null;
+   room?.dispose();room=null;keys?.abort();ambience?.dispose();ambience=null;editing=false;world?.dispose();world=null;ui=null;build=null;
    placing=false;upgrading=false;expanding=false;inspectOpen=false;shotReport=null;trailDraft=null;trailBusy=false;root.replaceChildren();
    return;
   }
@@ -996,11 +1052,12 @@ export function createKingdom(root,sound,applyWallet,rewards){
    const {createKingdomWorld}=await import('/kingdom-world.js');
    if(visit!==route)return;
    world=createKingdomWorld({canvas:ui.canvas,cube,clock,onSelect:select,onHover:hover,onPlot:pointOnPlot,onTrailDraw,
-    onCollect:collectProduction,onSpikeHit:recordSpikeHit});
+    onCollect:collectProduction,onSpikeHit:recordSpikeHit,onInteriorPick:hit=>room?.pick(hit)});
    world.select(selection);paintPlot();paintBuild();
    ui.loading.hidden=true;
-  }catch{
+  }catch(error){
    if(visit!==route)return;
+   console.error('Kingdom view initialization failed',error);world?.dispose();world=null;
    ui.loading.textContent='The 3D view could not start. You can still check your Kingdom and visitors below.';
    ui.controls.hidden=true;
    ui.canvas.tabIndex=-1;

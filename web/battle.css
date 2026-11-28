@@ -333,3 +333,9 @@ body:has(#battleRoom:not([hidden]) .live-arena)>:is(header,footer){display:none}
 .limbo-choice[data-picked="true"]{background:#942e5688}
 .limbo-choice[data-answer="true"]{background:#2c653fbb;outline:2px solid #a7f68e;outline-offset:-2px}
 .limbo-cue{text-align:center;margin:0;color:#ddd3f4;font-size:clamp(.67rem,1.65vw,.83rem)}
+
+.campaign-map .campaign-chapter{display:grid;gap:.35rem;padding:.45rem 0 .65rem;border-bottom:1px solid #343748}
+.campaign-chapter h3{display:flex;align-items:center;gap:.5rem;margin:.15rem .35rem;font-size:1rem}
+.campaign-chapter h3 img{width:1.35rem;height:1.35rem;object-fit:contain}
+.campaign-chapter h3 small{margin-left:auto;color:#b0b6ca;font-size:.75rem}
+.campaign-map:has(.campaign-chapter){display:block;max-height:43rem;overflow:auto;scrollbar-width:thin}

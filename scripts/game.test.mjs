@@ -17,7 +17,7 @@ import {seededRandom,drillInput,replayEndlessRemix} from '../web/game-replay.js'
 import {findRemix} from '../web/remixes.js';
 import {STEP,createEndlessCourse,makeCourse,newAttempt,advanceRunner,tunnelAt} from '../web/remix-physics.js';
 import {rewardEndlessRemix} from '../web/remix-endless.js';
-import {stageFor,settleCampaignClear} from '../web/campaign.js';
+import {campaignStages,stageUnlocked,stageFor,settleCampaignClear} from '../web/campaign.js';
 import {extremeOdds,extremeStage,extremeTable,levelRewardTenths} from '../web/card-economy.js';
 import {mineEarnings,mineMachineRate,mineSkillRequirements,mineSkills,mineWalletRate,settleMine} from '../web/mine-economy.js';
 import {coinEconomyVersion,startingCoins} from '../web/coin-economy.js';
@@ -25,6 +25,8 @@ import {playerProgress,playerXpAtLevel as playerXpAt,packPlayerXp,packXpAllowanc
 import {dropAccess,dropEligible,dropAccessSummary} from '../web/drop-access.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
 import {buildingFootprint,buildingPlacementError,campfirePrice,collectForge,forgePlan,gemMine,gemMinePlan,housePlacementError,housePlan,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,kingdomTrail,visitorSlots} from '../web/kingdom-rules.js';
+import {computerPlan} from '../web/kingdom-computer.js';
+import {visitorEligible} from '../web/kingdom-visitor-catalog.js';
 import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboApproachSeconds,limboChoiceAt,limboPattern,limboTrackSeconds} from '../web/limbo-keys.js';
@@ -723,15 +725,64 @@ test('forge caps and carries over storage and produces three Mana per second aft
  assert.equal(live.result.earned,6);
 });
 
-test('visitor ratings have ten anonymous slots and the lot geometry can reach five stars',()=>{
+test('all eighteen anonymous visitor slots are attainable and original rating unlocks still apply',()=>{
  const houses=[];
  for(let z=-9;z<=10;z++)for(let x=-10;x<=10;x++){
   const spot={x,z,rotation:0};
   if(!housePlacementError(houses,spot))houses.push(spot);
  }
- assert.deepEqual(visitorSlots.map(slot=>slot.rarity),['Common','Common','Uncommon','Uncommon','Uncommon','Rare','Rare','Epic','Epic','Legendary']);
- assert.deepEqual(visitorSlots.filter(slot=>slot.rarity==='Rare').map(slot=>slot.stars),[1.8,2.4]);
+ assert.equal(visitorSlots.length,18);
+ assert.ok(visitorSlots.every(slot=>visitorEligible(slot,1.4,560)));
+ assert.deepEqual(visitorSlots.slice(0,10).map(slot=>slot.rarity),['Common','Common','Uncommon','Uncommon','Uncommon','Rare','Rare','Epic','Epic','Legendary']);
+ assert.deepEqual(visitorSlots.filter(slot=>slot.rarity==='Rare').map(slot=>slot.legacyStars),[1.8,2.4]);
  assert(kingdomStats({kingdom:{houses:houses.slice(0,17),towerLevel:5}}).stars===5);
+});
+
+test('house computers charge once, track the assigned player, and keep partial Star cycles through upgrades, storage and moves',async t=>{
+ const start=Date.now();
+ t.mock.timers.enable({apis:['Date'],now:start});
+ const f=fixture(),player=await f.open();
+ const houses=[{id:'one',kind:'house',x:7,z:7,rotation:0},{id:'two',kind:'house',x:8,z:-7,rotation:0}];
+ f.store(player.id,w=>{w.coins=100_000;w.playerXp=playerXpAt(10);w.kingdom={houses,mana:200,visitorSchedule:Array.from({length:18},(_,i)=>i===17?start-60_000:null)};});
+ const send=(action,args,requestId)=>f.command(player,'kingdom.'+action,args,requestId);
+ const spot={houseId:'one',cell:2,rotation:3},key=crypto.randomUUID();
+ assert.equal((await send('computer.place',{...spot,cell:6})).status,400);
+ assert.equal((await send('computer.place',{...spot,houseId:'none'})).status,400);
+ const buy=await Promise.all([send('computer.place',spot,key),send('computer.place',spot,key)]);
+ for(const res of buy){assert.equal(res.status,200);const {wallet}=await res.json();assert.equal(wallet.coins,70_000);assert.equal(wallet.kingdom.mana,140);}
+ assert.equal((await send('computer.place',{...spot,houseId:'two'})).status,400);
+ assert.equal((await send('computer.play',{houseId:'one',resident:'cube',playing:true})).status,400);
+ assert.equal((await send('house.assign',{houseId:'one',resident:'visitor:15'})).status,400);
+ const act=(name,args={})=>send(name,{houseId:'one',...args});
+ assert.equal((await act('house.assign',{resident:'cube'})).status,200);
+ assert.equal((await send('house.assign',{houseId:'two',resident:'cube'})).status,400);
+ assert.equal((await act('computer.play',{resident:'cube',playing:true})).status,200);
+ t.mock.timers.setTime(start+30_000);
+ let saved=await f.wallet(player),plan=computerPlan(saved.kingdom.houses[0]);
+ assert.equal(plan.remainingMs,30_000);assert.equal(plan.stored,0);
+ assert.equal((await act('house.assign',{resident:'visitor:17'})).status,200);
+ plan=computerPlan((await f.wallet(player)).kingdom.houses[0]);assert.equal(plan.playing,false);assert.equal(plan.bonus,200);
+ assert.equal((await act('computer.play',{resident:'visitor:17',playing:true})).status,200);
+ t.mock.timers.setTime(start+35_000);
+ assert.equal((await act('computer.upgrade')).status,200);
+ assert.equal((await act('computer.upgrade')).status,400);
+ saved=await f.wallet(player);plan=computerPlan(saved.kingdom.houses[0]);
+ assert.equal(saved.coins,25_000);assert.equal(saved.kingdom.mana,50);assert.equal(plan.rate,6);assert.equal(plan.remainingMs,2500);
+ t.mock.timers.setTime(start+37_500);
+ const claimKey=crypto.randomUUID(),claims=await Promise.all([send('computer.collect',{houseId:'one'},claimKey),send('computer.collect',{houseId:'one'},claimKey)]);
+ for(const res of claims){const {wallet,result}=await res.json();assert.equal(result.earned,1);assert.equal(wallet.kingdom.stars,1);assert.equal(wallet.kingdom.earnedStars,1);}
+ assert.equal((await act('computer.collect')).status,400);
+ t.mock.timers.setTime(start+42_500);
+ const moved=await send('computer.place',{houseId:'two',sourceHouseId:'one',cell:5,rotation:1});
+ assert.equal(moved.status,200);
+ saved=(await moved.json()).wallet;
+ assert.equal(saved.kingdom.houses[0].computer,undefined);
+ assert.equal(computerPlan(saved.kingdom.houses[1]).progress,.5);assert.equal(saved.kingdom.houses[1].computer.playing,false);
+ assert.equal((await send('building.store',{id:'two'})).status,200);
+ t.mock.timers.setTime(start+242_500);
+ assert.equal((await act('computer.place',{cell:1})).status,400);
+ saved=await f.wallet(player);assert.equal(computerPlan(saved.kingdom.storage[0]).progress,.5);
+ assert.equal(saved.kingdom.stars,1);
 });
 
 test('feature and pack gates derive from player XP and cannot be opened early',async()=>{
@@ -1063,6 +1114,19 @@ test('the renamed campaign stages use four opponents from their own difficulty',
   assert.equal(new Set(stage.team).size,4);
   for(const id of stage.team)assert.ok(ids.has(id),stage.name+' · '+id);
  }
+ assert.equal(campaignStages.length,30);
+ assert.equal(new Set(campaignStages.map(s=>s.team.at(-1))).size,30);
+ const fresh={campaign:{}},legacy={campaign:{1:{tempo:true,squad:false}}};
+ assert.equal(stageUnlocked(legacy,2),true);
+ for(const stage of campaignStages){
+  assert.equal(stage.number,Object.keys(fresh.campaign).length+1);
+  assert.equal(stageUnlocked(fresh,stage.id),true);
+  const next=campaignStages[stage.number];
+  if(next)assert.equal(stageUnlocked(fresh,next.id),false);
+  const cards=await pool(difficulties[stage.tier]);
+  assert.ok(stage.team.length===4&&stage.team.every(id=>cards.some(row=>row[0]===id)));
+  fresh.campaign[stage.id]={firstVersion:3,tempo:true,squad:true};
+ }
  for(const [,id,name] of classicCampaignMoves)assert.equal(skillsFor({id,name}).signatureName,name);
 });
 
@@ -1143,14 +1207,24 @@ test('campaign first clears and replays award different bounties once',async()=>
   return {base,battle};
  }
  const first=await clear(),second=await clear();
- assert.equal(first.battle.earned,first.base*12+(stageFor(1).first+stageFor(1).master)*12);
- assert.equal(first.battle.campaignReceipt.clearPrize,720);
+ assert.equal(first.battle.earned,Math.floor(first.base*156/10)+936+468);
+ assert.equal(first.battle.campaignReceipt.clearPrize,936);
  assert.equal(first.battle.campaignReceipt.demonKeys,10);
  assert.equal(arenaPlayerXp(first.battle),120);
- assert.equal(second.battle.earned,Math.floor(second.base*.8));
+ assert.equal(second.battle.earned,Math.floor(second.base*104/100));
  assert.equal(second.battle.campaignReceipt.clearPrize,0);
  assert.equal(second.battle.campaignReceipt.demonKeys,undefined);
  assert.equal(arenaPlayerXp(second.battle),49);
+ args.tier=21;
+ assert.equal((await f.command(player,'arena.begin',args)).status,400);
+ args.tier=11;
+ const medium=await clear();
+ assert.equal(medium.battle.campaign,11);
+ assert.equal(medium.battle.tier,1);
+ args.tier=21;
+ const hard=await clear();
+ assert.equal(hard.battle.campaign,21);
+ assert.equal(hard.battle.enemies.at(-1).name,stageFor(21).captain);
 });
 test('the final campaign stage pays its scaled prize once and preserves active legacy battles',()=>{
  const w={coins:80};

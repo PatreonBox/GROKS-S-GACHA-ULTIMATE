@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import {kingdomRenderer} from './kingdom-renderer.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
 export function createBuildingPreview(canvas,building){
- const renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'});
+ const renderer=kingdomRenderer(canvas,{alpha:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.8));
  renderer.outputColorSpace=THREE.SRGBColorSpace;
  renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -61,13 +62,13 @@ export function createBuildingPreview(canvas,building){
   controls.update();
  },{signal:listeners.signal});
  resize();
- canvas.dataset.buildingRenderer='webgl';
+ canvas.dataset.buildingRenderer=canvas.dataset.renderer;
  return {resize,setModel,dispose(){
   delete canvas.dataset.buildingRenderer;
   listeners.abort();size.disconnect();controls.dispose();
   for(const base of [pedestal,turf]){
    base.geometry.dispose();base.material.dispose();
   }
-  renderer.dispose();renderer.forceContextLoss();
+  renderer.dispose();renderer.forceContextLoss?.();
  }};
 }
