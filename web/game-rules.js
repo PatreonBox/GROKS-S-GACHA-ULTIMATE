@@ -31,6 +31,7 @@ export function newWallet() {
 const levelId = value => Number.isSafeInteger(value)&&value>0;
 const key = value => typeof value==='string'&&value.length>0&&value.length<=80;
 const within = (value,min,max) => Number.isSafeInteger(value)&&value>=min&&value<=max;
+const tidalAttemptVersions=new Map([[tidalVideoMode,tidalVideoVersion],['video-contact',6]]);
 function requireRule(valid,message) {if(!valid)throw Error(message);}
 function requireLevel(wallet,level,name){
  requireRule(level===0||playerProgress(wallet.playerXp).level>=level,'Reach Level '+level+' to unlock '+name+'.');
@@ -376,7 +377,7 @@ const rules={
  }},
  'remix.begin':{run:({w,args:{id,mode:requestedMode},now})=>{
   const remix=levelId(id)&&findRemix(id);
-  const video=id===tidalVideoId&&requestedMode===tidalVideoMode?tidalVideoVersion:0;
+  const video=id===tidalVideoId?tidalAttemptVersions.get(requestedMode):null;
   const mode=video?'normal':requestedMode??'normal';
   requireRule(remix,'Choose a featured level.');
   requireRule(id!==tidalVideoId||!['video','video-sync','video-orbs','video-overlay','video-rhythm'].includes(requestedMode),'Refresh the page to play the updated Tidal Wave.');

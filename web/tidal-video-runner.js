@@ -3,7 +3,7 @@ import {starterCube} from './cube-catalog.js';
 import {bindRunnerControls} from './remix-controls.js';
 import {drawWave,drawWaveTrail,keepWavePoint,waveAngle} from './remix-wave.js';
 import {tidalCubeRadius,tidalPortalApproachX} from './tidal-cube-intro.js';
-import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep,tidalWidth,tidalHeight,tidalX,tidalVideoMode} from './tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep,tidalWidth,tidalHeight,tidalX,tidalVideoFps,tidalVideoMode} from './tidal-video-rules.js';
 
 const source='/arcade-video/tidal-wave.mp4';
 const waveDuration=Math.ceil(tidalLength/tidalStep);
@@ -17,7 +17,7 @@ const cubeInstructions=[
  'Tap the last pink orb.',
  transitionInstruction
 ];
-const waveInstructions='Hold to climb. Release to dive. Stay between the floor and ceiling.';
+const waveInstructions='Hold to climb. Release to dive. Fly through the spray and keep clear of the dark floor and ceiling.';
 
 function paintCube(ctx,cube,avatar,icon){
  const r=tidalCubeRadius;
@@ -54,7 +54,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  const icon=new Image();icon.src=avatar.icon||starterCube.icon;
  let phase='ready',run=newTidalWave(),trace=[],trail=[],token,frame=null,lastPortal=-Infinity;
  let quiet=false,closed=false,terminal=false,held=false,applied=0;
- const frameByVideo=typeof video.requestVideoFrameCallback==='function';
+ let overlayVisible=false;
  function syncAudio(){
   video.muted=quiet||!sound.enabled;
   audio.innerHTML=ico(video.muted?'muted':'volume');
@@ -62,12 +62,14 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  }
  function paint(){
   const time=run.tick*tidalStep;
-  ctx.clearRect(0,0,tidalWidth,tidalHeight);
-  if(run.form==='cube'||run.form==='transition'&&run.cube.x>=tidalPortalApproachX)paintCube(ctx,run.cube,avatar,icon);
+  // The player stays at tidalX. Only the trail, icon and its glow can leave ink here.
+  if(overlayVisible)ctx.clearRect(0,0,tidalX+64,tidalHeight);
+  const cubeVisible=run.form==='cube'||run.form==='transition'&&run.cube.x>=tidalPortalApproachX;
+  overlayVisible=cubeVisible||run.form==='wave';
+  if(cubeVisible)paintCube(ctx,run.cube,avatar,icon);
   if(run.form==='wave'){
    const scroll=run.distance-tidalX;
-   const points=trail.map(([x,y])=>[x-scroll,y]);
-   drawWaveTrail(ctx,points,{skin:avatar,mini:run.mini});
+   drawWaveTrail(ctx,trail,{skin:avatar,mini:run.mini,scroll});
    ctx.save();
    const age=time-lastPortal;
    if(age<.28){
@@ -77,8 +79,10 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
    drawWave(ctx,{x:tidalX,y:run.y,angle:run.distance?waveAngle(run.held,run.mini):0,mini:run.mini,skin:avatar});
    ctx.restore();
   }
-  size.textContent=run.form==='cube'?'CUBE':run.form==='transition'?'GET READY':run.mini?'MINI WAVE':'WAVE';
-  readout.textContent=(phase==='clear'?100:Math.min(99,Math.floor(time/tidalLength*100)))+'%';
+  const formLabel=run.form==='cube'?'CUBE':run.form==='transition'?'GET READY':run.mini?'MINI WAVE':'WAVE';
+  const percentLabel=(phase==='clear'?100:Math.min(99,Math.floor(time/tidalLength*100)))+'%';
+  if(size.textContent!==formLabel)size.textContent=formLabel;
+  if(readout.textContent!==percentLabel)readout.textContent=percentLabel;
  }
  function updateControls(){
   pad.textContent=run.form==='cube'?'Tap orb':'Hold to climb';
@@ -101,6 +105,8 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  function finish(result){
   if(phase!=='running')return;
   video.pause();stopFrame();
+  const impact=run.impactTime??run.tick*tidalStep;
+  if(result==='crash'&&Math.floor(video.currentTime*tidalVideoFps)!==Math.floor(impact*tidalVideoFps))video.currentTime=impact;
   const attempt=token;
   const reason=run.crashReason;
   const message=run.form==='wave'?'The wave hit the '+reason+'.':reason;
@@ -143,21 +149,24 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  }
  function scheduleFrame(){
   if(phase!=='running'||frame!==null)return;
-  frame=frameByVideo?video.requestVideoFrameCallback((_,{mediaTime})=>draw(mediaTime)):
-   requestAnimationFrame(()=>draw(video.currentTime));
+  frame=requestAnimationFrame(draw);
  }
  function stopFrame(){
   if(frame===null)return;
-  if(frameByVideo)video.cancelVideoFrameCallback(frame);
-  else cancelAnimationFrame(frame);
+  cancelAnimationFrame(frame);
   frame=null;
  }
  const ticksAt=time=>Math.min(waveDuration,Math.floor(time/tidalStep+1e-7));
- function draw(time){
+ function draw(){
   frame=null;
   if(phase!=='running')return;
-  advance(ticksAt(time));
-  paint();
+  // Keep the fixed-step replay on media time, while letting the icon respond
+  // at the display refresh rate between decoded video frames.
+  const target=ticksAt(video.currentTime);
+  if(!terminal&&target>run.tick){
+   advance(target);
+   if(phase==='running')paint();
+  }
   scheduleFrame();
  }
  function changeHeld(next){

@@ -19,7 +19,7 @@ export const remixes=[
 ];
 export const findRemix=id=>remixes.find(r=>r.id===Number(id));
 // Base payouts follow the arcade course, whose difficulty can differ from its arena.
-const keyRewards={6508283:2,119550490:4,4284013:4,61079355:4,86407629:5,3979721:6,44062068:8,86084399:10};
+const keyRewards={6508283:2,119550490:4,4284013:4,61079355:4,86407629:2,3979721:6,44062068:8,86084399:10};
 export const remixKeyReward=remix=>keyRewards[remix.id]??3;
 export const pulseCost=b=>b.remix===3979721&&b.kills>=2?1:2;
 export function keyTarget(b){

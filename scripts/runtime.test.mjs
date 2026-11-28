@@ -18,7 +18,7 @@ import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
-import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion,tidalWaveCeiling,tidalWaveFloor} from '../web/tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalShoreY,tidalStart,tidalStep,tidalVideoVersion,tidalWaveCeiling,tidalWaveFloor} from '../web/tidal-video-rules.js';
 import {replayTidalVideo} from '../web/game-replay.js';
 import {keepWavePoint,waveVerticalOffsets} from '../web/remix-wave.js';
 import {breakwaterCourse,breakwaterRadius,breakwaterSawY,stepBreakwaterWave,sweepBreakwaterPolygon} from '../web/breakwater-course.js';
@@ -159,14 +159,14 @@ test('Green kicks against flipped gravity and the form changes inside the wave p
  assert.equal(run.distance,0);
 });
 
-test('The visible normal and mini wave stop at the ceiling or floor on contact',()=>{
+test('Previously issued Tidal Wave attempts still use their original fixed floor and ceiling',()=>{
  const takeoff=newTidalWave(5);
  Object.assign(takeoff,{form:'wave',tick:480,y:tidalWaveFloor});
  assert.equal(stepTidalWave(takeoff),null);
  assert.ok(takeoff.y>tidalWaveFloor);
  for(const mini of [false,true]){
   for(const held of [false,true]){
-   const run=newTidalWave();
+   const run=newTidalWave(6);
    Object.assign(run,{form:'wave',mini,held,tick:600});
    const [top,bottom]=waveVerticalOffsets(held,mini);
    const edge=held?'ceiling':'floor';
@@ -178,6 +178,34 @@ test('The visible normal and mini wave stop at the ceiling or floor on contact',
    assert.ok(Math.abs(run.y+offset-boundary)<1e-9);
    assert.ok(Math.abs(run.distance-(mini?.5:1))<1e-9);
   }
+ }
+});
+
+test('The 14.93s spray stays open until the wave tip reaches the moving dark shore',()=>{
+ // Recording frame 448. The old floor was at y=422 while the black rim is near 480.
+ const startTick=448*4;
+ assert.ok(tidalShoreY(startTick,false)>475);
+ assert.ok(tidalShoreY(startTick,true)<25);
+ for(const mini of [false,true]){
+  for(const held of [false,true]){
+   const run=newTidalWave(),reach=waveVerticalOffsets(false,mini)[1],direction=held?-1:1;
+   const edge=held?'ceiling':'floor';
+   Object.assign(run,{form:'wave',tick:startTick,mini,held,portal:1,y:held?40+reach:422-reach});
+   assert.equal(stepTidalWave(run),null);
+   let result,steps=0;
+   while(!result&&steps++<16)result=stepTidalWave(run);
+   assert.equal(result,'crash');
+   assert.equal(run.crashReason,edge);
+   const at=run.impactTime/tidalStep;
+   assert.ok(at>=run.tick-1&&at<=run.tick);
+   assert.ok(Math.abs(run.y+direction*reach-tidalShoreY(at,held))<1e-6);
+   assert.ok(Math.abs(run.distance-(at-startTick)*tidalStep*902)<1e-7);
+  }
+  const turn=newTidalWave();
+  Object.assign(turn,{form:'wave',tick:startTick,mini,portal:1,
+   y:tidalShoreY(startTick,false)-waveVerticalOffsets(false,mini)[1]-.5});
+  tidalInput(turn,'held',true);
+  assert.equal(stepTidalWave(turn),null);
  }
 });
 
@@ -200,6 +228,11 @@ test('Updated Tidal Wave replays to the end and still verifies earlier overlay a
  const legacyTrace=[53,83].flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
  assert.equal(replayTidalVideo({start:0,video:4},{ticks:512,trace:legacyTrace},5000),15);
  assert.equal(replayTidalVideo({start:0,video:5},{ticks:113,trace:[]},5000),3);
+ const earlier=newTidalWave(6),inputs=[];
+ do{if(earlier.form==='cube'&&introTaps.includes(earlier.tick))tapTidalOrb(earlier,inputs);}
+ while(!stepTidalWave(earlier));
+ assert.equal(earlier.crashReason,'floor');
+ assert.equal(replayTidalVideo({start:0,video:6},{ticks:earlier.tick,trace:inputs},30000),Math.floor(earlier.tick*tidalStep/tidalLength*100));
 });
 
 test('The versioned death cue serves the uploaded MP3 through the game media route',async()=>{

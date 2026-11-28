@@ -860,16 +860,21 @@ test('Meme Arcade rewards a verified Tidal Wave cut once, including an older cle
  for(const receipt of receipts){
   assert.equal(receipt.status,200);
   const {wallet,result}=await receipt.json();
-  assert.deepEqual(result,{percent:100,playerXpEarned:0,cleared:true,demonKeys:5});
-  assert.equal(wallet.demonKeys,before.demonKeys+5);
+  assert.deepEqual(result,{percent:100,playerXpEarned:0,cleared:true,demonKeys:2});
+  assert.equal(wallet.demonKeys,before.demonKeys+2);
   assert.equal(wallet.coins,before.coins);
-  assert.equal(wallet.remixKeyRewards[remix.id],5);
+  assert.equal(wallet.remixKeyRewards[remix.id],2);
  }
  const replay=await f.command(player,'remix.finish',await start());
  assert.equal(replay.status,200);
  const {wallet,result}=await replay.json();
  assert.equal(result.demonKeys,0);
- assert.equal(wallet.demonKeys,before.demonKeys+5);
+ assert.equal(wallet.demonKeys,before.demonKeys+2);
+ f.store(player.id,w=>{w.remixKeyRewards[remix.id]=5;w.demonKeys=before.demonKeys+5;});
+ const oldClaim=await f.command(player,'remix.finish',await start()).then(r=>r.json());
+ assert.equal(oldClaim.result.demonKeys,0);
+ assert.equal(oldClaim.wallet.demonKeys,before.demonKeys+5);
+ assert.equal(oldClaim.wallet.remixKeyRewards[remix.id],5);
 });
 
 test('Normal waves keep their angle and mini speed while earlier arcade runs retain their physics',()=>{
