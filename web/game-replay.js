@@ -89,7 +89,7 @@ export function replayRemix(remix,session,proof,now,{finale=false}={}) {
 }
 
 export function replayTidalVideo(session,proof,now){
- const run=newTidalWave();
+ const run=newTidalWave(session.video===true?1:session.video);
  const result=replay(proof,{
   duration:now-session.start,step:tidalStep,maxSeconds:tidalLength+tidalStep,
   apply(kind,value){

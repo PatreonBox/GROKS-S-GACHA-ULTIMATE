@@ -18,7 +18,7 @@ import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
-import {newTidalWave,stepTidalWave,tidalChannel,tidalLength,tidalPortals,tidalStep} from '../web/tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion} from '../web/tidal-video-rules.js';
 import {replayTidalVideo} from '../web/game-replay.js';
 import {keepWavePoint} from '../web/remix-wave.js';
 import worker from '../dist/server/index.js';
@@ -39,24 +39,33 @@ test('Wave trail retains corners from beyond the left edge to the current positi
  ]);
 });
 
-test('Recorded wave flight has a reachable ending and replays its size changes',()=>{
+test('Recorded wave follows the measured speed transition and replays through the ending',()=>{
  const run=newTidalWave(),trace=[];
+ assert.equal(tidalScrollSpeed(tidalStart-.01),0);
+ assert.equal(tidalScrollSpeed(4),392);
+ assert.equal(tidalScrollSpeed(4.60),902);
  let result;
  while(!result){
-  const [top,bottom]=tidalChannel(run.tick*tidalStep);
-  const held=run.held?run.y>(top+bottom)/2-38:run.y>(top+bottom)/2+38;
+  const offset=run.mini?119:139;
+  const held=run.y>tidalHeight/2+(run.held?-offset:offset);
   if(held!==run.held){trace.push([run.tick,'held',held]);run.held=held;}
+  const distance=run.distance,y=run.y;
   result=stepTidalWave(run);
+  assert.ok(Math.abs(run.distance-distance-tidalScrollSpeed(run.tick*tidalStep)*tidalStep)<1e-8);
+  assert.ok(Math.abs(Math.abs(run.y-y)-(run.distance-distance)*(run.mini?2:1))<1e-8);
  }
  assert.equal(result,'clear');
  assert.equal(run.portal,tidalPortals.length);
  assert.equal(run.mini,false);
  const proof={ticks:run.tick,trace};
- assert.equal(replayTidalVideo({start:0},proof,tidalLength*1000),100);
- assert.throws(()=>replayTidalVideo({start:0},proof,1000),/could not be verified/);
+ const session={start:0,video:tidalVideoVersion};
+ assert.equal(replayTidalVideo(session,proof,tidalLength*1000),100);
+ assert.throws(()=>replayTidalVideo(session,proof,1000),/could not be verified/);
  const fall=newTidalWave();
  while(!stepTidalWave(fall)){}
- assert.ok(replayTidalVideo({start:0},{ticks:fall.tick,trace:[]},tidalLength*1000)<100);
+ assert.ok(fall.y+17>tidalHeight);
+ assert.ok(replayTidalVideo(session,{ticks:fall.tick,trace:[]},tidalLength*1000)<100);
+ assert.equal(replayTidalVideo({start:0,video:true},{ticks:487,trace:[]},tidalLength*1000),14);
 });
 
 test('Demon chest openings select the uploaded sound at the correct rarity boundaries',async()=>{

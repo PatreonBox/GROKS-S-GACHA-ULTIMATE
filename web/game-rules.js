@@ -13,7 +13,7 @@ import {armyMaps,armyLimit,armyTacticsVersion} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
 import {replayDrill,replayRemix,replayEndlessRemix,replayTidalVideo} from './game-replay.js';
 import {remixPhysicsVersion} from './remix-physics.js';
-import {tidalVideoId} from './tidal-video-rules.js';
+import {tidalVideoId,tidalVideoMode,tidalVideoVersion} from './tidal-video-rules.js';
 import {endlessKeyInterval,endlessKeyStatus,endlessMilestones,rewardEndlessRemix} from './remix-endless.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
@@ -376,14 +376,14 @@ const rules={
  }},
  'remix.begin':{run:({w,args:{id,mode:requestedMode},now})=>{
   const remix=levelId(id)&&findRemix(id);
-  const video=id===tidalVideoId&&requestedMode==='video';
+  const video=id===tidalVideoId&&(requestedMode===tidalVideoMode?tidalVideoVersion:requestedMode==='video');
   const mode=video?'normal':requestedMode??'normal';
   requireRule(remix,'Choose a featured level.');
   requireRule(video||requestedMode===undefined||requestedMode==='normal'||requestedMode==='endless','Choose Normal or Endless mode.');
   const token=crypto.randomUUID();
   const version=requestedMode===undefined?1:mode==='endless'?2:remixPhysicsVersion;
   w.remixRun={id,token,start:now,mode,version,keyVersion:id===86084399?2:0};
-  if(video)w.remixRun.video=true;
+  if(video)w.remixRun.video=video;
   if(mode==='endless'){
    const seed=randomBelow(0x100000000);
    w.remixRun.seed=seed;

@@ -1,7 +1,7 @@
 import {ico} from './icons.js';
 import {bindRunnerControls} from './remix-controls.js';
 import {drawWave,drawWaveTrail,keepWavePoint,waveRise} from './remix-wave.js';
-import {newTidalWave,stepTidalWave,tidalChannel,tidalLength,tidalStart,tidalStep,tidalWidth,tidalHeight,tidalX,tidalSpeed} from './tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalLength,tidalStart,tidalStep,tidalWidth,tidalHeight,tidalX,tidalVideoMode} from './tidal-video-rules.js';
 
 const source='/arcade-video/tidal-wave.mp4';
 const waveDuration=Math.ceil(tidalLength/tidalStep);
@@ -24,8 +24,9 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
  const action=dialog.querySelector('[data-tidal-action]'),audio=dialog.querySelector('[data-tidal-audio]');
  const pad=dialog.querySelector('.runner-touch');
  const touch=matchMedia('(pointer:coarse)');
- let phase='ready',run=newTidalWave(),trace=[],trail=[],token,frame=0,lastPortal=-Infinity;
- let quiet=false,closed=false,terminal=false;
+ let phase='ready',run=newTidalWave(),trace=[],trail=[],token,frame=null,lastPortal=-Infinity;
+ let quiet=false,closed=false,terminal=false,held=false,applied=0;
+ const frameByVideo=typeof video.requestVideoFrameCallback==='function';
  function syncAudio(){
   video.muted=quiet||!sound.enabled;
   audio.innerHTML=ico(video.muted?'muted':'volume');
@@ -34,24 +35,11 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
  function paint(){
   const time=run.tick*tidalStep;
   ctx.clearRect(0,0,tidalWidth,tidalHeight);
-  if(time>=tidalStart){
-   const channel=Array.from({length:51},(_,i)=>[i*16,...tidalChannel(time+(i*16-tidalX)/tidalSpeed)]);
-   for(const [side,bound] of [[1,0],[2,tidalHeight]]){
-    ctx.beginPath();ctx.moveTo(0,bound);
-    for(const point of channel)ctx.lineTo(point[0],point[side]);
-    ctx.lineTo(tidalWidth,bound);ctx.closePath();
-    ctx.fillStyle='rgba(1,9,23,.29)';ctx.fill();
-    ctx.beginPath();
-    for(const point of channel)ctx.lineTo(point[0],point[side]);
-    ctx.lineWidth=3;ctx.strokeStyle='rgba(0,12,28,.74)';ctx.stroke();
-    ctx.lineWidth=1.5;ctx.strokeStyle='rgba(166,241,255,.82)';ctx.stroke();
-   }
-  }
   if(phase!=='ready'){
-   const scroll=time*tidalSpeed-tidalX;
+   const scroll=run.distance-tidalX;
    const points=trail.map(([x,y])=>[x-scroll,y]);
    drawWaveTrail(ctx,points,{skin:avatar,mini:run.mini});
-   drawWave(ctx,{x:tidalX,y:run.y,angle:time<tidalStart?0:Math.atan2(waveRise(tidalSpeed,run.held,run.mini),tidalSpeed),mini:run.mini,skin:avatar});
+   drawWave(ctx,{x:tidalX,y:run.y,angle:time<tidalStart?0:Math.atan(waveRise(1,run.held,run.mini)),mini:run.mini,skin:avatar});
   }
   const age=time-lastPortal;
   if(age<.37){
@@ -78,11 +66,11 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
  }
  function finish(result){
   if(phase!=='running')return;
-  video.pause();
+  video.pause();stopFrame();
   const attempt=token;
-  show(result,result==='clear'?'Tidal Wave cleared!':'The wave touched the flight boundary.');
+  show(result,result==='clear'?'Tidal Wave cleared!':'The wave touched the edge of the screen.');
   action.focus({preventScroll:true});
-  onResult(attempt,{ticks:run.tick,trace}).then(receipt=>{
+  onResult(attempt,{ticks:run.tick,trace:trace.slice(0,applied)}).then(receipt=>{
    if(closed||token!==attempt||!receipt?.cleared)return;
    const prizes=[];
    if(receipt.demonKeys)prizes.push('+'+receipt.demonKeys+' Demon Keys');
@@ -92,48 +80,59 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
  }
  function advance(target){
   while(phase==='running'&&!terminal&&run.tick<target){
+   while(trace[applied]?.[0]===run.tick)run.held=trace[applied++][2];
    const before=run.portal,status=stepTidalWave(run);
    if(run.portal!==before)lastPortal=run.tick*tidalStep;
-   if(run.tick*tidalStep>=tidalStart)keepWavePoint(trail,run.tick*tidalStep*tidalSpeed,run.y,tidalX);
+   if(run.tick*tidalStep>=tidalStart)keepWavePoint(trail,run.distance,run.y,tidalX);
    if(status==='crash')finish(status);
    if(status==='clear')terminal=true;
   }
  }
- function draw(){
-  frame=0;
-  if(phase!=='running')return;
-  advance(Math.min(waveDuration,Math.floor(video.currentTime/tidalStep)));
-  paint();
-  if(phase==='running')frame=requestAnimationFrame(draw);
+ function scheduleFrame(){
+  if(phase!=='running'||frame!==null)return;
+  frame=frameByVideo?video.requestVideoFrameCallback((_,{mediaTime})=>draw(mediaTime)):
+   requestAnimationFrame(()=>draw(video.currentTime));
  }
- function changeHeld(held){
-  advance(Math.min(waveDuration,Math.floor(video.currentTime/tidalStep)));
-  if(phase!=='running'||terminal||held===run.held)return;
-  trace.push([run.tick,'held',held]);run.held=held;
+ function stopFrame(){
+  if(frame===null)return;
+  if(frameByVideo)video.cancelVideoFrameCallback(frame);
+  else cancelAnimationFrame(frame);
+  frame=null;
+ }
+ const ticksAt=time=>Math.min(waveDuration,Math.floor(time/tidalStep+1e-7));
+ function draw(time){
+  frame=null;
+  if(phase!=='running')return;
+  advance(ticksAt(time));
+  paint();
+  scheduleFrame();
+ }
+ function changeHeld(next){
+  if(phase!=='running'||terminal||next===held)return;
+  held=next;
+  const tick=Math.max(run.tick,ticksAt(video.currentTime),trace.at(-1)?.[0]??0);
+  trace.push([tick,'held',next]);
  }
  function pause(){
   if(phase!=='running')return;
   changeHeld(false);
-  if(phase!=='running')return;
-  input.reset();video.pause();cancelAnimationFrame(frame);frame=0;
+  input.reset();video.pause();stopFrame();
   show('paused','Paused. Hold Space, click, or touch to climb.');
  }
  function play(){
-  show('running','Hold to climb. Release to dive. Stay between the two flight boundaries.');
+  show('running','Hold to climb. Release to dive. Keep the wave inside the frame.');
   canvas.focus({preventScroll:true});
-  video.play().then(()=>{
-   if(phase==='running'&&!frame)frame=requestAnimationFrame(draw);
-  }).catch(()=>{if(phase==='running')pause()});
+  video.play().then(scheduleFrame).catch(()=>{if(phase==='running')pause()});
  }
  const input=bindRunnerControls({surface:canvas,pad,dialog,isRunning:()=>phase==='running',onPress:()=>changeHeld(true),onHeld:changeHeld,onPause:pause});
  async function start(){
   if(phase==='paused'){play();return;}
-  input.reset();run=newTidalWave();trace=[];trail=[];lastPortal=-Infinity;terminal=false;
+  input.reset();run=newTidalWave();trace=[];trail=[];token=undefined;lastPortal=-Infinity;terminal=false;held=false;applied=0;
   show('loading','Preparing the recorded flight…');
   if(video.error)video.load();
   video.currentTime=0;
   try{
-   ({token}=await onStart('video'));
+   ({token}=await onStart(tidalVideoMode));
    if(!closed)play();
   }catch(error){if(!closed)show('ready',error.message);}
  }
@@ -143,12 +142,12 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
   advance(waveDuration);
   if(terminal)finish('clear');
  });
- video.addEventListener('error',()=>{if(!closed){video.pause();show('error','The recording could not load. Try again.')}});
+ video.addEventListener('error',()=>{if(!closed){video.pause();stopFrame();show('error','The recording could not load. Try again.')}});
  audio.onclick=()=>{quiet=!quiet;syncAudio();};
  action.onclick=start;
  dialog.querySelector('[data-tidal-close]').onclick=()=>dialog.close();
  dialog.addEventListener('close',()=>{
-  closed=true;cancelAnimationFrame(frame);input.dispose();
+  closed=true;stopFrame();input.dispose();
   document.removeEventListener('gdlb-game-sound',syncAudio);
   document.removeEventListener('visibilitychange',visibilityChanged);
   video.pause();video.removeAttribute('src');video.load();dialog.remove();
