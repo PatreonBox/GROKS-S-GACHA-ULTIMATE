@@ -56,9 +56,13 @@ function sceneMarkup(config,step,total,bulkCount,hasOpenAll){
   '<div class="chest-live" aria-live="polite" role="status"></div>';
 }
 
-function cardMarkup({html,difficulty},i,up){
+function cardMarkup({html,difficulty,rarity},i,up){
+ const rank=rarityOrder.indexOf(rarity?.id);
+ const pulse=rank>=4&&(difficulty==='Extreme Demon'||difficulty==='Impossible');
+ const accent=pulse?' data-rare-pulse style="--pulse-color:'+cardRarities[rank].color+';--pulse-glow:'+
+  (.28+(rank-4)*.073).toFixed(2)+';--pulse-period:'+(2.9-(rank-4)*.145).toFixed(2)+'s;--pulse-delay:'+(i%5)*.19+'s"':'';
  return (
-   '<div class="chest-card"'+(up?' data-flipped':'')+'><div class="chest-card-shell">'+
+   '<div class="chest-card"'+(up?' data-flipped':'')+accent+'><div class="chest-card-shell">'+
    '<button class="chest-card-back gd-card-back" type="button" disabled aria-label="Flip card '+(i+1)+'" data-chest-card="'+i+'">'+
    cardBackMark(difficulty)+'</button>'+
    '<div class="chest-card-front"'+(up?'':' inert aria-hidden="true"')+'>'+html+'</div></div></div>');

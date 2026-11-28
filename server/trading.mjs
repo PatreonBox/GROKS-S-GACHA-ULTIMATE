@@ -7,8 +7,7 @@ import {isUuid,one,reject} from './game-http.mjs';
 import {directoryPlayer,findPlayer,searchPlayers} from './player-directory.mjs';
 import {collectionPower,discordAvatar,rankingVersion} from './player-rankings.mjs';
 import {browseCollection,exchangeCards,readBundle,snapshotBundle,validCardId,validFinish,verifyTradeSerials} from './trade-cards.mjs';
-import {updateAchievements} from '../web/progression-rules.js';
-import {seedAchievements} from './progression.mjs';
+import {seedAchievements,updateAchievements} from './progression.mjs';
 import {addMarketQuotes,browseMarket,marketQuotes,tradeSamples} from './trade-market.mjs';
 
 const offerLifetime=48*86_400_000;

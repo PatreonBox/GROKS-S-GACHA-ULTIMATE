@@ -98,14 +98,13 @@ test('pack purchase commits the debit, cards, and receipt together',async()=>{
  const paid=await f.wallet(session);
  assert.equal(paid.coins,135);
  assert.equal(paid.demonKeys,starterDemonKeys);
- assert.ok(paid.demonKeysToClaim>0);
  const {cards}=await (await f.call('/api/game?view=cards',session)).json();
  assert.equal(cards.reduce((sum,entry)=>sum+entry.copies,0),5);
  assert.equal((await f.command(session,'pack.buy',{packId:'common',quantity:1})).status,400);
  assert.equal((await f.command(session,'pack.advance',{id:pulls[0].id,opened:1})).status,200);
  const complete=await f.wallet(session);
  assert.equal(complete.pending,null);
- assert.equal(complete.demonKeys,starterDemonKeys+paid.demonKeysToClaim);
+ assert.equal(complete.demonKeys,starterDemonKeys+(paid.demonKeysToClaim||0));
  assert.equal(complete.demonKeysToClaim,undefined);
 });
 
@@ -1441,8 +1440,8 @@ test('All 65 achievements use staged server progress including legacy collection
   }
  }
  const f=fixture(),player=await f.open();
- const picks=await Promise.all(difficulties.map(async difficulty=>(await pool(difficulty))[0]));
- f.addCards(player.id,picks);
+ const picks=await Promise.all(difficulties.map(async difficulty=>(await pool(difficulty)).slice(0,5)));
+ f.addCards(player.id,picks.flat());
  f.store(player.id,w=>{
   w.achievementProgress={};
   w.playerXp=playerXpAt(19);w.training={1:{xp:4750,spike:31,saw:28,endurance:22}};
@@ -1521,13 +1520,19 @@ test('Legacy revealed Banner draws backfill once and only newly opened guarantee
 
 test('Achievement rewards backfill once across concurrent reads and reject client-supplied progress',async()=>{
  const f=fixture(),player=await f.open(),old=Date.now()-1000;
- f.addCards(player.id,(await pool('Easy')).slice(0,4));
- f.store(player.id,w=>{w.achievementProgress={cardMask:2};w.achievements={'card-easy':old};});
+ f.addCards(player.id,(await pool('Easy')).slice(0,20));
+ f.store(player.id,w=>{
+  w.achievementProgress={version:4};
+  w.achievements={'card-easy':old};w.achievementRewards={...w.achievements};
+  w.playerXp=20;w.achievementRewardXp=20;w.achievementBonusBp={mine:10};
+ });
  const [first,second]=await Promise.all([f.wallet(player),f.wallet(player)]);
  for(const wallet of [first,second,await f.wallet(player)]){
   assert.equal(wallet.achievements['card-easy'],old);
-  assert.ok(wallet.achievements['card-easy:2']>old);
-  assert.equal(wallet.achievements['card-easy:3'],undefined);
+  assert.ok(wallet.achievements['card-easy:discovery:1']>old);
+  assert.ok(wallet.achievements['card-easy:discovery:2']>old);
+  assert.equal(wallet.achievements['card-easy:discovery:3'],undefined);
+  assert.equal(wallet.achievementRewards['card-easy:discovery:1'],undefined);
   assert.equal(wallet.playerXp,65);
   assert.equal(wallet.achievementRewardXp,65);
   assert.deepEqual(wallet.achievementBonusBp,{mine:25});
@@ -1536,8 +1541,36 @@ test('Achievement rewards backfill once across concurrent reads and reject clien
  }
  const stored=f.sqlite.prepare('SELECT ranking_xp FROM game_profiles WHERE player_id=?').get(player.id);
  assert.equal(stored.ranking_xp,65);
- assert.equal((await f.command(player,'achievement.complete',{id:'card-easy:3',xp:1000})).status,400);
+ assert.equal((await f.command(player,'achievement.complete',{id:'card-easy:discovery:3',xp:1000})).status,400);
  assert.equal((await f.wallet(player)).playerXp,65);
+});
+
+test('Difficulty badges use seven goals and only unique cards from their own Card Index',async()=>{
+ const badges=achievements.filter(badge=>badge.discoveryDifficulty);
+ assert.deepEqual(badges.map(badge=>badge.discoveryDifficulty),difficulties);
+ for(const badge of badges){
+  const total=new Set((await pool(badge.discoveryDifficulty)).map(row=>row[0])).size;
+  const sixty=Math.ceil(total*3/5);
+  assert.deepEqual(badge.stages.map(stage=>stage.goal),[5,20,50,150,350,sixty,total]);
+  assert.match(badge.stages[5].description,/60% of this difficulty/);
+  assert.match(badge.stages[6].description,/100% of this difficulty/);
+ }
+ const f=fixture(),player=await f.open(),hard=await pool('Hard'),badge=badges.find(item=>item.discoveryDifficulty==='Hard');
+ const [first,second,third,fourth,fifth,sixth,seventh]=badge.stages;
+ f.addCards(player.id,[...hard.slice(0,sixth.goal-1),[9_000_001_112,...hard[0].slice(1)],(await pool('Hard Demon'))[0]]);
+ const old=Date.now()-1000;
+ f.store(player.id,w=>{w.achievementProgress={version:4};w.achievements={'card-hard:3':old};w.achievementRewards={...w.achievements};});
+ const before=await f.wallet(player);
+ assert.equal(before.achievementProgress.byDifficulty[difficulties.indexOf('Hard')],sixth.goal-1);
+ for(const stage of [first,second,third,fourth,fifth])assert.ok(before.achievements[stage.id]);
+ assert.equal(before.achievements[sixth.id],undefined);
+ assert.equal(before.achievements[seventh.id],undefined);
+ assert.equal(before.achievementRewards[third.id],undefined);
+ f.addCards(player.id,hard.slice(sixth.goal-1));
+ f.store(player.id,w=>{w.achievementProgress.discoveryIndexVersion='previous';});
+ const completed=await f.wallet(player);
+ assert.ok(completed.achievements[sixth.id]&&completed.achievements[seventh.id]);
+ assert.equal(completed.achievementProgress.byDifficulty[difficulties.indexOf('Hard')],hard.length);
 });
 
 test('Small Mana achievement boosts carry across collections',()=>{

@@ -110,7 +110,7 @@
 .achievement-difficulty[data-difficulty=hard]{--rank:#fbdc92}
 .achievement-difficulty[data-difficulty=harder]{--rank:#ffb489}
 .achievement-difficulty[data-difficulty=insane]{--rank:#f6b6ea}
-.achievement-difficulty[data-difficulty=demon-extreme]{--rank:#ffadc1}
+.achievement-difficulty[data-difficulty^=demon]{--rank:#ffadc1}
 .achievement-stage-number,.achievement-unearned{font-size:.74rem;color:#c9c2dd}
 .achievement-track{display:flex;align-items:center;gap:7px;min-width:0;color:#d0cee6;font-size:.74rem;font-variant-numeric:tabular-nums}
 .achievement-track progress{height:6px;flex:1;min-width:18px;accent-color:var(--badge-mid,#c2a0f6)}

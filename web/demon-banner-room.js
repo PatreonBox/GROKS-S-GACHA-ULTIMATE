@@ -255,18 +255,21 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   el.querySelector('[data-remove-featured]')?.addEventListener('click',()=>{target=null;el.close();render();body.querySelector('[data-banner-action="featured"]')?.focus()});
   load(1);
  }
- function testDialog(){
-  const el=modal('Test opening','<p>Choose a banner and a card. Test openings spend zero keys and give zero rewards.</p>'+
+ function testDialog(category){
+  const el=modal(category==='Impossible'?'Impossible list':'Test opening','<p>Choose a banner and a card. Test openings spend zero keys and give zero rewards.</p>'+
    '<form class="banner-test-form"><label>Banner<select name="banner">'+orderedBanners.map(id=>'<option value="'+id+'" '+(id===banner?'selected':'')+'>'+displayName(id)+'</option>').join('')+
    '</select></label><label>Card difficulty<select name="category"><option value="">Any</option>'+cardCategories.map(d=>'<option>'+esc(d)+'</option>').join('')+
    '</select></label><label>Find exact level<input name="search" type="search" placeholder="Level name or ID"></label>'+
    '<label>Exact level<select name="levelId"><option value="">Any matching card</option></select></label><button type="submit" class="primary">Run test</button>'+
    '<p role="status" data-test-status></p></form>');
   const form=el.querySelector('form'),select=form.elements.levelId;
+  if(category)form.elements.category.value=category;
   bindSearch({el,input:form.elements.search,category:form.elements.category,render(rows,message){
-   select.innerHTML='<option value="">Any matching card</option>'+rows.map(row=>
+   const impossible=form.elements.category.value==='Impossible';
+   select.innerHTML='<option value="">'+(impossible?'Random Impossible level':'Any matching card')+'</option>'+rows.map(row=>
     '<option value="'+row[0]+'">'+esc(row[1])+' · #'+row[0]+'</option>').join('');
-   form.querySelector('[data-test-status]').textContent=rows.length?'':message;
+   form.querySelector('[data-test-status]').textContent=impossible&&rows.length?
+    format(rows.length)+' Impossible '+(rows.length===1?'level':'levels'):rows.length?'':message;
   }});
   form.onsubmit=async e=>{
    e.preventDefault();
@@ -338,7 +341,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
    else if(playerLevel()!==before)render();
    else renderControls();
   },
-  openTest(){if(body&&admin)testDialog()},
+  openTest(category){if(body&&admin)testDialog(category)},
   tick(){if(page==='keys'&&body)renderShop()},
   leave(){closeDialog();body=null;page='';status=''}
  };

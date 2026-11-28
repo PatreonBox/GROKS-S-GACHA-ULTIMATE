@@ -117,7 +117,10 @@ export function setupAdminTools({canOpen,loadWallet,run,searchPlayers,moderate})
  kingdomEdit.elements.adjustment.addEventListener('change',kingdomAmountLimits);
  kingdomAmountLimits();
  panel.querySelector('[data-admin-open-kingdom]').addEventListener('click',()=>panel.close());
- panel.querySelector('[data-admin-open-gacha]').addEventListener('click',()=>panel.close());
+ for(const link of panel.querySelectorAll('[data-admin-open-gacha]'))link.addEventListener('click',()=>{
+  panel.close();
+  if(link.hash===location.hash)window.dispatchEvent(new HashChangeEvent('hashchange'));
+ });
  panel.querySelector('[data-close-admin]').addEventListener('click',()=>panel.close());
  async function open(pane){
   if(!canOpen()||panel.open)return;

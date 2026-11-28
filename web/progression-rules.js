@@ -7,9 +7,11 @@ import {cubeCatalog,ownsCube} from './cube-catalog.js';
 import {awardPlayerXp} from './player-progression.js';
 import {keyLimit,releaseAchievementKeys} from './demon-keys.js';
 import {remixes} from './remixes.js';
+import {difficulties} from './drop-access.js';
+import {discoveryTotals} from './data/discovery-index.js';
 
 export {achievementBoostLabels,achievementBoosts} from './achievement-boosts.js';
-export const achievementVersion=4;
+export const achievementVersion=5;
 const medalMaterials=['Wood','Brass','Bronze','Silver','Gold','Platinum','Diamond'];
 export const achievementMaterial=(stage,total)=>medalMaterials[Math.max(0,5-total)+stage-1];
 export const achievementXp={Easy:20,Normal:45,Hard:70,Harder:85,Insane:100,Demon:150};
@@ -23,7 +25,7 @@ const plural=(count,singular,plural=singular+'s')=>count===1?singular:plural;
 function achievement({id,group,name,stat,symbol,color,href,icon},boost,targets,describe,legacyStage=targets.length){
  const stages=targets.map(([goal,difficulty],i)=>({
   id:i+1===legacyStage?id:id+':'+(i+1),stage:i+1,goal,difficulty,xp:achievementXp[difficulty],keys:achievementKeys[difficulty],
-  boost:{key:boost,percent:boostPercents[difficultyNames.indexOf(difficulty)]},description:describe(goal)
+  boost:{key:boost,percent:boostPercents[difficultyNames.indexOf(difficulty)]},description:describe(goal,i)
  }));
  const last=stages.at(-1);
  return {id,group,name,stat,symbol,color,href,icon,stages,goal:last.goal,difficulty:last.difficulty,description:last.description};
@@ -42,12 +44,18 @@ const firstCards=[
  ['demon-insane','Insane Demon','Against All Odds','#f494bf','Harder','Insane','Demon'],
  ['demon-extreme','Extreme Demon','Beyond the Red Line','#ffbd79','Insane','Demon','Demon']
 ];
-const firstCardsByDifficulty=new Map(firstCards.map((row,i)=>[row[1],i]));
-const achievementsForCards=firstCards.map(([face,difficulty,name,color,first,second,third],i)=>
- achievement({id:'card-'+face,group:'Cards',name,color,stat:'card'+i,icon:'/assets/faces/'+face+'.webp',href:'#gacha/index'},
-  i<6?'mine':'battle',[[1,first],[4,second],[12,third]],goal=>goal===1?'Collect your first '+difficulty+' card.':
-   'Discover '+n(goal)+' different '+difficulty+' cards.',1)
-);
+const achievementsForCards=firstCards.map(([face,difficulty,name,color,first,second,third],i)=>{
+ const id='card-'+face,total=discoveryTotals[difficulty],sixty=Math.ceil(total*3/5);
+ const goals=[5,20,50,150,350,sixty,total];
+ const ranks=[first,second,third,'Insane','Demon','Demon','Demon'];
+ const badge=achievement({id,group:'Cards',name,color,stat:'card'+i,icon:'/assets/faces/'+face+'.webp',href:'#gacha/index'},
+  i<6?'mine':'battle',goals.map((goal,index)=>[goal,ranks[index]]),(goal,index)=>
+   'Discover '+n(goal)+' different '+difficulty+' cards'+
+   (index===5?' (60% of this difficulty’s Card Index).':index===6?' (100% of this difficulty’s Card Index).':'.'));
+ badge.stages=badge.stages.map((stage,index)=>({...stage,id:id+':discovery:'+(index+1),
+  ...(index<3?{previousReward:index===0?id:id+':'+(index+1)}:{})}));
+ return {...badge,discoveryDifficulty:difficulty};
+});
 
 const tracks={
  Cards:{symbol:'pack',color:'#b3a1ff',href:'#gacha/index',boost:'mine'},
@@ -198,7 +206,7 @@ export function achievementProgress(wallet,now=Date.now()){
  const gemMines=Boolean(kingdom?.gemMines?.length||storage.some(building=>building.kind==='gem-mine'));
  const arcadeModes=new Set(remixes.filter(remix=>wallet.remixBest?.[remix.id]===100&&
   (remix.id!==86084399||wallet.limboKeysCleared)).map(remix=>remix.mode));
- return {...progress,cardMask:progress.cardMask||0,mine:Math.max(progress.mine||0,mineRate(wallet.mine)),
+ return {...progress,mine:Math.max(progress.mine||0,mineRate(wallet.mine)),
   battle:progress.battle||0,army:armyClears(wallet),training:progress.training||0,
   houses:homes.length,tower:towerPlan(wallet,now).level,land:landPlan(wallet).level,
   limbo:wallet.limboKeysCleared?100:Math.min(99,wallet.remixBest?.[86084399]||0),trades:progress.trades||0,
@@ -227,21 +235,18 @@ export function achievementProgress(wallet,now=Date.now()){
 export function achievementCount(definition,progress){
  if(!definition.stat.startsWith('card'))return progress[definition.stat]||0;
  const tier=Number(definition.stat.slice(4));
- return Math.max(progress.byDifficulty?.[tier]||0,Number(Boolean(progress.cardMask&(1<<tier))));
+ return progress.byDifficulty?.[tier]||0;
 }
 
-function updateCollection(state,records){
+function updateCollection(state,records,discoveryDifficulties){
  const byDifficulty=Array(firstCards.length).fill(0);
  let unique=0,demons=0,holos=0,antimatter=0,index=0;
  for(const card of records){
   if(!Array.isArray(card?.row))continue;
-  const difficulty=card.row[6],tier=firstCardsByDifficulty.get(difficulty);
+  const tier=discoveryDifficulties.get(card.id);
   unique++;
-  if(tier!==undefined){
-   byDifficulty[tier]++;
-   state.cardMask=(state.cardMask||0)|(1<<tier);
-   if(tier>=6)demons++;
-  }
+  if(tier!==undefined)byDifficulty[tier]++;
+  if(difficulties.indexOf(card.row[6])>=6)demons++;
   if(card.everHolo||card.holoCopies>0)holos++;
   if(card.everAntimatter||card.antimatterCopies>0)antimatter++;
   if(card.indexReward!==undefined)index++;
@@ -249,12 +254,12 @@ function updateCollection(state,records){
  Object.assign(state,{byDifficulty,unique,demons,holos,antimatter,index});
 }
 
-export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train=false,trained=0,events={},visitors,deferDemonKeys=Boolean(wallet.pending)}={},now=Date.now()){
+export function updateAchievements(wallet,{records,changes,discoveryDifficulties,wins=0,traded=0,train=false,trained=0,events={},visitors,deferDemonKeys=Boolean(wallet.pending)}={},now=Date.now()){
  const state=wallet.achievementProgress??={};
  if(records){
   const owned=new Map(records.map(card=>[card.id,card]));
   for(const [id,card] of changes||[])owned.set(id,card);
-  updateCollection(state,owned.values());
+  updateCollection(state,owned.values(),discoveryDifficulties);
  }
  if(wins)state.battle=(state.battle||0)+wins;
  if(traded)state.trades=(state.trades||0)+traded;
@@ -272,7 +277,7 @@ export function updateAchievements(wallet,{records,changes,wins=0,traded=0,train
   for(const stage of item.stages){
    if(known<stage.goal)continue;
    earned[stage.id]??=now;
-   if(!Object.hasOwn(rewards,stage.id))awarded.push(stage);
+   if(!Object.hasOwn(rewards,stage.id)&&!(stage.previousReward&&Object.hasOwn(rewards,stage.previousReward)))awarded.push(stage);
   }
  }
  if(!awarded.length)return awarded;

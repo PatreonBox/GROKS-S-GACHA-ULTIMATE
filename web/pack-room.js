@@ -302,7 +302,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
    const owner=!byId('openAdminTools').hidden;
    if(view!=='keys'){prepareChestReveal();sound.preloadChestEffects();}
    banners.show(byId('arcBody'),view,wallet,owner);
-   if(view==='banner-test'&&owner)banners.openTest();
+   if(view==='banner-test'&&owner)banners.openTest(options.testCategory);
   }
   if(['index','merge','vault'].includes(view))stations.show(view,wallet);
   if(view==='results'){root.innerHTML='<div id="arcBody"></div>';resultsPage();window.scrollTo(0,0);bestSound()}

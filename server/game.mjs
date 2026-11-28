@@ -14,8 +14,8 @@ import {kingdomDefences,kingdomForges,kingdomHouses,maxTowerLevel,settleKingdomC
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
-import {trainingLevels,updateAchievements} from '../web/progression-rules.js';
-import {achievementActionEvents,achievementStatistics,refreshAchievementWallet,seedAchievements} from './progression.mjs';
+import {trainingLevels} from '../web/progression-rules.js';
+import {achievementActionEvents,achievementStatistics,refreshAchievementWallet,seedAchievements,updateAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
 import {grantDiscordKeyBonus,playerNotifications} from './game-notifications.mjs';
 import {browseDemonTargets,demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';

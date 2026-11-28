@@ -3,9 +3,8 @@ import {settleMine} from '../web/mine-economy.js';
 import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progression.js';
 import {directoryPlayer,findPlayer,searchPlayers} from './player-directory.mjs';
 import {isUuid,one,reject} from './game-http.mjs';
-import {seedAchievements} from './progression.mjs';
+import {seedAchievements,updateAchievements} from './progression.mjs';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
-import {updateAchievements} from '../web/progression-rules.js';
 import {validCoinAmount} from '../web/coin-economy.js';
 
 function managePlayer(record){

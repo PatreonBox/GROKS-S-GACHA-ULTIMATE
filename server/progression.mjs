@@ -1,11 +1,16 @@
-import {achievementById,achievementVersion,bannerAchievementStat,updateAchievements} from '../web/progression-rules.js';
+import {achievementById,achievementVersion,bannerAchievementStat,updateAchievements as applyAchievementRewards} from '../web/progression-rules.js';
 import {normalizeWallet} from '../web/pack-engine.js';
 import {needsCoinNormalization} from '../web/coin-economy.js';
 import {discoveredVisitors} from './kingdom-visitors.mjs';
 import {one,reject} from './game-http.mjs';
 import {initDemonKeys,releaseAchievementKeys} from '../web/demon-keys.js';
+import {discoveryDifficulties,discoveryIndexVersion} from '../dist/discovery-index.mjs';
 
-export const needsAchievementSeed=wallet=>wallet.achievementProgress?.version!==achievementVersion;
+export const needsAchievementSeed=wallet=>wallet.achievementProgress?.version!==achievementVersion||
+ wallet.achievementProgress.discoveryIndexVersion!==discoveryIndexVersion;
+export function updateAchievements(wallet,progress,now){
+ return applyAchievementRewards(wallet,{...progress,discoveryDifficulties},now);
+}
 const olderBattleWins=wallet=>Object.keys(wallet.campaign||{}).length+Object.values(wallet.remixWins||{}).reduce((sum,wins)=>sum+wins,0);
 const fullSquadWon=battle=>battle?.status==='won'&&battle.allies?.length===4&&battle.allies.every(ally=>ally.hp>0);
 const statisticsCache=new WeakMap();
@@ -63,6 +68,7 @@ export async function seedAchievements(db,player,wallet,now,records,deferDemonKe
  }
  for(const [key,count] of Object.entries(recentChests))progress[key]=Math.max(progress[key]||0,count);
  progress.version=achievementVersion;
+ progress.discoveryIndexVersion=discoveryIndexVersion;
  updateAchievements(wallet,{records:cardRows,train:true,visitors:discoveredVisitors(wallet,now).length,deferDemonKeys},now);
 }
 

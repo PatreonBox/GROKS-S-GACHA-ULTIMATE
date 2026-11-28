@@ -5,8 +5,10 @@ import {fileURLToPath} from 'node:url';
 import {brotliCompressSync,gzipSync,gunzipSync,constants} from 'node:zlib';
 import {build} from 'esbuild';
 import {sceneBundles} from './scene-bundles.mjs';
-const root=fileURLToPath(new URL('../',import.meta.url));process.chdir(root);
-restoreAssets(new URL('../',import.meta.url));
+import {prepareDiscoveryIndex} from './discovery-index.mjs';
+const source=new URL('../',import.meta.url),root=fileURLToPath(source);process.chdir(root);
+restoreAssets(source);
+await prepareDiscoveryIndex(source);
 const types={'.mp3':'audio/mpeg','.ogg':'audio/ogg','.mp4':'video/mp4','.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.woff2':'font/woff2','.webp':'image/webp','.avif':'image/avif','.png':'image/png','.svg':'image/svg+xml'};
 const assets={};
 function encodeNumbers(values,increasing=false){
