@@ -59,8 +59,9 @@ export const sectionGuides={
   ['Equip it','Your equipped cube explores your Kingdom and appears in supported training drills and Mini Games.']
  ]},
  'kingdom':{title:'Your Kingdom',art:'/assets/gd-kingdom-castle-icon.png',steps:[
-  ['Look around','Drag to orbit the plot. Use Pan to slide the camera, and zoom with the scroll wheel, pinch, or the on-screen buttons.'],
+  ['Look around','Drag to orbit the plot, use WASD or Pan to move around, and zoom with the scroll wheel, pinch, or the on-screen buttons.'],
    ['Place a building','Open Build Mode to preview a building and check its cost. Choose a clear spot, then press E or Place. Press R to rotate and Q to cancel.'],
+   ['Draw a trail','In Build Mode, choose Draw trail and drag across the ground. Save it to replace the existing pavement. Follow trail controls how residents roam.'],
    ['Collect mana','Build a Mana Forge and wait for the blue bubble. Click the bubble to add its stored mana to your Kingdom.'],
   ['Attract visitors','Your first tower holds two houses. Upgrade it to add more lots and raise your Kingdom’s rating. The Visitor index reveals creators as you reach their star requirements.']
  ]},
