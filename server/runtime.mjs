@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {timingSafeEqual} from 'node:crypto';
 import {statSync} from 'node:fs';
 import {join} from 'node:path';
 import {Readable} from 'node:stream';
@@ -28,6 +29,8 @@ const {DB,sqlite}=openGameDatabase(join(directory,'gd-lvl-battles.sqlite'));
 const discord=createDiscordAuth(sqlite,{origin:publicUrl.origin,clientId:process.env.DISCORD_CLIENT_ID,guildId:officialGuildId});
 const reports=createBugReports(sqlite,{apiKey:process.env.RESEND_API_KEY,from:process.env.BUG_REPORT_FROM,to:process.env.BUG_REPORT_TO});
 const reportTimer=reports.start();
+const profileKey=process.env.GDK_PROFILE_API_KEY?.trim()||'';
+const botAuthorization=/^[a-f0-9]{64}$/.test(profileKey)?Buffer.from('Bearer '+profileKey):null;
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,publicUrl);
@@ -39,12 +42,23 @@ const server=http.createServer(async(req,res)=>{
   }
   const headers=new Headers(req.headers);
   headers.delete('oai-authenticated-user-id');
+  const botProfile=url.pathname==='/api/discord/profile';
+  if(botProfile){
+   const authorization=Buffer.from(headers.get('authorization')||'');
+   if(!botAuthorization||authorization.length!==botAuthorization.length||!timingSafeEqual(authorization,botAuthorization)){
+    const status=botAuthorization?401:503;
+    res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-store'});
+    res.end(JSON.stringify({error:status===401?'Bot authorization required.':'The bot profile connection is unavailable.'}));
+    return;
+   }
+   headers.delete('authorization');
+  }
   const hasBody=!['GET','HEAD'].includes(req.method);
   const request=new Request(url,{method:req.method,headers,...(hasBody?{body:Readable.toWeb(req),duplex:'half'}:{})});
   const account=discord?.account(request);
   const response=await discord?.handle(request,url)??await worker.fetch(request,{
    DB,guestOnly:true,discordEnabled:Boolean(discord),discordUser:account?.id,discordProfile:account?.profile,
-   adminDiscordId:process.env.GAME_ADMIN_DISCORD_ID,
+   adminDiscordId:process.env.GAME_ADMIN_DISCORD_ID,discordBotProfileAuthorized:botProfile,
    submitBugReport:reports.submit
   });
   const outputHeaders=Object.fromEntries(response.headers);

@@ -10,7 +10,8 @@ import {maxPlayerLevel,playerProgress,playerXpAtLevel} from '../web/player-progr
 import {featureLevel} from '../web/level-access.js';
 import {tradeLevelNotice} from '../web/trade-rules.js';
 import {discoveredVisitors,kingdomVisitors,settleKingdomVisitors} from './kingdom-visitors.mjs';
-import {kingdomDefences,kingdomForges,kingdomHouses,maxTowerLevel,settleKingdomConstruction} from '../web/kingdom-rules.js';
+import {kingdomDefences,kingdomForges,kingdomHouses,kingdomStats,maxTowerLevel,settleKingdomConstruction} from '../web/kingdom-rules.js';
+import {impossibleCover} from '../web/impossible-cards.js';
 import {bestCardShowcase,kingdomShowcase} from './player-showcases.mjs';
 import {GameRequestError,one,reject,uuid} from './game-http.mjs';
 import {trading} from './trading.mjs';
@@ -109,21 +110,30 @@ async function inventory(db,id){
  return results.map(entry=>JSON.parse(entry.card));
 }
 
-async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,admin,knownRank}){
- const wallet=normalizeWallet(JSON.parse(record.wallet));
+async function collectionCounts(db,playerId,collectibleIds){
  const {results}=await db.prepare(`SELECT level_id,json_extract(card,'$.copies') AS copies
-  FROM game_cards WHERE player_id=?`).bind(record.player_id).all();
+  FROM game_cards WHERE player_id=?`).bind(playerId).all();
  let unique=0,copies=0;
  for(const entry of results){
   if(collectibleIds.has(entry.level_id))unique++;
   copies+=Math.max(0,entry.copies||0);
  }
+ return {unique,copies,collectible:collectibleIds.size};
+}
+
+function canShowProfile(record,saved,adminOwner){
+ return saved&&!record.banned_at&&!record.leaderboard_excluded&&record.owner!==adminOwner&&!saved.legacyTransfer;
+}
+
+async function profileStats(db,record,collectibleIds,{adminOwner,discordOnly,admin,knownRank}){
+ const wallet=normalizeWallet(JSON.parse(record.wallet));
+ const counts=await collectionCounts(db,record.player_id,collectibleIds);
  const privateRank=Boolean(admin||record.leaderboard_excluded||wallet.legacyTransfer);
  const rank=privateRank?null:knownRank??await playerRank(db,{adminOwner,discordOnly:Number(discordOnly),playerId:record.player_id,inventory});
- return {coins:roundCoins(wallet.coins+mineEarnings(wallet).coins),gems:wallet.gems,unique,copies,
+ return {coins:roundCoins(wallet.coins+mineEarnings(wallet).coins),gems:wallet.gems,...counts,
   level:playerProgress(wallet.playerXp).level,rank,privateRank,
   power:powerIsCurrent(record)?record.collection_power:collectionPower(await inventory(db,record.player_id),wallet),
-  collectible:collectibleIds.size,campaignTotal:campaignStages.length,
+  campaignTotal:campaignStages.length,
   campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(wallet,i+1)),0)};
 }
 
@@ -355,6 +365,37 @@ export function gameRoutes(readJson,hasArt){
   }).catch(error=>{collectibleIds=undefined;throw error;});
   return collectibleIds;
  }
+ async function discordBotProfile(db,discordId,adminOwner){
+  if(!/^\d{17,20}$/.test(discordId||''))reject('A Discord member ID is required.',400);
+  const owner='discord:'+discordId;
+  const record=await profile(db,owner,false);
+  const saved=record&&JSON.parse(record.wallet);
+  if(!canShowProfile(record,saved,adminOwner)||saved.profileHidden)reject('This player profile is unavailable.',404);
+
+  const level=playerProgress(saved.playerXp).level;
+  const stats={level,...await collectionCounts(db,record.player_id,await getCollectibleIds()),
+   campaignClears:campaignStages.reduce((count,_,i)=>count+Number(stageCleared(saved,i+1)),0),
+   campaignTotal:campaignStages.length};
+  const best=saved.shareBestCard===false?null:bestCardShowcase(await inventory(db,record.player_id),saved);
+  const plot=saved.shareKingdom!==false&&level>=featureLevel('kingdom')?kingdomStats(saved):null;
+
+  // Check the current settings again after reading the collection so a privacy change takes effect immediately.
+  const current=await profile(db,owner,false);
+  const currentWallet=current&&JSON.parse(current.wallet);
+  if(!canShowProfile(current,currentWallet,adminOwner)||currentWallet.profileHidden||current.player_id!==record.player_id)
+   reject('This player profile is unavailable.',404);
+  const result={stats};
+  if(best&&currentWallet.shareBestCard!==false){
+   const {id,title,creator,difficulty,rank,finish,level,stage,power,maxHp,attack,basic,signature}=best;
+   result.bestCard={id,title,creator,difficulty,rank,finish,level,stage,power,maxHp,attack,
+    basic:basic.name,signature:signature.name,
+    art:impossibleCover(id)||(hasArt(id)?'/assets/shots/'+id+'.webp':'/api/thumbnail/'+id+'/small')};
+  }
+  if(plot&&currentWallet.shareKingdom!==false&&playerProgress(currentWallet.playerXp).level>=featureLevel('kingdom')){
+   result.kingdom={stars:plot.stars,towerLevel:plot.tower.level,landLevel:plot.land.level};
+  }
+  return result;
+ }
  async function gachaActivity(db,record){
   const wallet=JSON.parse(record.wallet);
   const cards=await inventory(db,record.player_id);
@@ -379,6 +420,12 @@ export function gameRoutes(readJson,hasArt){
   const requiresSignIn=Boolean(env.discordEnabled);
   try{
    const url=new URL(request.url);
+   const adminOwner=/^\d{17,20}$/.test(env.adminDiscordId||'')?'discord:'+env.adminDiscordId:'';
+   if(url.pathname==='/api/discord/profile'){
+    if(!env.discordBotProfileAuthorized)reject('This route is unavailable.',404);
+    if(request.method!=='GET')reject('Method not supported.',405);
+    return json(await discordBotProfile(db,url.searchParams.get('member'),adminOwner));
+   }
    if(!['GET','POST'].includes(request.method))reject('Method not supported.',405);
    const isTransfer=url.pathname==='/api/game/transfer';
    const isReport=url.pathname==='/api/game/report';
@@ -388,7 +435,6 @@ export function gameRoutes(readJson,hasArt){
    const initial=request.method==='GET'&&view==='wallet'&&url.pathname==='/api/game';
    const subject=chatgpt?request.headers.get('oai-authenticated-user-id'):null;
    const owner=env.discordUser?'discord:'+env.discordUser:subject?'account:'+subject:null;
-   const adminOwner=/^\d{17,20}$/.test(env.adminDiscordId||'')?'discord:'+env.adminDiscordId:'';
    const admin=Boolean(adminOwner&&owner===adminOwner);
    const account={signedIn:Boolean(owner),accountSignIn:Boolean(accountProvider),accountProvider,requiresSignIn};
    if(admin)account.admin=true;
@@ -431,9 +477,9 @@ export function gameRoutes(readJson,hasArt){
      const options={adminOwner,discordOnly:Number(requiresSignIn),playerId:viewer?.player_id||'',inventory};
      const player=await rankedPlayer(db,options,target);
      if(!player)reject('This player profile is unavailable.',404);
-     const record=await one(db,'SELECT wallet,player_id,owner,leaderboard_excluded,collection_power,power_version FROM game_profiles WHERE player_id=?',target);
+     const record=await one(db,'SELECT wallet,player_id,owner,banned_at,leaderboard_excluded,collection_power,power_version FROM game_profiles WHERE player_id=?',target);
      const saved=record&&JSON.parse(record.wallet);
-     if(!saved||record.leaderboard_excluded||record.owner===adminOwner||saved.legacyTransfer)reject('This player profile is unavailable.',404);
+     if(!canShowProfile(record,saved,adminOwner))reject('This player profile is unavailable.',404);
      if(saved.profileHidden&&!player.mine)reject('This player keeps their profile private.',403);
      const shareKingdom=(player.mine||saved.shareKingdom!==false)&&playerProgress(saved.playerXp).level>=featureLevel('kingdom');
      const shareBestCard=player.mine||saved.shareBestCard!==false;

@@ -441,10 +441,10 @@ async function unusedPort(){
  await new Promise(resolve=>probe.close(resolve));
  return port;
 }
-async function launch(port,volume,clientId=''){
+async function launch(port,volume,clientId='',variables={}){
  const child=spawn(process.execPath,['server/runtime.mjs'],{env:{...process.env,PORT:String(port),
   RAILWAY_ENVIRONMENT_ID:clientId?'runtime-test':'',RAILWAY_VOLUME_MOUNT_PATH:volume,
-  GAME_PUBLIC_ORIGIN:publicOrigin,DISCORD_CLIENT_ID:clientId}});
+  GAME_PUBLIC_ORIGIN:publicOrigin,DISCORD_CLIENT_ID:clientId,...variables}});
  let stderr='';
  child.stderr.on('data',data=>{stderr+=data.toString()});
  try{
@@ -540,6 +540,70 @@ test('the HTTP server keeps the wallet and cards across a restart',async()=>{
 });
 
 const tradePool=createCardPool(path=>JSON.parse(readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
+
+test('the Discord profile bridge requires its key and respects every showcase privacy setting',async()=>{
+ const volume=await mkdtemp(join(tmpdir(),'gd-discord-profile-'));
+ const {sqlite}=openGameDatabase(join(volume,'gd-lvl-battles.sqlite'));
+ const discordId='1570000000000000100',adminId='1570000000000000200',unknownId='1570000000000000300';
+ const token='ab'.repeat(32),port=await unusedPort(),base='http://127.0.0.1:'+port;
+ const id=crypto.randomUUID(),now=Date.now();
+ const [card]=await tradePool('Easy');
+ const saved={...newWallet(),playerXp:playerXpAtLevel(8),kingdom:{towerLevel:2,landLevel:1}};
+ const insert=sqlite.prepare('INSERT INTO game_profiles(player_id,owner,wallet,updated_at) VALUES(?,?,?,?)');
+ insert.run(id,'discord:'+discordId,JSON.stringify(saved),now);
+ insert.run(crypto.randomUUID(),'discord:'+adminId,JSON.stringify(saved),now);
+ sqlite.prepare('INSERT INTO game_cards(player_id,level_id,card) VALUES(?,?,?)')
+  .run(id,card[0],JSON.stringify({id:card[0],row:card,copies:2}));
+ const settings=options=>sqlite.prepare('UPDATE game_profiles SET wallet=? WHERE player_id=?').run(JSON.stringify({...saved,...options}),id);
+ let child;
+ try{
+  child=await launch(port,volume,'1570000000000000000',{GDK_PROFILE_API_KEY:token,GAME_ADMIN_DISCORD_ID:adminId});
+  const api=(member=discordId,headers={Authorization:'Bearer '+token},method='GET')=>
+   fetch(base+'/api/discord/profile?member='+encodeURIComponent(member),{headers,method});
+  assert.equal((await api(discordId,{})).status,401);
+  assert.equal((await api(discordId,{Authorization:'Bearer '+'00'.repeat(32)})).status,401);
+  assert.equal((await api(discordId,{'oai-authenticated-user-id':discordId,'discord-bot-profile-authorized':'true'})).status,401);
+  assert.equal((await api(discordId,undefined,'POST')).status,405);
+  assert.equal((await api('Groks')).status,400);
+  assert.equal((await api(adminId)).status,404);
+  const missing=await (await api(unknownId)).json();
+  assert.equal((await fetch(base+'/api/players?player='+id)).status,401);
+
+  const response=await api(),profile=await response.json();
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('cache-control'),'private, no-store');
+  assert.deepEqual(Object.keys(profile).sort(),['bestCard','kingdom','stats']);
+  assert.equal(profile.stats.level,8);
+  assert.equal(profile.stats.unique,1);
+  assert.equal(profile.stats.copies,2);
+  assert.equal(profile.bestCard.title,card[1]);
+  assert.ok(profile.bestCard.basic&&profile.bestCard.signature);
+  assert.match(profile.bestCard.art,/^\/(?:assets\/|api\/thumbnail\/)/);
+  assert.equal(profile.kingdom.towerLevel,2);
+  assert.equal('wallet' in profile,false);
+
+  settings({shareBestCard:false});
+  const cardHidden=await (await api()).json();
+  assert.equal('bestCard' in cardHidden,false);
+  assert.equal(cardHidden.kingdom.towerLevel,2);
+  settings({shareKingdom:false});
+  const kingdomHidden=await (await api()).json();
+  assert.equal('kingdom' in kingdomHidden,false);
+  assert.equal(kingdomHidden.bestCard.title,card[1]);
+  settings({profileHidden:true});
+  const hidden=await api();
+  assert.equal(hidden.status,404);
+  assert.equal(hidden.headers.get('cache-control'),'private, no-store');
+  assert.deepEqual(await hidden.json(),missing);
+  settings({});
+  sqlite.prepare('UPDATE game_profiles SET banned_at=? WHERE player_id=?').run(now,id);
+  assert.equal((await api()).status,404);
+ }finally{
+  await stop(child);
+  sqlite.close();
+  await rm(volume,{recursive:true,force:true});
+ }
+});
 
 function tradeFixture(t){
  const {DB,sqlite}=openGameDatabase(':memory:');
