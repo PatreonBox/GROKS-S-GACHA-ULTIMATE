@@ -203,6 +203,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   if(view==='army')army.refreshCollection();
  });
  document.addEventListener('gdlb-admin-wallet',event=>applyWallet(event.detail));
+ document.addEventListener('gdlb-settings-wallet',event=>applyWallet(event.detail));
  window.addEventListener('pageshow',()=>{if(!document.hidden)checkpointMine(true)});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden||wallet?.mine)checkpointMine(!document.hidden)});
  setInterval(()=>{
@@ -595,7 +596,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   if(pending.banner){beginChest(pending);return}
   run=pending;packIndex=pending.opened;stage='sealed';stopTimers();
   preparePullOdds(pending).then(()=>{
-   if(run===pending)prepareRareReveal(pullCards(pending),sound);
+   if(run===pending)prepareRareReveal(pullCards(pending),sound,wallet?.rareRevealMinimum);
   });
   if(!reveal.open)reveal.showModal();drawReveal();
  }
@@ -621,18 +622,19 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   const {pull,index,test,bulk,seenCards}=opening,remaining=pull.quantity-index;
   const hand=bulk?unopenedChestCards(pull,index):pullCards(pull,index);
   const cards=hand.map(item=>({html:card(item.row,{deal:true,fresh:item.fresh,bonus:item.bonus,finish:item.finish,serial:item.serial,drawChance:test?null:item}),
-   title:item.row[1],difficulty:item.row[6],rarity:cardRarity(item.row),cinematic:Boolean(revealTier(item.percent))}));
-  prepareRareReveal(hand.slice(0,10),sound);
+   title:item.row[1],difficulty:item.row[6],rarity:cardRarity(item.row)}));
+  prepareRareReveal(hand.slice(0,10),sound,wallet?.rareRevealMinimum);
   chestScene=openChestReveal({
    tier:pull.banner,cards,step:index+1,total:pull.quantity,bulkCount:bulk?remaining:1,sound,toggleSound,observeArt,
    initialFlipped:hand.flatMap((item,i)=>seenCards.has(item.drawIndex)?[i]:[]),
+   shouldPlayCutscene:i=>automaticRevealTier(hand[i]),
    onClose:()=>{
     if(chestRun!==opening)return;
     closeChest();banners.setWallet(wallet);
     if(view==='shop')updatePurchase();
    },
-   onCard:async i=>{
-    const item=hand[i],scene=openRare(item);
+   onCard:async (i,source,cinematic)=>{
+    const item=hand[i],scene=cinematic&&openRare(item,{source,test});
     if(scene){opening.seenRare.add(item.drawIndex);await scene.done}
     else landPull(item,i,0);
     seenCards.add(item.drawIndex);
@@ -650,8 +652,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   const {pull,index,test,bulk}=opening;
   if(test){
    if(skip){
-    const best=(pull.forcedLevelId?pullCards(pull).find(item=>item.drawIndex===0&&revealTier(item.percent)):null)||rarestHighlight(pull);
-    if(best&&!opening.seenCards.has(best.drawIndex)&&!opening.seenRare.has(best.drawIndex))await openRare(best)?.done;
+    const best=(pull.forcedLevelId?pullCards(pull).find(item=>item.drawIndex===0&&automaticRevealTier(item)):null)||rarestHighlight(pull);
+    if(best&&!opening.seenCards.has(best.drawIndex)&&!opening.seenRare.has(best.drawIndex))await openRare(best,{test})?.done;
    }
    if(opening===chestRun)closeChest();
    return;
@@ -666,7 +668,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
     return;
    }
    if(skip&&next.lastPull?.id===pull.id){
-    const best=unopenedChestCards(pull,index).find(item=>revealTier(item.percent)&&!opening.seenCards.has(item.drawIndex));
+    const best=unopenedChestCards(pull,index).find(item=>automaticRevealTier(item)&&!opening.seenCards.has(item.drawIndex));
     if(best&&!opening.seenRare.has(best.drawIndex))await openRare(best)?.done;
    }
    if(opening!==chestRun)return;
@@ -688,17 +690,19 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   if(best.finish!=='standard'||best.tier>=9||best.difficultyPercent<=1||findRemix(best.row[0]))landPull(best,0,0);
   else sound.play('results');
  }
+ const automaticRevealTier=item=>revealTier(item.percent,wallet?.rareRevealMinimum);
  function rarestHighlight(pull){
   return pullCards(pull).reduce((best,item)=>{
-   return revealTier(item.percent)&&(!best||item.percent<best.percent)?item:best;
+   return automaticRevealTier(item)&&(!best||item.percent<best.percent)?item:best;
   },null);
  }
- function openRare(item,{skipAll}={}){
-  const tier=revealTier(item.percent);
+ function openRare(item,{source,skipAll,replay=false,test=false}={}){
+  const tier=replay?revealTier(item.percent):automaticRevealTier(item);
   if(!tier)return null;
   activeRare?.scene.close();sound.stop();
   const scene=playRareReveal({
-   tier,levelId:item.row[0],difficulty:item.row[6],cardHTML:card(item.row,{deal:true,finish:item.finish,serial:item.serial}),
+   tier,levelId:item.row[0],difficulty:item.row[6],source,
+   cardHTML:card(item.row,{deal:true,fresh:item.fresh,bonus:item.bonus,finish:item.finish,serial:item.serial,drawChance:test?null:item}),
    title:item.row[1],odds:oneIn(item.percent),oddsLabel:rarityLabel(item),sound,toggleSound,observeArt,skipAll
   });
   activeRare={scene,drawIndex:item.drawIndex};
@@ -724,7 +728,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   const shopLink=banner?'#gacha':'#gacha/packs';
   const bestRank=best.tier===10&&best.row[10]?'#'+number(best.row[10])+' ':best.tier>10?'ILL #'+best.row[10]+' ':'';
   const rare=entries.map((item,i)=>({item,i})).filter(x=>revealTier(x.item.percent));
-  prepareRareReveal(rare.map(({item})=>item),sound);
+  prepareRareReveal(rare.map(({item})=>item),sound,wallet?.rareRevealMinimum);
   const replay=rare.length?'<div class="rare-replay">'+(rare.length>1?'<select id="rareReplayPick" aria-label="Choose a rare pull to replay">'+
    rare.map(({item,i})=>'<option value="'+i+'">'+enc(item.row[1]+' · '+rarityLabel(item)+' · '+rarityValue(item))+'</option>').join('')+'</select>':'')+
    '<button class="outline" data-rare-replay>'+ico('spark')+' Replay rare reveal</button></div>':
@@ -814,9 +818,9 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
     actions.querySelector('[data-next]').focus({preventScroll:true});
    }
    if(quick){
-    const featured=hand.find(item=>revealTier(item.percent));
-    if(featured){
-     const scene=openRare(featured,{skipAll:()=>progress(true)});
+    const featured=hand.findIndex(automaticRevealTier);
+    if(featured!==-1){
+     const scene=openRare(hand[featured],{source:cards[featured],skipAll:()=>progress(true)});
      scene.done.then(()=>{if(current())finishHand()});
     }else{
      if(hand[0])landPull(hand[0],0,0);
@@ -828,7 +832,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
    function dealNext(i){
     if(!current())return;
     if(i===cards.length){finishHand();return}
-    const item=hand[i],el=cards[i],scene=openRare(item,{skipAll:()=>progress(true)});
+    const item=hand[i],el=cards[i],scene=openRare(item,{source:el,skipAll:()=>progress(true)});
     const bringIntoView=()=>{if(reveal.clientWidth<=680)el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})};
     if(scene){
      scene.done.then(()=>{
@@ -915,7 +919,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   if(b.id==='buyPack'){purchase();return}
   if('rareReplay'in b.dataset&&view==='results'&&wallet?.lastPull){
    const item=pullCards(wallet.lastPull)[Number(byId('rareReplayPick')?.value||0)];
-   if(item)openRare(item);
+   if(item)openRare(item,{replay:true});
    return;
   }
   if(b.dataset.binder){sound.play('select');collectionPage+=Number(b.dataset.binder);binder();return}

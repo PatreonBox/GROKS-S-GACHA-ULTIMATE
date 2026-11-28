@@ -1,20 +1,9 @@
 import {ico} from './icons.js';
 import {rareLevelTrack} from './rare-level-tracks.js';
 import {cardBackMark} from './pack-model.js';
+import {rareTiers,revealTier} from './rare-reveal-tiers.js';
 
-export const rareTiers=[
- {n:5000,name:'First Light',effect:'slit',ink:'#9beaff',flare:'#147eef',hit:840,ms:2050},
- {n:20000,name:'Prism Break',effect:'prism',ink:'#e9b1ff',flare:'#9151ff',hit:1060,ms:2400},
- {n:100000,name:'Starfall',effect:'starfall',ink:'#ffe5ac',flare:'#ef6faa',hit:1390,ms:2840},
- {n:500000,name:'Eclipse',effect:'eclipse',ink:'#ffa6bb',flare:'#f42682',hit:2000,ms:3600},
- {n:1000000,name:'Singularity',effect:'singularity',ink:'#a9f3ff',flare:'#6d5dff',hit:2500,ms:4350},
- {n:10000000,name:'Event Horizon',effect:'horizon',ink:'#fff1b9',flare:'#7b69ff',hit:3140,ms:5440}
-];
-export function revealTier(percent){
- if(!(percent>0&&Number.isFinite(percent)))return null;
- for(let i=rareTiers.length-1;i>=0;i--)if(percent<=100/rareTiers[i].n)return rareTiers[i];
- return null;
-}
+export {rareTiers,revealTier};
 
 const bedSource=tier=>'/reveal-media/beds/'+tier.effect+'.mp3';
 const reducedMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -23,15 +12,18 @@ function loadWorld(){
  if(!worldRequest)worldRequest=import('/rare-reveal-world.js').catch(()=>{worldRequest=null;return null});
  return worldRequest;
 }
-export function prepareRareReveal(items,sound){
- const rare=items.filter(item=>revealTier(item.percent));
+export function prepareRareReveal(items,sound,minimum){
+ const rare=items.flatMap(item=>{
+  const tier=revealTier(item.percent,minimum);
+  return tier?[{tier,levelId:item.row[0]}]:[];
+ });
  if(!rare.length)return;
  if(!reducedMotion())loadWorld();
  if(!sound.enabled)return;
  const tracks=new Set();
- for(const item of rare){
-  tracks.add(bedSource(revealTier(item.percent)));
-  const track=rareLevelTrack(item.row[0]);
+ for(const {tier,levelId} of rare){
+  tracks.add(bedSource(tier));
+  const track=rareLevelTrack(levelId);
   if(track)tracks.add(track.src);
  }
  for(const src of tracks)sound.prepareRevealTrack(src);
@@ -52,30 +44,44 @@ function turnCard(deck,tier){
  const [entry,ready,landed]=motions[tier.effect];
  const direction=Math.sign(ready[4]),turn=.17*tier.hit+135;
  return deck.animate([
-  {opacity:0,transform:pose(entry),easing:'cubic-bezier(.18,.68,.31,1)'},
-  {offset:(tier.hit-turn)/tier.ms,opacity:1,transform:pose(ready),easing:'cubic-bezier(.52,.03,.79,.52)'},
-  {offset:tier.hit/tier.ms,opacity:1,transform:pose([0,0,9,2,90*direction,0,.98]),easing:'cubic-bezier(.10,.71,.27,1)'},
-  {offset:(tier.hit+turn)/tier.ms,opacity:1,transform:pose(landed),easing:'cubic-bezier(.23,.67,.37,1)'},
-  {offset:(tier.hit+turn+475)/tier.ms,opacity:1,transform:pose([0,0,0,0,0,0,1])},
-  {opacity:1,transform:pose([0,0,0,0,0,0,1])}
+  {transform:pose(entry),easing:'cubic-bezier(.18,.68,.31,1)'},
+  {offset:(tier.hit-turn)/tier.ms,transform:pose(ready),easing:'cubic-bezier(.52,.03,.79,.52)'},
+  {offset:tier.hit/tier.ms,transform:pose([0,0,9,2,90*direction,0,.98]),easing:'cubic-bezier(.10,.71,.27,1)'},
+  {offset:(tier.hit+turn)/tier.ms,transform:pose(landed),easing:'cubic-bezier(.23,.67,.37,1)'},
+  {offset:(tier.hit+turn+475)/tier.ms,transform:'none'},
+  {transform:'none'}
  ],{duration:tier.ms,fill:'forwards'});
 }
 
-export function playRareReveal({tier,levelId,difficulty,cardHTML,title,odds,oddsLabel,sound,toggleSound,observeArt,skipAll}){
+function matchOpeningCard(dialog,source){
+ if(!source?.offsetWidth||!source.offsetHeight)return;
+ dialog.style.setProperty('--source-card-width',source.offsetWidth+'px');
+ dialog.style.setProperty('--source-card-ratio',String(source.offsetWidth/source.offsetHeight));
+ dialog.style.setProperty('--source-card-corner',getComputedStyle(source).getPropertyValue('--card-corner')||getComputedStyle(source).borderRadius);
+ const back=source.querySelector('.gd-card-back');
+ if(!back)return;
+ const style=getComputedStyle(back);
+ for(const property of ['metal','halo','inner-radius']){
+  const value=style.getPropertyValue('--back-'+property);
+  if(value)dialog.style.setProperty('--source-back-'+property,value);
+ }
+}
+
+export function playRareReveal({tier,levelId,difficulty,cardHTML,source,title,odds,oddsLabel,sound,toggleSound,observeArt,skipAll}){
  const effect=rareTiers.indexOf(tier),reduce=reducedMotion()||!Element.prototype.animate;
  const track=rareLevelTrack(levelId),src=track?.src,bed=bedSource(tier);
  const dialog=document.createElement('dialog'),prior=document.activeElement;
  dialog.className='rare-reveal';dialog.dataset.effect=tier.effect;
  dialog.setAttribute('aria-label','Rare card reveal');
  dialog.style.setProperty('--rarity',tier.ink);dialog.style.setProperty('--flare',tier.flare);
- dialog.style.setProperty('--charge',tier.hit+'ms');
+ matchOpeningCard(dialog,source);
  dialog.innerHTML='<div class="rare-sky" aria-hidden="true"><img alt="" class="rare-hero"></div>'+
   '<div class="rare-environment" aria-hidden="true"></div><canvas aria-hidden="true"></canvas>'+
   '<div class="rare-impact" aria-hidden="true"></div>'+
   '<div class="rare-head" aria-hidden="true"><span>'+tier.name+'</span><strong>'+odds+'</strong><small>'+oddsLabel+' · per card</small></div>'+
-  '<div class="rare-stage" aria-hidden="true" inert><div class="rare-float"><div class="rare-deck"><i class="rare-edge"></i>'+
+  '<div class="rare-stage" aria-hidden="true" inert><div class="rare-float"><div class="rare-deck">'+
   '<div class="rare-back gd-card-back">'+cardBackMark(difficulty)+'</div>'+
-  '<div class="rare-front">'+cardHTML+'</div></div></div></div>'+
+  '<div class="rare-front"'+(source?.classList.contains('chest-card')?' data-chest-layout':'')+'>'+cardHTML+'</div></div></div></div>'+
   '<p class="rare-live" role="status" aria-live="polite"></p><div class="rare-footer">'+
   (track?'<div class="rare-track-credit"><a class="rare-track" target="_blank" rel="noopener noreferrer">'+
    '<span></span>'+ico('external')+'</a><a class="rare-track-license" target="_blank" rel="noopener noreferrer">License</a></div>':'')+

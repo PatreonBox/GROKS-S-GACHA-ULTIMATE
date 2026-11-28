@@ -70,6 +70,11 @@
 .profile-privacy+.profile-privacy{margin-top:7px}
 .profile-privacy small{display:block;color:#becfe5}
 .profile-privacy input{width:21px;height:21px;flex:none;accent-color:#92e5d6}
+.rare-reveal-setting{display:grid;gap:8px;margin-top:12px}
+.rare-reveal-setting select{
+ width:100%;min-height:42px;padding:7px 10px;color:#ecf4ff;
+ border:1px solid #59718f;border-radius:7px;background:#111c2b;
+}
 .player-dialog .player-menu-heading .player-avatar{width:56px;height:56px}
 .player-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:17px 0 0}
 .player-stats>div{padding:10px;border:1px solid #394d67;border-radius:9px;background:#111927}

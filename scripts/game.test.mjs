@@ -38,6 +38,7 @@ import {kingdomVisitors} from '../server/kingdom-visitors.mjs';
 import {kingdomNavigation} from '../client/kingdom-navigation.js';
 import {createKingdomWalker,kingdomCubeAnimations} from '../client/kingdom-walkers.js';
 import {routeKingdomTrail} from '../client/kingdom-trail.js';
+import {rareTiers,revealTier} from '../web/rare-reveal-tiers.js';
 
 const origin='https://game.example';
 const pool=createCardPool(path=>JSON.parse(fs.readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
@@ -1916,6 +1917,26 @@ test('Banner previews cover ten difficulties and use eligible levels with art',a
    assert.ok(['.webp','.avif'].some(extension=>fs.existsSync(new URL(art.href+extension))));
   }
  }
+});
+
+test('Rare cutscene preferences save per player and filter by the minimum reveal tier',async()=>{
+ const f=fixture(),player=await f.open(),other=await f.open();
+ const legacy=await f.wallet(player);
+ for(const tier of rareTiers){
+  assert.equal(revealTier(100/tier.n,legacy.rareRevealMinimum),tier);
+  assert.equal(revealTier(100/tier.n,tier.effect),tier);
+  assert.equal(revealTier(101/tier.n,tier.effect),null);
+  assert.equal(revealTier(100/tier.n,'off'),null);
+ }
+ assert.equal((await f.command(player,'settings.rare-reveal',{minimum:'eclipse'})).status,200);
+ assert.equal((await f.wallet(player)).rareRevealMinimum,'eclipse');
+ assert.equal(revealTier(100/432_755,'eclipse'),null);
+ assert.equal(revealTier(100/510_000,'eclipse').effect,'eclipse');
+ assert.equal((await f.command(player,'settings.rare-reveal',{minimum:'off'})).status,200);
+ assert.equal((await f.wallet(player)).rareRevealMinimum,'off');
+ assert.equal((await f.command(player,'settings.rare-reveal',{minimum:'ancient'})).status,400);
+ assert.equal((await f.wallet(player)).rareRevealMinimum,'off');
+ assert.equal((await f.wallet(other)).rareRevealMinimum,undefined);
 });
 
 test('Owner-only chest test can select all ten Impossible cards and leaves the save untouched',async()=>{

@@ -172,10 +172,14 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
 
 if (typeof document !== 'undefined') {
  setupPlayerMenu({loadStats:()=>gameRead('profile'),sendReport:body=>submit('/api/game/report',body),
-  loadPrivacy:async()=>{
-   const {profileHidden,shareKingdom,shareBestCard}=await gameRead('wallet');
-   return {hidden:Boolean(profileHidden),shareKingdom:shareKingdom!==false,shareBestCard:shareBestCard!==false};
-  },savePrivacy:settings=>gameCommand('profile.privacy',settings)});
+  loadSettings:async()=>{
+   const {profileHidden,shareKingdom,shareBestCard,rareRevealMinimum}=await gameRead('wallet');
+   return {hidden:Boolean(profileHidden),shareKingdom:shareKingdom!==false,shareBestCard:shareBestCard!==false,rareRevealMinimum};
+  },savePrivacy:settings=>gameCommand('profile.privacy',settings),
+  saveRareReveal:async minimum=>{
+   const {wallet}=await gameCommand('settings.rare-reveal',{minimum},'settings');
+   document.dispatchEvent(new CustomEvent('gdlb-settings-wallet',{detail:wallet}));
+  }});
  setupAdminTools({canOpen:()=>canAdmin,loadWallet:()=>gameRead('wallet'),searchPlayers:searchAdminPlayers,moderate:runPlayerAdmin,run:async(action,args)=>{
   const data=await gameCommand(action,args);
   if(action==='admin.adjust'||action==='admin.kingdom.finish')document.dispatchEvent(new CustomEvent('gdlb-admin-wallet',{detail:data.wallet}));

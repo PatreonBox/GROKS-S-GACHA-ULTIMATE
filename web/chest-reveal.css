@@ -153,9 +153,9 @@ dialog.chest-reveal{
  .chest-card-back{min-height:clamp(94px,15vh,138px)}
  .chest-reveal[data-bulk] .chest-card-back{min-height:clamp(90px,13dvh,126px)}
  .chest-card-back{--back-inner-radius:5px}
- .chest-card-front .level-card{padding:3px 3px 6px}
- .chest-card-front .level-card>strong{font-size:.75rem;line-height:1.06}
- .chest-card-front .level-card>small,.chest-card-front .card-type{font-size:.61rem}
+ :is(.chest-card-front,.rare-front[data-chest-layout]) .level-card{padding:3px 3px 6px}
+ :is(.chest-card-front,.rare-front[data-chest-layout]) .level-card>strong{font-size:.75rem;line-height:1.06}
+ :is(.chest-card-front,.rare-front[data-chest-layout]) :is(.level-card>small,.card-type){font-size:.61rem}
  .chest-count{font-size:.72rem}
 }
 @media(max-width:365px){.chest-buttons :is(.outline,.primary){padding-inline:7px;font-size:.78rem}.chest-buttons{gap:4px}}

@@ -58,7 +58,10 @@ dialog.rare-reveal[open]{
 .rare-head small{color:#e5deee;font-size:.83rem;font-weight:650;text-shadow:0 1px 6px #000}
 .rare-head strong,.rare-head small{opacity:0;transform:translateY(7px);transition:opacity .32s ease,transform .45s cubic-bezier(.16,1,.3,1)}
 .rare-reveal[data-revealed] .rare-head :is(strong,small){opacity:1;transform:none}
-.rare-stage{position:relative;width:100%;min-height:0;min-width:0;display:grid;place-items:center;perspective:1000px;pointer-events:none}
+.rare-stage{
+ position:relative;width:100%;height:100%;min-height:0;min-width:0;display:grid;place-items:center;
+ container-type:size;perspective:1000px;pointer-events:none;
+}
 .rare-float{transform-style:preserve-3d}
 .rare-reveal[data-hover] .rare-float{animation:rare-card-hover 5.8s ease-in-out infinite}
 @keyframes rare-card-hover{
@@ -67,31 +70,35 @@ dialog.rare-reveal[open]{
  50%{transform:translateY(-9px) rotateY(0) rotateZ(0)}
  75%{transform:translateY(-5px) rotateY(-2.5deg) rotateZ(-.5deg)}
 }
-.rare-deck{display:grid;position:relative;width:clamp(130px,min(82vw,50.6dvh),358px);aspect-ratio:1.04;grid-template:minmax(0,1fr)/minmax(0,1fr);transform-style:preserve-3d;transform:rotateY(180deg)}
-.rare-back,.rare-front{grid-area:1/1;display:grid;place-items:stretch;-webkit-backface-visibility:hidden;backface-visibility:hidden;border-radius:13px}
-.rare-edge{position:absolute;inset:1px;border-radius:12px;transform-style:preserve-3d;background:var(--rarity)}
-.rare-edge::before,.rare-edge::after{content:"";position:absolute;top:7px;bottom:7px;width:8px;transform:rotateY(90deg);
- background:linear-gradient(90deg,var(--flare),var(--rarity) 42%,#faf5ff 63%,var(--flare))}
-.rare-edge::before{left:-4px}.rare-edge::after{right:-4px}
-.rare-front{position:relative;transform:translateZ(4px);overflow:hidden;background:#11111d;
+.rare-deck{
+ --card-ratio:var(--source-card-ratio,.78);
+ position:relative;width:min(var(--source-card-width,300px),calc(100cqw - 20px),calc((100cqh - 20px) * var(--card-ratio)));
+ aspect-ratio:var(--card-ratio);border-radius:var(--source-card-corner,13px);
+ transform-style:preserve-3d;transform:rotateY(180deg);
+}
+.rare-back,.rare-front{
+ position:absolute;inset:0;display:grid;border-radius:inherit;
+ -webkit-backface-visibility:hidden;backface-visibility:hidden;
+}
+.rare-front{transform:translateZ(.75px);overflow:hidden;visibility:hidden;
  box-shadow:0 19px 43px #010108bb,0 0 38px color-mix(in srgb,var(--flare) 33%,transparent)}
-.rare-deck .level-card{width:100%;height:100%;min-height:0;padding:7px 7px 9px;border-width:2px;border-radius:inherit}
-.rare-deck .level-card:not(.holo-card,.antimatter-card){border-color:color-mix(in srgb,var(--rarity) 78%,#332b56)}
-.rare-deck .card-art{flex:1 1 61%;min-height:0;aspect-ratio:auto}
-.rare-deck .level-card>strong,.rare-deck .level-card>small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rare-deck .level-card>strong{font-size:clamp(17px,3vw,29px);line-height:1.08}
-.rare-deck .level-card>small{line-height:1.22}
+.rare-reveal[data-revealed] .rare-front{visibility:visible}
+.rare-deck .level-card{width:100%;height:100%;min-height:0;border-radius:inherit;transform:none}
+.rare-deck .card-art{min-height:0}
 .rare-front::after{content:"";position:absolute;inset:0;pointer-events:none;
  background:linear-gradient(113deg,transparent 36%,#fff8 48%,#fff2 52%,transparent 62%);
  transform:translateX(-120%);opacity:.68}
 .rare-reveal[data-revealed]:not([data-still]) .rare-front::after{animation:rare-sweep 1.1s cubic-bezier(.2,.8,.25,1) .16s forwards}
 @keyframes rare-sweep{to{transform:translateX(130%);opacity:0}}
-.rare-back{--back-metal:var(--rarity);--back-halo:color-mix(in srgb,var(--flare) 52%,#1e294a);
- position:absolute;inset:0;transform:translateZ(-4px) rotateY(180deg);place-items:center;border:1px solid var(--back-metal);
- box-shadow:inset 0 0 25px #a499f737,0 16px 31px #010108a8,0 0 32px color-mix(in srgb,var(--flare) 47%,transparent)}
-.rare-back .gd-card-back-mark{animation:rare-charge var(--charge) ease-in both}
-@keyframes rare-charge{from{opacity:.55;scale:.84}to{opacity:1;scale:1.08}}
-.rare-reveal:not([data-revealed]) .rare-front .level-card{visibility:hidden}
+.rare-deck .rare-back{
+ --back-metal:var(--source-back-metal,var(--rarity));
+ --back-halo:var(--source-back-halo,color-mix(in srgb,var(--flare) 42%,#1e294a));
+ --back-inner-radius:var(--source-back-inner-radius,8px);
+ transform:rotateY(180deg) translateZ(.75px);place-items:center;border:1px solid var(--back-metal);
+ box-shadow:0 15px 26px #05091296,inset 0 0 31px #111425;
+}
+.rare-reveal:not([data-still]) .rare-back{animation:rare-back-in .25s ease-out both}
+@keyframes rare-back-in{from{opacity:0}to{opacity:1}}
 .rare-footer{display:grid;justify-items:center;gap:10px;z-index:2;text-align:center}
 .rare-track-credit{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px 8px;visibility:hidden}
 .rare-reveal[data-revealed] .rare-track-credit{visibility:visible}
@@ -159,17 +166,14 @@ dialog.rare-reveal[open]{
 @media(max-height:540px){
  dialog.rare-reveal[open]{gap:8px;padding-block:max(9px,env(safe-area-inset-top)) max(9px,env(safe-area-inset-bottom))}
  .rare-head{gap:4px}.rare-head span{padding-block:3px}.rare-head strong{font-size:clamp(25px,8dvh,47px)}.rare-head small{font-size:.72rem}
- .rare-deck{width:clamp(119px,min(74vw,43dvh),242px)}.rare-deck .level-card>strong{font-size:clamp(14px,4dvh,24px)}
- .rare-deck .level-card{padding:5px 5px 7px}
  .rare-footer{gap:7px}.rare-controls button{min-height:39px}
 }
 @media(max-height:540px) and (min-width:600px){
  dialog.rare-reveal[open]{grid-template-columns:minmax(0,1fr) minmax(0,1.24fr) minmax(0,1fr);grid-template-rows:1fr;align-items:center}
  .rare-head strong{font-size:clamp(25px,min(5vw,8dvh),47px);white-space:normal}
- .rare-deck{width:min(100%,58dvh,260px)}
  .rare-footer{min-width:0}
 }
 @media(prefers-reduced-motion:reduce){
- .vault-shell,.rare-back .gd-card-back-mark,.rare-impact,.rare-reveal[data-hover] .rare-float,.rare-reveal[data-revealed] .rare-front::after{animation:none}
+ .vault-shell,.rare-reveal .rare-back,.rare-impact,.rare-reveal[data-hover] .rare-float,.rare-reveal[data-revealed] .rare-front::after{animation:none}
  .rare-hero,.rare-head strong,.rare-head small,.rare-environment,.rare-reveal>canvas{transition:none}
 }

@@ -1,3 +1,5 @@
+import {defaultRevealMinimum,rareTiers,validRevealMinimum} from './rare-reveal-tiers.js';
+
 const numberFormat = new Intl.NumberFormat(undefined, {maximumFractionDigits: 1});
 const receiptDate = new Intl.DateTimeFormat(undefined, {dateStyle:'medium',timeStyle:'short'});
 
@@ -18,7 +20,7 @@ export function renderPlayerMenu(signedIn, profile) {
  document.getElementById('playerProfileRefresh').hidden=Boolean(handle);
 }
 
-export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) {
+export function setupPlayerMenu({loadStats,sendReport,loadSettings,savePrivacy,saveRareReveal}) {
  const menu=document.getElementById('playerMenu');
  if(!menu)return;
  const summary=menu.querySelector('summary');
@@ -28,7 +30,10 @@ export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) 
  const globalRank=document.getElementById('playerGlobalRank');
  const statsStatus=document.getElementById('playerStatsStatus');
  const settings=document.getElementById('playerSettings'),privacy=settings.querySelectorAll('[data-profile-privacy]');
- const privacyStatus=document.getElementById('profilePrivacyStatus');
+ const rareReveal=document.getElementById('rareRevealMinimum'),settingsStatus=document.getElementById('playerSettingsStatus');
+ const settingsControls=[...privacy,rareReveal];
+ rareReveal.replaceChildren(new Option('Off','off'),...rareTiers.map(tier=>
+  new Option(tier.name+'+ · 1 in '+tier.n.toLocaleString('en-US'),tier.effect)));
  const report=document.getElementById('bugReport');
  const form=document.getElementById('bugReportForm');
  const receiptBox=document.getElementById('bugReportReceipt');
@@ -38,6 +43,7 @@ export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) 
  const send=document.getElementById('sendBugReport');
  const fields=form.querySelector('fieldset');
  let reference,submitted=false,sending=false,statsRequest=0,settingsRequest=0;
+ let savedRevealMinimum=defaultRevealMinimum,savingSettings;
 
  for(const img of document.querySelectorAll('[data-player-avatar]')){
   img.addEventListener('load',()=>{img.hidden=false;});
@@ -85,29 +91,43 @@ export function setupPlayerMenu({loadStats,sendReport,loadPrivacy,savePrivacy}) 
 
  document.getElementById('openPlayerSettings').addEventListener('click',async()=>{
   menu.open=false;
-  for(const input of privacy)input.disabled=true;
-  privacyStatus.textContent='Loading settings…';
+  for(const control of settingsControls)control.disabled=true;
+  settingsStatus.textContent='Loading settings…';
   settings.showModal();
   const request=++settingsRequest;
   try{
-   const values=await loadPrivacy();
+   await savingSettings?.catch(()=>{});
+   const values=await loadSettings();
    if(request!==settingsRequest)return;
-   for(const input of privacy){input.checked=values[input.dataset.profilePrivacy];input.disabled=false}
-   privacyStatus.textContent='';
-  }catch(error){if(request===settingsRequest)privacyStatus.textContent=error.message}
+   for(const input of privacy)input.checked=values[input.dataset.profilePrivacy];
+   savedRevealMinimum=validRevealMinimum(values.rareRevealMinimum)?values.rareRevealMinimum:defaultRevealMinimum;
+   rareReveal.value=savedRevealMinimum;
+   for(const control of settingsControls)control.disabled=false;
+   settingsStatus.textContent='';
+  }catch(error){if(request===settingsRequest)settingsStatus.textContent=error.message}
  });
  settings.addEventListener('change',async event=>{
   const input=event.target,key=input.dataset.profilePrivacy;
-  if(!key)return;
-  const checked=input.checked,request=++settingsRequest;
-  for(const control of privacy)control.disabled=true;
-  privacyStatus.textContent='Saving…';
+  if(!key&&input!==rareReveal)return;
+  const value=key?input.checked:rareReveal.value,request=++settingsRequest;
+  for(const control of settingsControls)control.disabled=true;
+  settingsStatus.textContent='Saving…';
+  const pending=key?savePrivacy({[key]:value}):saveRareReveal(value);
+  savingSettings=pending;
   try{
-   await savePrivacy({[key]:checked});
-   if(request===settingsRequest)privacyStatus.textContent='Visibility saved.';
+   await pending;
+   if(!key)savedRevealMinimum=value;
+   if(request===settingsRequest)settingsStatus.textContent=key?'Visibility saved.':'Cutscene preference saved.';
   }catch(error){
-   if(request===settingsRequest){input.checked=!checked;privacyStatus.textContent=error.message}
-  }finally{if(request===settingsRequest)for(const control of privacy)control.disabled=false}
+   if(request===settingsRequest){
+    if(key)input.checked=!value;
+    else rareReveal.value=savedRevealMinimum;
+    settingsStatus.textContent=error.message;
+   }
+  }finally{
+   if(savingSettings===pending)savingSettings=null;
+   if(request===settingsRequest)for(const control of settingsControls)control.disabled=false;
+  }
  });
 
  document.getElementById('openBugReport').addEventListener('click',()=>{

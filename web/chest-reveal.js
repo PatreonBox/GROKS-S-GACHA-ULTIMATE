@@ -68,7 +68,7 @@ function cardMarkup({html,difficulty,rarity},i,up){
    '<div class="chest-card-front"'+(up?'':' inert aria-hidden="true"')+'>'+html+'</div></div></div>');
 }
 
-export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpenAll,onFlipAll,sound,toggleSound,observeArt,step=1,total=1,bulkCount=1,initialFlipped=[]}){
+export function openChestReveal({tier,cards,shouldPlayCutscene,onCard,advance,onClose,onSkip,onOpenAll,onFlipAll,sound,toggleSound,observeArt,step=1,total=1,bulkCount=1,initialFlipped=[]}){
  const config=trims[tier]||trims.standard,rarity=highestRarity(cards),timePlan=chestTimeline(rarity),still=reducedMotion();
  const bulk=bulkCount>1,finalHand=bulk||step>=total;
  const dialog=document.createElement('dialog'),prior=document.activeElement;
@@ -302,16 +302,16 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpen
  function flipOne(button){
   const i=Number(button.dataset.chestCard);
   if(closed||dialog.dataset.phase!=='cards'||flipping||submitting||flipped.has(i))return;
-  const card=button.closest('.chest-card'),item=cards[i];
+  const card=button.closest('.chest-card'),item=cards[i],cinematic=Boolean(shouldPlayCutscene?.(i));
   flipping=true;status();playCue('sweep',.64);
-  if(item.cinematic&&!still)card.dataset.charging='';
-  else if(!item.cinematic)card.dataset.flipped='';
+  if(cinematic&&!still)card.dataset.charging='';
+  else if(!cinematic)card.dataset.flipped='';
   schedule(async()=>{
    if(closed)return;
-   try{await onCard?.(i)}
+   try{await onCard?.(i,card,cinematic)}
    finally{
     if(!closed){
-     if(item.cinematic)card.dataset.cinematicSeen='';
+     if(cinematic)card.dataset.cinematicSeen='';
      delete card.dataset.charging;
      flipped.add(i);revealFront(card);flipping=false;status();
      live.textContent=item.title+(item.rarity?.label?' · '+item.rarity.label:'');
@@ -320,7 +320,7 @@ export function openChestReveal({tier,cards,onCard,advance,onClose,onSkip,onOpen
      }
     }
    }
-  },still?0:item.cinematic?430:285);
+  },still?0:cinematic?430:285);
  }
  document.body.append(dialog);dialog.showModal();closeButton.focus({preventScroll:true});
  setMute();sound.unlock?.();sound.prepareChestEffects?.(rarity);

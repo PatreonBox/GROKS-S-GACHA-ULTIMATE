@@ -21,6 +21,7 @@ import {achievementBoost} from './achievement-boosts.js';
 import {bannerPrice,demonBanners,maxBannerDraws,prepareDemonPull,rollDemonBanner} from './demon-banner.js';
 import {buyDemonKeys,campaignKeyReward,claimDemonKeys,initDemonKeys,rewardDemonKeys} from './demon-keys.js';
 import {packAvailability,packStockLimit,spendPackStock} from './pack-stock.js';
+import {validRevealMinimum} from './rare-reveal-tiers.js';
 
 export function newWallet() {
  return {coins:startingCoins,coinEconomyVersion,gems:10,luck:0,bonus:0,pending:null,playerXp:0,cubeCatalogVersion,equippedCube:starterCube.id};
@@ -226,6 +227,10 @@ const rules={
   const entries=Object.entries(args);
   requireRule(entries.length&&entries.every(([key,value])=>Object.hasOwn(setting,key)&&typeof value==='boolean'),'Choose a profile visibility setting.');
   for(const [key,value] of entries)w[setting[key]]=value;
+ }},
+ 'settings.rare-reveal':{run:({w,args})=>{
+  requireRule(validRevealMinimum(args.minimum),'Choose a rare cutscene tier or Off.');
+  w.rareRevealMinimum=args.minimum;
  }},
  'trade.settings':{run:({w,args})=>{
   requireRule(typeof args.enabled==='boolean'&&validTradeMinimum(args.minimum),'Choose valid Trade settings.');
