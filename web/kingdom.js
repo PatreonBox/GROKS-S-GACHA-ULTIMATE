@@ -380,12 +380,12 @@ export function createKingdom(root,sound,applyWallet,rewards){
   finally{finishing=false}
  }
  function paintDaylight(){
-  const {night,remaining}=kingdomDaylight(clock());
+  const {night,time}=kingdomDaylight(clock());
   ui.daylight.dataset.night=String(night);
   ambience?.setNight(night);
   ui.daylightName.textContent=night?'Night':'Day';
-  ui.daylightTime.textContent=duration(Math.ceil(remaining/1000));
-  ui.daylightTime.setAttribute('aria-label','Until '+(night?'daybreak':'nightfall')+' '+ui.daylightTime.textContent);
+  ui.daylightTime.textContent=time;
+  ui.daylightTime.dateTime=time;
  }
  async function refreshVisitors(){
   refreshingVisitors=true;
@@ -745,7 +745,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<p class="kingdom-loading" role="status">Loading your Kingdom…</p>'+
    '<div class="kingdom-plot-stats"><span>'+ico('tower')+'<b data-plot-buildings>1 building</b></span>'+
    '<button type="button" data-visitor-index aria-label="Visitor index" aria-haspopup="dialog" title="Visit the visitor index">'+ico('box')+'<b data-residents>1 resident</b></button>'+
-   '<span class="kingdom-daylight"><i aria-hidden="true"></i><b data-daylight-name>Day</b> <time>6:00</time></span></div>'+
+   '<span class="kingdom-daylight"><i aria-hidden="true"></i><b data-daylight-name></b> <time></time></span></div>'+
    '<div class="kingdom-arrival" role="status" hidden><img alt=""><strong></strong></div>'+
    '<div class="tower-construction-meter" data-tower-progress hidden><div><strong>Tower Level 2</strong><b data-tower-countdown>1:00</b></div>'+
    '<progress aria-label="Tower construction progress" max="60" value="0"></progress></div>'+
