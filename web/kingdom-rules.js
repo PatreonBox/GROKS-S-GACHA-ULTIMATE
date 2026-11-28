@@ -21,11 +21,13 @@ export const forgeUpgrade={coins:coinPrice(100_000),mana:300,buildMs:30_000,towe
 export const towerUpgradeMana=500;
 const forgeTiers=[{rate:1,capacity:300},{rate:3,capacity:1200}];
 export const manaIcon='/assets/kingdom/mana-orbs.webp';
+export const campfireKind='campfire',campfirePrice=2500;
 export const buildingSpecs={
  house:{name:'GD House',size:houseSize,height:houseHeight,price:housePrice},
  forge:{name:'The Mana Forge',size:{width:3.20,depth:3.20},height:3.65,price:forgePrice},
  'gem-mine':{name:'Gem Mine',size:{width:4.15,depth:3.60},height:3.55,price:gemMine.coins},
- [spikeKind]:{name:'Spike Shooter',size:{width:2.55,depth:2.65},height:1.86,price:spikePrice}
+ [spikeKind]:{name:'Spike Shooter',size:{width:2.55,depth:2.65},height:1.86,price:spikePrice},
+ [campfireKind]:{name:'Campfire',size:{width:1.65,depth:1.65},height:1.07,price:campfirePrice}
 };
 export const plotBounds={left:-14,right:14,back:-13,front:14};
 export const lastLandLevel=5;
@@ -39,7 +41,31 @@ export const trailCorners=[
  [-3.3,2.65],[-.8,4.2],[3.1,4.3],[6.5,2.1],[5.7,-2.7],
  [2.7,-4.3],[-3.4,-4.4],[-6.4,-1.2],[-6.1,1.3]
 ];
-const trailClearance=.86;
+export const maxTrailPoints=96;
+export function kingdomTrail(wallet){
+ const saved=wallet?.kingdom?.trail;
+ return {points:saved?.points??trailCorners,closed:saved?.closed??true,follow:saved?.follow??true,custom:Boolean(saved?.points)};
+}
+export function updateKingdomTrail(wallet,{points,follow}){
+ if(follow!==undefined&&typeof follow!=='boolean')throw Error('Choose whether residents follow the trail.');
+ const kingdom=wallet.kingdom??={},trail={...kingdom.trail};
+ if(points===null){delete trail.points;delete trail.closed;}
+ else if(points!==undefined){
+  const bounds=landPlan(wallet).bounds;
+  if(!Array.isArray(points)||points.length<2||points.length>maxTrailPoints||
+   points.some(point=>!Array.isArray(point)||point.length!==2||!point.every(Number.isFinite)||
+    !treeWithin({x:point[0],z:point[1]},bounds)))throw Error('Draw a trail on your plot.');
+  const rounded=points.map(point=>point.map(value=>Math.round(value*100)/100));
+  trail.points=rounded.filter(([x,z],i)=>!i||Math.hypot(x-rounded[i-1][0],z-rounded[i-1][1])>=.1);
+  if(trail.points.length<2)throw Error('Draw a longer trail.');
+  const [firstX,firstZ]=trail.points[0],[lastX,lastZ]=trail.points.at(-1);
+  trail.closed=trail.points.length>3&&Math.hypot(firstX-lastX,firstZ-lastZ)<1;
+  if(trail.closed&&Math.hypot(firstX-lastX,firstZ-lastZ)<.3)trail.points.pop();
+ }
+ if(follow!==undefined)trail.follow=follow;
+ kingdom.trail=trail;
+ return {trail:kingdomTrail(wallet)};
+}
 export const visitorSlots=[
  ['Common',.3],['Common',.6],['Uncommon',.9],['Uncommon',1.2],['Uncommon',1.5],
  ['Rare',1.8],['Rare',2.4],['Epic',3],['Epic',3.6],['Legendary',4.5]
@@ -54,10 +80,12 @@ export const towerExperience=level=>towerTiers[level-1]?.xp||0;
 export const kingdomHouses=wallet=>wallet?.kingdom?.houses||[];
 export const kingdomForges=wallet=>wallet?.kingdom?.forges||[];
 export const kingdomDefences=wallet=>wallet?.kingdom?.defences||[];
+const kingdomCampfires=wallet=>wallet?.kingdom?.campfires||[];
 const kingdomGemMines=wallet=>wallet?.kingdom?.gemMines||[];
 export const kingdomStorage=wallet=>wallet?.kingdom?.storage||[];
-const phaseDuration=360_000;
+export const kingdomPhaseDuration=360_000;
 export function kingdomDaylight(now){
+ const phaseDuration=kingdomPhaseDuration;
  const cycle=now%(2*phaseDuration),night=cycle>=phaseDuration;
  const elapsed=cycle%phaseDuration;
  const edge=Math.min(1,elapsed/25_000,(phaseDuration-elapsed)/25_000);
@@ -116,7 +144,8 @@ const towerInvestment=(kingdom,level)=>kingdom?.towerInvestment??towerTiers.slic
 const landInvestment=(kingdom,level)=>kingdom?.landInvestment??Array.from({length:level},(_,i)=>previousCoinPrice(landCost(i))).reduce((sum,price)=>sum+price,0);
 export function kingdomStats(wallet,now=Date.now()){
  const houses=kingdomHouses(wallet),forges=kingdomForges(wallet),gemMines=kingdomGemMines(wallet),defences=kingdomDefences(wallet),storage=kingdomStorage(wallet);
- const buildings=[...houses,...forges,...gemMines,...defences],removedTrees=wallet?.kingdom?.removedTrees||[];
+ const campfires=kingdomCampfires(wallet);
+ const buildings=[...houses,...forges,...gemMines,...defences,...campfires],removedTrees=wallet?.kingdom?.removedTrees||[];
  const tower=towerPlan(wallet,now),land=landPlan(wallet);
  const houseLots=houses.length+storage.filter(item=>(item.kind||'house')==='house').length;
  const defenceLots=defences.length+storage.filter(item=>item.kind===spikeKind).length;
@@ -129,7 +158,7 @@ export function kingdomStats(wallet,now=Date.now()){
    (kind==='house'&&(building.level===3||building.upgrade?.level===3)?previousCoinPrice(houseUpgrades[1].coins):0));
   return sum+base+upgrade;
  },0)+towerInvestment(wallet?.kingdom,tower.construction?.level??tower.level)+landInvestment(wallet?.kingdom,land.level);
- return {houses,forges,gemMines,defences,storage,buildings,tower,land,stars,value,houseLots,defenceLots,removedTrees,
+ return {houses,forges,gemMines,defences,campfires,storage,buildings,tower,land,stars,value,houseLots,defenceLots,removedTrees,trail:kingdomTrail(wallet),
   trees:plotTrees(buildings,removedTrees,land.bounds),mana:wallet?.kingdom?.mana||0,houseCost:housePrice*2**houseLots};
 }
 
@@ -258,17 +287,6 @@ function projectsInto(a,b){
 export const towerFootprint={left:towerPlot.x-1.67,right:towerPlot.x+1.67,back:-1.67,front:1.92};
 const towerArea={x:towerPlot.x,z:(towerFootprint.back+towerFootprint.front)/2,w:1.67,d:(towerFootprint.front-towerFootprint.back)/2,c:1,s:0};
 const overlaps=(a,b)=>projectsInto(a,b)&&projectsInto(b,a);
-// Retain the trail for resident and visitor traffic.
-function crossesTrail(box){
- for(let i=0;i<trailCorners.length;i++){
-  const [x,z]=trailCorners[i],[nextX,nextZ]=trailCorners[(i+1)%trailCorners.length];
-  for(let j=0;j<=8;j++){
-   const a=x+(nextX-x)*j/8,b=z+(nextZ-z)*j/8;
-   if(insideFootprint({x:a,z:b},box))return true;
-  }
- }
- return false;
-}
 export function plotTrees(buildings,removed=[],bounds=null){
  const gone=new Set(removed),footprints=buildings.map(building=>buildingFootprint(building,.14));
  return kingdomForest.filter(tree=>!gone.has(tree.id)&&(!bounds||treeWithin(tree,bounds))&&!footprints.some(box=>insideFootprint(tree,box)));
@@ -277,12 +295,11 @@ export function plotTrees(buildings,removed=[],bounds=null){
 export function buildingPlacementError(buildings,proposal,bounds=plotBounds,trees=[]){
  const {x,z,rotation}=proposal;
  if(!Number.isFinite(x)||!Number.isFinite(z)||typeof rotation!=='number'||!Number.isInteger(rotation*2)||rotation<0||rotation>=4)return 'Choose a position on your plot.';
- const box=buildingFootprint(proposal,.06);
+ const box=buildingFootprint(proposal,.02);
  if(box.left<bounds.left||box.right>bounds.right||box.back<bounds.back||box.front>bounds.front)return 'Keep the building inside your plot.';
- const space=buildingFootprint(proposal,.22);
- if(overlaps(space,towerArea)||buildings.some(building=>overlaps(space,buildingFootprint(building,.09))))return 'There’s already a building here.';
- if(trees.some(tree=>insideFootprint(tree,buildingFootprint(proposal,tree.radius+.10))))return 'Clear the tree before placing here.';
- if(crossesTrail(buildingFootprint(proposal,trailClearance)))return 'Leave the walking trail clear.';
+ const space=buildingFootprint(proposal,.06);
+ if(overlaps(space,towerArea)||buildings.some(building=>overlaps(space,buildingFootprint(building,.025))))return 'There’s already a building here.';
+ if(trees.some(tree=>insideFootprint(tree,buildingFootprint(proposal,tree.radius+.03))))return 'Clear the tree before placing here.';
  return '';
 }
 export const housePlacementError=(houses,proposal)=>buildingPlacementError(houses,proposal);
@@ -311,6 +328,11 @@ export function buildForge(wallet,args,now){
  forge.collectedAt=now;
  wallet.kingdom={...wallet.kingdom,forges:[...plot.forges,forge],mana:plot.mana+forgeWelcomeMana};
  return forge;
+}
+export function buildCampfire(wallet,args,now){
+ const plot=kingdomStats(wallet,now),building=buildAt(wallet,plot,args,campfireKind,campfirePrice);
+ wallet.kingdom={...wallet.kingdom,campfires:[...plot.campfires,building]};
+ return building;
 }
 export function buildSpikeShooter(wallet,args,now){
  const plot=kingdomStats(wallet,now);
@@ -404,6 +426,7 @@ function buildingRecords(kingdom,kind){
  if(kind==='forge')return kingdom.forges??=[];
  if(kind==='gem-mine')return kingdom.gemMines??=[];
  if(kind===spikeKind)return kingdom.defences??=[];
+ if(kind===campfireKind)return kingdom.campfires??=[];
  return kingdom.houses??=[];
 }
 export function storeKingdomBuilding(wallet,id,now){

@@ -39,7 +39,7 @@ dialog.chest-reveal{
 .chest-close:hover,.chest-buttons .outline:hover{border-color:var(--chest-accent);background:#242d42}
 .chest-close,.chest-buttons [data-chest-mute]{width:44px;padding:0}
 .chest-close svg,.chest-buttons svg{width:18px;height:18px}
-.chest-content{grid-row:2;align-self:center;width:min(100%,1250px);margin-inline:auto;padding:0 clamp(12px,3vw,30px);text-align:center}
+.chest-content{grid-row:2;align-self:center;width:min(100%,1375px);margin-inline:auto;padding:0 clamp(12px,3vw,30px);text-align:center}
 .chest-hint{margin:0 0 clamp(12px,2.4vh,26px);font-size:clamp(.91rem,2.1vw,1.15rem);font-weight:750;text-shadow:0 2px 10px #01040d;opacity:0;transition:opacity .25s ease}
 .chest-reveal[data-phase="cards"] .chest-hint{opacity:1}
 .chest-reveal[data-complete] .chest-hint{min-height:1.4em}

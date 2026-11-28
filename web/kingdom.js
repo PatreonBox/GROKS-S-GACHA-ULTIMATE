@@ -3,12 +3,13 @@ import {campaignStages} from './campaign.js';
 import {ico} from './icons.js';
 import {kingdomAmbience} from './kingdom-ambience.js';
 import {gameCommand,gameRead} from './game-client.js';
-import {buildingSpecs,buildingPlacementError,forgeMinimum,forgePlan,forgeStored,forgeUpgrade,forgeWelcomeMana,gemMine,gemMineBuildError,gemMinePlan,housePlan,houseStars,houseUpgrades,kingdomDaylight,kingdomStats,lastLandLevel,manaIcon,towerExperience,towerSkipCost,visitorSlots,visitorWelcomeMs} from './kingdom-rules.js';
+import {buildingSpecs,buildingPlacementError,campfireKind,forgeMinimum,forgePlan,forgeStored,forgeUpgrade,forgeWelcomeMana,gemMine,gemMineBuildError,gemMinePlan,housePlan,houseStars,houseUpgrades,kingdomDaylight,kingdomStats,lastLandLevel,manaIcon,towerExperience,towerSkipCost,visitorSlots,visitorWelcomeMs} from './kingdom-rules.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from './kingdom-suggestions.js';
 import {spikeIcon,spikeKind,spikePlan} from './kingdom-defences.js';
 import {playerProgress} from './player-progression.js';
 import {towerPlayerLevel} from './level-access.js';
 import {rewardOrigin} from './reward-flight.js';
+import {loadingMarkup} from './loading.js';
 
 const readout=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const compact=new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:2});
@@ -46,6 +47,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  let buildingKind='house',productionKind='forge',expanding=false,editing=false,ambience,visitorDue,refreshingVisitors=false;
  let clockOffset=0,finishing=false,finishRetryAt=0;
  let welcomeUntil=0,trackedUpgrade,inspectOpen=false,shotReport;
+ let trailDraft=null,trailBusy=false;
  const collecting=new Set(),welcomed=new Set();
  const clock=()=>Date.now()+clockOffset;
  const timeLeft=site=>Math.max(0,Math.ceil((site.endsAt-clock())/1000));
@@ -88,7 +90,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    return {level,construction,unmet,next:next&&{coins:next.price,mana:next.mana,buildMs:next.buildMs,benefit:next.limit+' house lots · +'+next.xp+' XP'}};
   }
   const building=buildingFor(id);
-  if(!building||building.kind===mineKind)return null;
+  if(!building||building.kind===mineKind||building.kind===campfireKind)return null;
   if(building.kind===spikeKind){
    const plan=spikePlan(building,clock()),{next}=plan;
    return {...plan,unmet:next?.towerLevel>plot.tower.level?'Requires Tower Level '+next.towerLevel+'.':'',
@@ -179,11 +181,11 @@ export function createKingdom(root,sound,applyWallet,rewards){
  }
 
  function paintPicker(){
-  const {houses,forges,gemMines,defences}=plot;
+  const {houses,forges,gemMines,defences,campfires}=plot;
   const entries=items=>items.map((item,index)=>[buildingKey(item),nameOf(buildingKey(item))+(items.length>1?' '+(index+1):'')]);
   const groups=[
    ['Kingdom',[['tower',towerName],['cube',cube.name]]],
-   ['Housing',entries(houses)],['Production',[...entries(forges),...entries(gemMines)]],['Defences',entries(defences)],
+   ['Housing',entries(houses)],['Production',[...entries(forges),...entries(gemMines)]],['Defences',entries(defences)],['Outdoor',entries(campfires)],
    ['Visitors',visitors.map(guest=>['visitor:'+guest.id,guest.name])]
   ];
   if(treeFor(selection))groups.push(['Landscape',[[selection,nameOf(selection)]]]);
@@ -203,15 +205,15 @@ export function createKingdom(root,sound,applyWallet,rewards){
   if(!ui)return;
   const {houses}=plot;
   const guest=guestFor(selection),building=buildingFor(selection),house=building&&(building.kind||'house')==='house';
-  const mine=building?.kind===mineKind,defence=building?.kind===spikeKind;
+  const mine=building?.kind===mineKind,defence=building?.kind===spikeKind,fire=building?.kind===campfireKind;
   const tower=selection==='tower',tree=treeFor(selection);
   paintPicker();
   ui.name.textContent=nameOf(selection);
   const option=upgradeOption(selection);
-  ui.state.textContent=option?'Level '+option.level:mine?'Production':guest?guest.rarity+' resident':tree?'Landscape':cube.rarity+' cube';
+  ui.state.textContent=option?'Level '+option.level:mine?'Production':fire?'Outdoor':guest?guest.rarity+' resident':tree?'Landscape':cube.rarity+' cube';
   ui.description.textContent=tower?houses.length+' / '+plot.tower.limit+' houses · '+plot.defenceLots+' / '+plot.tower.defenceLimit+' defences':
    house?'+'+readout.format(houseStars(option.level))+' stars':
-   defence?option.damage+' damage per shot':
+   defence?option.damage+' damage per shot':fire?'Lights the grass at night and gives awake cubes a spot to warm up.':
    building?'':guest?'Moved in after your Kingdom reached '+guest.stars+' stars.':tree?'Clear this tree to free up its space.':'Your equipped cube roams the grounds.';
   ui.spikeTest.hidden=!defence;
   ui.fire.disabled=!world;
@@ -311,7 +313,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
     '<small>'+found+' / '+slots.length+'</small></h3>'+slots.map(slot=>visitorCard(slot,discovered.get(slot.slot))).join('')+'</section>';
   }).join('');
   if(focused)[...ui.guestRows.querySelectorAll('[data-visit]')].find(node=>node.dataset.visit===focused)?.focus({preventScroll:true});
-  world?.setPlot(buildings,visitors,plot.tower.level,plot.land.level,plot.tower.construction,plot.removedTrees);
+  world?.setPlot(buildings,visitors,plot.tower.level,plot.land.level,plot.tower.construction,plot.removedTrees,plot.trail);
   welcomeVisitors();
   paintSelection();
   paintConstruction();
@@ -332,7 +334,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }
   plot=kingdomStats(wallet,clock());
   visitors=visitorsFrom(wallet);visitorDue=wallet.visitorRefreshAt;
-  const signature=[plot.tower.level,plot.tower.construction?.endsAt,plot.land.level,
+  const signature=[plot.tower.level,plot.tower.construction?.endsAt,plot.land.level,JSON.stringify(plot.trail),
    ...plot.buildings.map(building=>[building.id,building.x,building.z,building.rotation,building.level,building.upgrade?.endsAt,building.collectedAt,building.storedMana,building.storedGems,building.productionMs].join('@')),
    ...plot.storage.map(item=>item.id),...plot.removedTrees,...visitors.map(guest=>guest.id)].join('/');
   if(signature!==plotSignature){
@@ -443,7 +445,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  }
  function updatePreview(){
   if(!build?.point)return;
-  const step=snap&&!build.locked?1:100,point=build.locked?build.spot:build.point;
+  const step=snap&&!build.locked?4:100,point=build.locked?build.spot:build.point;
   const spot={x:Math.round(point.x*step)/step,z:Math.round(point.z*step)/step,rotation:build.rotation,kind:build.kind};
   build.spot=spot;
   build.error=placementError(spot);
@@ -452,7 +454,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
  const suggestionLabel=task=>task.site?'View construction':task.action.object?task.ready?'Upgrade':'View requirements':
   task.action.mode==='expand'?task.ready?'Expand':'View expansion':task.action.mode==='restore'?'Place back':task.ready?'Build':'View building';
  function paintSuggestions(){
-  ui.tracker.hidden=Boolean(build||!wallet);
+  ui.tracker.hidden=Boolean(build||trailDraft||!wallet);
   if(ui.tracker.hidden)return;
   const rows=suggestions();
   const tracked=rows.find(row=>row.id===trackedUpgrade)||recommendedKingdomUpgrade(rows);
@@ -517,7 +519,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    ui.storage.dataset.items=storedKey;
    ui.storage.innerHTML=storage.length?storage.map(item=>{
     const spec=buildingSpecs[item.kind||'house'];
-    return '<div><span>'+spec.name+(item.kind===mineKind?'':' · Level '+(item.level||1))+'</span><button type="button" class="outline" data-restore-building="'+escape(item.id)+'">Place back</button></div>';
+    return '<div><span>'+spec.name+([mineKind,campfireKind].includes(item.kind)?'':' · Level '+(item.level||1))+'</span><button type="button" class="outline" data-restore-building="'+escape(item.id)+'">Place back</button></div>';
    }).join(''):'<p>No stored buildings.</p>';
   }
   ui.storageCount.textContent=storage.length?' ('+storage.length+')':'';
@@ -537,6 +539,11 @@ export function createKingdom(root,sound,applyWallet,rewards){
   ui.priceLine.hidden=house&&full&&!tower.next;
   ui.priceMana.hidden=buildingKind!==mineKind;
   ui.choose.disabled=!world||!wallet||upgrading||expanding||Boolean(problem)||short>0;
+  ui.followTrail.setAttribute('aria-pressed',String(plot.trail.follow));
+  ui.followTrail.textContent='Follow trail '+(plot.trail.follow?'on':'off');
+  ui.followTrail.disabled=trailBusy;
+  ui.drawTrail.disabled=!world||trailBusy;
+  ui.resetTrail.disabled=!plot.trail.custom||trailBusy;
   const rows=[['tower',towerName],...(house?houses:defence?defences:forges).map((item,i)=>[buildingKey(item),nameOf(buildingKey(item))+' '+(i+1)])];
   const key=rows.map(([id])=>id).join('/');
   if(ui.buildUpgrades.dataset.rows!==key){
@@ -561,12 +568,13 @@ export function createKingdom(root,sound,applyWallet,rewards){
   const spec=buildingSpecs[buildingKind];
   ui.optionName.textContent=spec.name;
   ui.preview.setAttribute('aria-label',spec.name+' 3D preview');
-  const house=buildingKind==='house',defence=buildingKind===spikeKind;
+  const house=buildingKind==='house',defence=buildingKind===spikeKind,fire=buildingKind===campfireKind;
   ui.buildEffect.innerHTML=house?star+'+0.3 stars':buildingKind==='forge'?mana+'1 mana/s · +'+forgeWelcomeMana+' on placement':
-   defence?spike+spikePlan({level:1}).damage+' damage per shot':gem+'1 gem every '+gemMine.interval/60_000+' minutes · Stores '+gemMine.capacity;
+   defence?spike+spikePlan({level:1}).damage+' damage per shot':fire?ico('flame')+' Warm light for your Kingdom at night':
+   gem+'1 gem every '+gemMine.interval/60_000+' minutes · Stores '+gemMine.capacity;
   ui.choose.textContent='Build '+(buildingKind==='forge'?'Mana Forge':spec.name);
-  ui.productionPicker.hidden=house||defence;
-  for(const button of ui.kindButtons)button.setAttribute('aria-pressed',String(button.dataset.buildKind===(house?'house':defence?spikeKind:'forge')));
+  ui.productionPicker.hidden=house||defence||fire;
+  for(const button of ui.kindButtons)button.setAttribute('aria-pressed',String(button.dataset.buildKind===(!ui.productionPicker.hidden?'forge':buildingKind)));
   for(const button of ui.productionButtons)button.setAttribute('aria-pressed',String(button.dataset.productionKind===buildingKind));
   ui.previewStatus.hidden=false;
   try{
@@ -579,7 +587,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   }
  }
  function openBuildMenu(){
-  if(!wallet||build)return;
+  if(!wallet||build||trailDraft)return;
   delete ui.buildNotice.dataset.notice;
   if(!ui.buildDialog.open)ui.buildDialog.showModal();
   paintBuildMenu();previewBuilding();paintSuggestions();
@@ -587,11 +595,15 @@ export function createKingdom(root,sound,applyWallet,rewards){
  function paintBuild(){
   if(!ui)return;
   const buying=build?.mode==='new',unavailable=buying?purchaseProblem(build.kind):'';
-  ui.toolbar.classList.toggle('is-building',Boolean(build));
-  ui.inspect.hidden=Boolean(build);
-  ui.openBuild.hidden=Boolean(build);
+  const active=Boolean(build||trailDraft);
+  ui.toolbar.classList.toggle('is-building',active);
+  ui.inspect.hidden=active;
+  ui.openBuild.hidden=active;
   ui.openBuild.disabled=!wallet||(!world&&!ui.controls.hidden);
   ui.editTools.hidden=!build;
+  ui.trailTools.hidden=!trailDraft;
+  ui.saveTrail.disabled=trailBusy||!trailDraft||trailDraft.length<2;
+  ui.cancelTrail.disabled=trailBusy;
   ui.place.hidden=!build?.locked;
   const short=build?Math.max(0,build.cost-coins):0,priceChanged=Boolean(buying&&build.cost!==priceFor(build.kind));
   ui.place.disabled=placing||Boolean(build?.error||unavailable)||short>0||priceChanged;
@@ -616,6 +628,42 @@ export function createKingdom(root,sound,applyWallet,rewards){
   paintUpgrade(ui.inspectUpgrade,selection);
   paintSuggestions();
   world?.setBuild(build?{...build,snap}:null);
+ }
+ function startTrail(){
+  if(!world||trailBusy||build)return;
+  ui.buildDialog.close();
+  trailDraft=[];
+  ui.trailStatus.textContent='Drag across the ground to draw a trail. Bring the ends together to make a loop.';
+  world.setTrailMode(true);paintBuild();
+  ui.canvas.focus({preventScroll:true});
+ }
+ function stopTrail(){
+  trailDraft=null;
+  world?.setTrailMode(false);paintBuild();
+  ui.openBuild.focus({preventScroll:true});
+ }
+ function onTrailDraw(points){
+  if(!trailDraft||trailBusy)return;
+  trailDraft=points;
+  ui.trailStatus.textContent=points.length?'Trail preview. Save it or drag again to redraw.':'Draw across more open ground.';
+  paintBuild();
+ }
+ async function saveTrail(args){
+  if(trailBusy)return;
+  const epoch=visit;
+  trailBusy=true;paintBuild();
+  if(trailDraft)ui.trailStatus.textContent='Saving trail…';
+  try{
+   const {wallet:next}=await gameCommand('kingdom.trail',args);
+   applyWallet(next);
+   if(epoch!==visit)return;
+   if(trailDraft)stopTrail();
+   sound.play('inspect',{level:.55});
+  }catch(error){
+   if(epoch!==visit)return;
+   if(trailDraft)ui.trailStatus.textContent=error.message;
+   else ui.buildNotice.dataset.notice=error.message;
+  }finally{if(epoch===visit){trailBusy=false;paintBuild();}}
  }
  function pointOnPlot(point,lock){
   if(!build||build.locked||placing)return;
@@ -735,14 +783,14 @@ export function createKingdom(root,sound,applyWallet,rewards){
  }
  function setUp(){
   cube=equippedCube(wallet);
-  root.innerHTML='<div class="kingdom-heading"><h1>Your Kingdom</h1><div class="kingdom-summary">'+
+  root.innerHTML='<div class="kingdom-frame" aria-label="Your 3D Kingdom"><canvas tabindex="0" aria-label="Kingdom plot" aria-describedby="kingdomControls"></canvas>'+
+   '<div class="kingdom-loading">'+loadingMarkup('Loading your Kingdom…')+'</div>'+
+   '<div class="kingdom-heading"><h1>Your Kingdom</h1><div class="kingdom-summary">'+
    '<span class="kingdom-value">'+coin+'<span>Kingdom value <b data-plot-value>0</b></span></span>'+
    '<span class="kingdom-quality"><span class="kingdom-stars" role="img" aria-label="0 out of 5 stars">'+
    Array.from({length:5},()=>'<span>'+star+'<i>'+star+'</i></span>').join('')+
    '</span><b data-plot-rating>0 / 5</b></span>'+
    '<span class="kingdom-mana" id="kingdomManaBadge">'+mana+'<span>Mana <b data-plot-mana id="kingdomManaCount">0</b></span></span></div></div>'+
-   '<div class="kingdom-frame" aria-label="Your 3D Kingdom"><canvas tabindex="0" aria-label="Kingdom plot" aria-describedby="kingdomControls"></canvas>'+
-   '<p class="kingdom-loading" role="status">Loading your Kingdom…</p>'+
    '<div class="kingdom-plot-stats"><span>'+ico('tower')+'<b data-plot-buildings>1 building</b></span>'+
    '<button type="button" data-visitor-index aria-label="Visitor index" aria-haspopup="dialog" title="Visit the visitor index">'+ico('box')+'<b data-residents>1 resident</b></button>'+
    '<span class="kingdom-daylight"><i aria-hidden="true"></i><b data-daylight-name></b> <time></time></span></div>'+
@@ -750,7 +798,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="tower-construction-meter" data-tower-progress hidden><div><strong>Tower Level 2</strong><b data-tower-countdown>1:00</b></div>'+
    '<progress aria-label="Tower construction progress" max="60" value="0"></progress></div>'+
    '<div class="kingdom-hover" aria-hidden="true" hidden></div>'+
-   '<div class="kingdom-controls"><span id="kingdomControls">Drag to orbit · Scroll or pinch to zoom</span><div role="group" aria-label="Camera controls">'+
+   '<div class="kingdom-controls"><span id="kingdomControls">Drag to orbit · WASD to move · Scroll or pinch to zoom</span><div role="group" aria-label="Camera controls">'+
    cameraButton('pan','pan','Pan camera')+cameraButton('out','zoomOut','Zoom out')+cameraButton('in','zoomIn','Zoom in')+
    cameraButton('reset','aim','Reset camera')+cameraButton('ambient','volume','Kingdom ambience')+'</div></div>'+
    '<section class="kingdom-inspector" aria-label="Inspect your plot"><div class="kingdom-objects">'+
@@ -767,7 +815,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="kingdom-manage" data-manage-building hidden><button class="outline" type="button" data-move-building aria-label="Move building">Move</button>'+
    '<button class="outline" type="button" data-store-building aria-label="Store building">Store</button></div>'+
    '<button class="outline" type="button" data-clear-tree hidden></button>'+
-   '<p class="kingdom-notice" data-kingdom-notice role="status"></p></div></section></div>'+
+   '<p class="kingdom-notice" data-kingdom-notice role="status"></p></div></section>'+
    '<div class="kingdom-builder"><section class="kingdom-recommendation" aria-label="Tracked Kingdom upgrade" hidden>'+
    '<div><small>Suggested upgrade</small><strong data-tracker-title></strong><span data-tracker-status></span>'+
    '<progress max="1" aria-label="Suggested upgrade progress"></progress></div><button type="button" class="outline" data-tracker-action></button></section>'+
@@ -778,10 +826,13 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<div class="kingdom-build-controls"><button type="button" class="outline" data-build="snap" aria-pressed="true">Snap on</button>'+
    '<button type="button" class="outline" data-build="rotate">Rotate 45° <kbd>R</kbd></button>'+
    '<button type="button" class="outline" data-build="cancel">Cancel <kbd>Q</kbd></button>'+
-   '<button type="button" class="primary" data-build="place" hidden>Place <kbd>E</kbd></button></div></div></div>'+
-   '<dl class="kingdom-stats" aria-label="Player stats"><div><dt>'+coin+'Coins</dt><dd data-plot-coins></dd></div>'+
+   '<button type="button" class="primary" data-build="place" hidden>Place <kbd>E</kbd></button></div></div>'+
+   '<div class="kingdom-trail-tools" data-trail-tools hidden><div><strong>Walking trail</strong><p data-trail-status role="status"></p></div>'+
+   '<div class="kingdom-build-controls"><button class="outline" type="button" data-trail-cancel>Cancel</button>'+
+   '<button class="primary" type="button" data-trail-save>Save trail</button></div></div></div>'+
+   '<details class="kingdom-player-stats"><summary>Stats</summary><dl class="kingdom-stats" aria-label="Player stats"><div><dt>'+coin+'Coins</dt><dd data-plot-coins></dd></div>'+
    '<div><dt><img src="/assets/packs/gem.png" alt="">Gems</dt><dd data-plot-gems></dd></div>'+
-   '<div><dt>'+ico('battle')+'Campaign clears</dt><dd data-plot-clears></dd></div></dl>'+
+   '<div><dt>'+ico('battle')+'Campaign clears</dt><dd data-plot-clears></dd></div></dl></details></div>'+
    '<dialog class="kingdom-guest-index" aria-labelledby="guestTitle"><div class="guest-index-heading"><h2 id="guestTitle">Visitor index</h2>'+
    '<button type="button" class="iconbtn" data-close-visitors aria-label="Close visitor index">'+ico('x')+'</button></div>'+
    '<div class="visitor-collection"><b data-visitor-count></b><progress aria-label="Visitors discovered" max="'+visitorSlots.length+'" value="0"></progress></div>'+
@@ -792,7 +843,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<progress aria-label="House lots used" data-lot-meter max="2" value="0"></progress></div>'+
    '<div class="build-catalog" role="group" aria-label="Building categories"><button type="button" class="outline" data-build-kind="house" aria-pressed="true">Housing</button>'+
    '<button type="button" class="outline" data-build-kind="forge" aria-pressed="false">'+mana+'Production<small data-production-count></small></button>'+
-   '<button type="button" class="outline" data-build-kind="'+spikeKind+'" aria-pressed="false">'+spike+'Defences<small data-defence-count></small></button></div>'+
+   '<button type="button" class="outline" data-build-kind="'+spikeKind+'" aria-pressed="false">'+spike+'Defences<small data-defence-count></small></button>'+
+   '<button type="button" class="outline" data-build-kind="'+campfireKind+'" aria-pressed="false">'+ico('flame')+'Campfire</button></div>'+
    '<div class="build-catalog build-production" role="group" aria-label="Production buildings" hidden>'+
    '<button class="outline" type="button" data-production-kind="forge" aria-pressed="true">'+mana+'Mana Forge</button>'+
    '<button class="outline" type="button" data-production-kind="gem-mine" aria-pressed="false">'+gem+mineName+'</button></div>'+
@@ -803,6 +855,10 @@ export function createKingdom(root,sound,applyWallet,rewards){
    '<small class="build-price" data-house-price-line>'+coin+'<b data-house-price></b></small>'+
    '<small class="build-price" data-build-mana hidden>'+mana+'<b>'+readout.format(gemMine.mana)+' Mana</b></small>'+
    '<button class="primary" type="button" data-build="choose">Build GD House</button></div></article>'+
+   '<section class="land-expansion" aria-label="Walking trail"><div><strong>Walking trail</strong><small>Draw pavement across your plot.</small></div>'+
+   '<div class="kingdom-build-controls"><button class="primary" type="button" data-trail-draw>Draw trail</button>'+
+   '<button class="outline" type="button" data-trail-follow aria-pressed="true">Follow trail on</button>'+
+   '<button class="outline" type="button" data-trail-reset>Restore default</button></div></section>'+
    '<details class="build-storage"><summary>Stored buildings<span data-storage-count></span></summary><div data-build-storage></div></details>'+
    '<details class="build-storage build-suggestions"><summary>Suggested upgrades</summary><div data-suggestions></div></details>'+
    '<section class="build-upgrades" aria-labelledby="buildUpgradesTitle"><h3 id="buildUpgradesTitle">Building upgrades</h3><div data-build-upgrades></div></section>'+
@@ -830,6 +886,8 @@ export function createKingdom(root,sound,applyWallet,rewards){
    value:get('[data-plot-value]'),buildings:get('[data-plot-buildings]'),starValue:get('[data-plot-rating]'),
    stars:get('.kingdom-stars'),starFills:[...root.querySelectorAll('.kingdom-stars i')],
    toolbar:get('.kingdom-builder'),status:get('[data-build-status]'),editTools:get('[data-build-tools]'),
+   trailTools:get('[data-trail-tools]'),trailStatus:get('[data-trail-status]'),cancelTrail:get('[data-trail-cancel]'),saveTrail:get('[data-trail-save]'),
+   drawTrail:get('[data-trail-draw]'),followTrail:get('[data-trail-follow]'),resetTrail:get('[data-trail-reset]'),
    buildDialog:get('.kingdom-build-menu'),preview:get('.build-viewport canvas'),previewStatus:get('[data-preview-status]'),
    buildNotice:get('[data-build-notice]'),choose:get('[data-build="choose"]'),
    optionName:get('[data-build-name]'),buildEffect:get('[data-build-effect]'),kindButtons:root.querySelectorAll('[data-build-kind]'),
@@ -868,11 +926,16 @@ export function createKingdom(root,sound,applyWallet,rewards){
    if(button.dataset.trackUpgrade){trackedUpgrade=button.dataset.trackUpgrade;paintSuggestions();return}
    if(button.dataset.suggestedAction){runSuggestion(button.dataset.suggestedAction);return}
    if(button===ui.openBuild){openBuildMenu();return}
+   if(button===ui.drawTrail){startTrail();return}
+   if(button===ui.cancelTrail){stopTrail();return}
+   if(button===ui.saveTrail){if(trailDraft?.length>1)saveTrail({points:trailDraft});return}
+   if(button===ui.followTrail){saveTrail({follow:!plot.trail.follow});return}
+   if(button===ui.resetTrail){saveTrail({points:null});return}
    if(button.dataset.build==='close'){ui.buildDialog.close();return}
    if(button.dataset.buildKind||button.dataset.productionKind){
     if(button.dataset.productionKind)productionKind=button.dataset.productionKind;
     const kind=button.dataset.buildKind;
-    buildingKind=kind==='house'||kind===spikeKind?kind:productionKind;
+    buildingKind=kind&&kind!=='forge'?kind:productionKind;
     delete ui.buildNotice.dataset.notice;paintBuildMenu();previewBuilding();return;
    }
    if(button===ui.choose){startBuild();return}
@@ -902,6 +965,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   };
   keys=new AbortController();
   document.addEventListener('keydown',event=>{
+   if(trailDraft&&!trailBusy&&['Escape','q'].includes(event.key)){event.preventDefault();stopTrail();return}
    if(event.key==='Escape'&&!build&&inspectOpen&&!document.querySelector('dialog[open]')){
     inspectOpen=false;paintPicker();ui.detailToggle.focus({preventScroll:true});return;
    }
@@ -921,7 +985,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
    if(root.hidden)return;
    root.hidden=true;visit++;
    keys?.abort();ambience?.dispose();ambience=null;editing=false;world?.dispose();world=null;ui=null;build=null;
-   placing=false;upgrading=false;expanding=false;inspectOpen=false;shotReport=null;root.replaceChildren();
+   placing=false;upgrading=false;expanding=false;inspectOpen=false;shotReport=null;trailDraft=null;trailBusy=false;root.replaceChildren();
    return;
   }
   if(!root.hidden)return;
@@ -931,7 +995,7 @@ export function createKingdom(root,sound,applyWallet,rewards){
   try{
    const {createKingdomWorld}=await import('/kingdom-world.js');
    if(visit!==route)return;
-   world=createKingdomWorld({canvas:ui.canvas,cube,clock,onSelect:select,onHover:hover,onPlot:pointOnPlot,
+   world=createKingdomWorld({canvas:ui.canvas,cube,clock,onSelect:select,onHover:hover,onPlot:pointOnPlot,onTrailDraw,
     onCollect:collectProduction,onSpikeHit:recordSpikeHit});
    world.select(selection);paintPlot();paintBuild();
    ui.loading.hidden=true;

@@ -1,6 +1,15 @@
-main:has(#kingdomRoom:not([hidden])){
- width:min(2050px,100%);padding-inline:clamp(10px,1.6vw,29px);
+body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])){
+ display:flex;flex-direction:column;height:100dvh;overflow:hidden;
 }
+body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])) > :is(header,.save-status){flex:none}
+body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])) > .save-status{margin-block:0;padding-block:4px}
+body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])) .game-quick-tools{display:flex}
+body:has(#gameMain:not([hidden]) > #kingdomRoom:not([hidden])) > footer{display:none}
+#gameMain:has(> #kingdomRoom:not([hidden])){
+ flex:1;min-height:0;width:100%;margin:0;padding:0;
+}
+#kingdomRoom,#kingdomRoom>.kingdom-frame{height:100%;min-height:0}
+#kingdomRoom>.kingdom-frame{border:0;border-radius:0}
 .kingdom-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 13px}
 .kingdom-heading h1{margin:0}
 .kingdom-summary{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -22,6 +31,7 @@ main:has(#kingdomRoom:not([hidden])){
 .kingdom-frame canvas[data-dragging="true"]{cursor:grabbing}
 .kingdom-frame canvas[data-pointing="true"]{cursor:pointer}
 .kingdom-frame canvas[data-building="true"]:not([data-dragging="true"]){cursor:crosshair}
+.kingdom-frame canvas[data-trail-drawing=true]{cursor:crosshair}
 .kingdom-frame canvas[data-locked="true"]:not([data-dragging="true"]){cursor:grab}
 .kingdom-frame canvas:focus-visible{outline:2px solid #c9ffbb;outline-offset:-4px}
 .kingdom-loading{
@@ -85,6 +95,8 @@ main:has(#kingdomRoom:not([hidden])){
  background:linear-gradient(115deg,#1c3337,#1b2537 65%);
 }
 [data-build-tools]{display:flex;align-items:center;justify-content:space-between;gap:9px 14px;flex-wrap:wrap}
+.kingdom-trail-tools{display:flex;align-items:center;justify-content:space-between;gap:8px 15px;flex-wrap:wrap}
+.kingdom-trail-tools p{margin:3px 0 0;color:#d2e4f0;font-size:13px}
 .kingdom-placement-copy{display:flex;gap:3px 10px;align-items:center;flex-wrap:wrap}
 .kingdom-placement-copy span{display:inline-flex;align-items:center;gap:5px;color:#f1cd8b;font-size:.81rem}
 .kingdom-placement-copy p{flex-basis:100%;margin:0;color:#d2dce9;font-size:13px}
@@ -272,6 +284,47 @@ main:has(#kingdomRoom:not([hidden])){
 .kingdom-manage{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .kingdom-detail [data-clear-tree]{display:inline-flex;gap:6px}
 .kingdom-detail [data-clear-tree] img,[data-skip-tower] img{width:17px;height:17px;object-fit:contain}
+
+#kingdomRoom .kingdom-heading{position:absolute;inset:12px 13px auto;margin:0;pointer-events:none}
+#kingdomRoom .kingdom-heading h1{font:800 clamp(24px,3.4vw,38px)/1 Cond,sans-serif;text-shadow:0 2px 9px #0a1525}
+#kingdomRoom .kingdom-plot-stats{top:62px}
+#kingdomRoom .tower-construction-meter{top:108px}
+#kingdomRoom .kingdom-arrival{top:107px}
+#kingdomRoom .kingdom-loading{background:#102238ef;border:1px solid #c9eaff70}
+#kingdomRoom .kingdom-builder{position:absolute;right:13px;bottom:65px;margin:0;align-items:end}
+#kingdomRoom .kingdom-builder.is-building{inset:auto 13px 68px;width:min(720px,calc(100% - 26px));margin-inline:auto}
+#kingdomRoom [data-build=start]{min-height:52px;min-width:140px;justify-content:center;font-size:1.07rem;box-shadow:0 4px 0 #4c347e,0 9px 25px #02071068}
+#kingdomRoom .kingdom-recommendation{max-width:290px;background:#172838ee}
+.kingdom-player-stats{position:absolute;bottom:70px;left:13px;z-index:1;max-width:calc(100% - 26px)}
+.kingdom-player-stats summary{
+ width:max-content;cursor:pointer;border:1px solid #9bd0d875;border-radius:7px;
+ padding:6px 11px;background:#152838ef;color:#f1faff;font-weight:700;font-size:13px;
+}
+.kingdom-player-stats .kingdom-stats{margin-top:5px}
+#kingdomRoom .kingdom-frame:has(.kingdom-inspector:has([aria-expanded=true]),.kingdom-builder.is-building) .kingdom-player-stats{visibility:hidden}
+@media(max-width:720px){
+ #kingdomRoom .kingdom-heading{inset:8px 7px auto;gap:4px}
+ #kingdomRoom .kingdom-plot-stats{top:59px}
+ #kingdomRoom .kingdom-summary>span{padding:4px 5px;font-size:11px}
+ #kingdomRoom .kingdom-summary{gap:4px}
+ #kingdomRoom .kingdom-inspector{bottom:66px}
+ #kingdomRoom .kingdom-builder{right:7px;bottom:66px}
+ #kingdomRoom .kingdom-recommendation{display:none}
+ #kingdomRoom [data-build=start]{min-width:116px;min-height:44px;padding-inline:8px;font-size:.94rem}
+ .kingdom-player-stats{left:7px;bottom:7px}
+}
+@media(max-width:550px){
+ #kingdomRoom .kingdom-plot-stats{top:79px}
+ #kingdomRoom .kingdom-heading{flex-direction:column}
+ #kingdomRoom :is(.tower-construction-meter,.kingdom-arrival){top:121px}
+}
+@media(max-height:510px) and (orientation:landscape){
+ #kingdomRoom .kingdom-plot-stats{top:49px}
+ #kingdomRoom .kingdom-heading{inset-block-start:6px}
+ #kingdomRoom .kingdom-plot-stats :is(span,button){padding-block:4px}
+ #kingdomRoom .kingdom-inspector,.kingdom-player-stats{bottom:7px}
+ #kingdomRoom .kingdom-inspector{left:65px}
+}
 .kingdom-upgrade [data-skip-tower]{justify-self:start;margin-top:6px}
 .build-storage{padding:9px 12px;border:1px solid #38506b;border-radius:8px;background:#131e30}
 .build-storage summary{cursor:pointer;font-weight:800;color:#edf6ff}

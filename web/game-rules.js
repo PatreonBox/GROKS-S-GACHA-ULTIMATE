@@ -15,7 +15,7 @@ import {replayDrill,replayRemix,replayEndlessRemix} from './game-replay.js';
 import {endlessKeyInterval,endlessKeyStatus,endlessMilestones,rewardEndlessRemix} from './remix-endless.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
-import {buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
+import {buildCampfire,buildForge,buildGemMine,buildHouse,buildSpikeShooter,clearKingdomTree,collectForge,collectGemMine,expandLand,placeKingdomBuilding,settleKingdomConstruction,skipTower,storeKingdomBuilding,towerExperience,towerPlan,updateKingdomTrail,upgradeForge,upgradeHouse,upgradeSpikeShooter,upgradeTower} from './kingdom-rules.js';
 import {validTradeMinimum} from './trade-rules.js';
 import {achievementBoost} from './achievement-boosts.js';
 import {bannerPrice,demonBanners,maxBannerDraws,prepareDemonPull,rollDemonBanner} from './demon-banner.js';
@@ -35,7 +35,7 @@ function requireLevel(wallet,level,name){
 const gatedActions={
  'mine.tap':'mine','mine.machine':'mine','mine.skill':'mine','mine.code':'mine',
  'cube.equip':'cubes','kingdom.house':'kingdom','kingdom.tower':'kingdom','kingdom.tower.finish':'kingdom',
- 'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom',
+ 'kingdom.forge':'kingdom','kingdom.collect':'kingdom','kingdom.expand':'kingdom','kingdom.campfire':'kingdom','kingdom.trail':'kingdom',
  'kingdom.gem-mine':'kingdom','kingdom.gem-mine.collect':'kingdom',
  'kingdom.spike-shooter':'kingdom','kingdom.spike-shooter.upgrade':'kingdom',
  'kingdom.house.upgrade':'kingdom','kingdom.forge.upgrade':'kingdom','kingdom.construction.finish':'kingdom',
@@ -202,6 +202,8 @@ const rules={
   return {house};
  }},
  'kingdom.forge':{run:({w,args,now})=>({forge:buildForge(w,args,now)})},
+ 'kingdom.campfire':{run:({w,args,now})=>({building:buildCampfire(w,args,now)})},
+ 'kingdom.trail':{run:({w,args})=>updateKingdomTrail(w,args)},
  'kingdom.gem-mine':{run:({w,args,now})=>({building:buildGemMine(w,args,now)})},
  'kingdom.spike-shooter':{run:({w,args,now})=>({building:buildSpikeShooter(w,args,now)})},
  'kingdom.house.upgrade':{run:({w,args,now})=>({house:upgradeHouse(w,args.id,args.level,now)})},

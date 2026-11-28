@@ -1,3 +1,4 @@
+import {loadingMarkup} from './loading.js';
 import {cardGrowth,cardLevelCap,feedXP,spareCopies,xpAt} from './card-growth.js';
 import {stat} from './card-economy.js';
 import {impossibleCategory} from './impossible-cards.js';
@@ -373,7 +374,7 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const heading=live?'':'<div class="bt-heading"><h1>'+(gym?'Training zone':arcadePage?'Mini Games':battleView==='campaign'?'Battle campaign':'Battle mode')+'</h1>'+mutedBtn()+'</div>'+
    battleNavigation(battleView,playerLevel);
   const content=collectionError&&!loaded?'<p>Your squad could not load. <button class="outline" data-retry-collection>Try again</button></p>':
-   !wallet||!loaded?'<p role="status">Loading your squad…</p>':gym?training():match?arena(match):lobby();
+   !wallet||!loaded?loadingMarkup('Loading your squad…'):gym?training():match?arena(match):lobby();
   root.innerHTML=heading+(live?content:'<div class="battle-content'+(screen&&lastScreen!==screen?' battle-enter':'')+'">'+content+'</div>')+
    '<div class="bt-feedback" role="status">'+enc(feedback)+'</div>';
   lastScreen=screen;

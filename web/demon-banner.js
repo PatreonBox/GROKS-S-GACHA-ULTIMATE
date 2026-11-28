@@ -20,14 +20,14 @@ const legendaryIndex=4,mythicIndex=5,impossibleIndex=12;
 const tickets=1_000_000;
 // Each Pro Legendary-and-higher tier has exactly twenty times its Standard odds, at the same player level.
 const baseWeights=[528000,285000,126000,42810,15000,2000,700,300,100,55,22,8,5];
-const focusChance=.06;
+export const featuredOddsMultiplier=15;
 export const keyBannerLevelCap=100;
 export const proOddsMultiplier=20;
 export const bannerLuckCap=500;
 export const bannerLuckBonus=luck=>Math.max(0,Math.min(bannerLuckCap,luck))*.001;
 export const demonPityUnlock={legendary:dropUnlocks.find(step=>step.rarity>=legendaryIndex).level,mythic:dropUnlocks.find(step=>step.rarity>=mythicIndex).level};
 
-export function bannerOdds(id,level=0,{target=false,luck=0,preview=false,groups}={}){
+export function bannerOdds(id,level=0,{luck=0,preview=false,groups}={}){
  if(!Object.hasOwn(demonBanners,id))throw Error('Choose a Demon banner.');
  const levelBonus=Math.max(0,Math.min(keyBannerLevelCap,level))*.006;
  const luckBonus=bannerLuckBonus(luck);
@@ -40,8 +40,7 @@ export function bannerOdds(id,level=0,{target=false,luck=0,preview=false,groups}
   for(let i=1;i<legendaryIndex;i++)weights[i]=Math.floor(weights[i]*(tickets-premium)/regular);
  }
  weights[0]=tickets-weights.slice(1).reduce((sum,weight)=>sum+weight,0);
- return cardRarities.map((rarity,i)=>({...rarity,weight:weights[i],percent:weights[i]/10_000,
-  ...(id==='special'&&target?{focusPercent:focusChance*100}:{})}));
+ return cardRarities.map((rarity,i)=>({...rarity,weight:weights[i],percent:weights[i]/10_000}));
 }
 
 export function bannerPity(wallet,id){
@@ -153,19 +152,39 @@ export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force,previ
  if(!preview&&target&&!dropEligible(target,access))throw Error('That featured level is locked. '+dropAccessSummary(level));
  const {groups,groupCounts}=preview?catalogue:availableBannerGroups(catalogue,access);
  const odds=bannerOdds(id,level,{luck:wallet.luck||0,preview,groups}),pity=bannerPity(wallet,id),focus=target&&cardRarity(target).index;
+ const focusIndex=target?groups[focus].indexOf(target):-1;
+ const focusSize=target?groups[focus].length:0;
+ // Tiny rarity pools need additional rarity tickets to give the selected card the full boost.
+ const smallPool=focusSize>0&&focusSize<featuredOddsMultiplier;
+ const scale=smallPool?focusSize:1;
+ const extra=smallPool?(featuredOddsMultiplier-1)*odds[focus].weight:0;
+ function rollTable(floor){
+  const donor=extra?odds.findIndex(tier=>tier.index>=floor&&tier.index<focus&&tier.weight*scale>=extra):-1;
+  const boosted=donor>=0;
+  const weights=odds.map(tier=>tier.index<floor?0:tier.weight*scale+
+   (boosted&&tier.index===focus?extra:0)-(tier.index===donor?extra:0));
+  const total=weights.reduce((sum,weight)=>sum+weight,0);
+  const focusPool=focusSize+(boosted?featuredOddsMultiplier-1:0),focusTickets=Math.min(featuredOddsMultiplier,focusPool);
+  return {weights,total,focusPool,focusTickets};
+ }
+ const base=rollTable(0);
+ const tables=new Map([[0,base],[legendaryIndex,rollTable(legendaryIndex)],[mythicIndex,rollTable(mythicIndex)]]);
+ const targetShare=table=>table.focusPool?table.focusTickets/table.focusPool:0;
+ const otherShare=(table,i)=>i===focus?(1-targetShare(table))/Math.max(1,groups[i].length-1):1/groups[i].length;
  const declaredWeights=Object.fromEntries(cardCategories.map(category=>[category,0]));
  for(const tier of odds){
   if(!tier.weight)continue;
-  const group=groups[tier.index],fraction=tier.percent/group.length;
-  for(const [category,count] of Object.entries(groupCounts[tier.index]))
-   declaredWeights[category]+=count*fraction*(tier.index===focus?1-focusChance:1);
+  const focused=tier.index===focus;
+  for(const [category,count] of Object.entries(groupCounts[tier.index])){
+   const includesTarget=focused&&category===target[6];
+   declaredWeights[category]+=100*base.weights[tier.index]/base.total*
+    ((count-Number(includesTarget))*otherShare(base,tier.index)+(includesTarget?targetShare(base):0));
+  }
  }
- if(target)declaredWeights[target[6]]+=odds[focus].percent*focusChance;
 
  const rows=[],sizes=[],holos=[],antimatters=[],drawPercents=[],drawDifficultyPercents=[],drawRarityPercents=[],guarantees=[];
- const cumulative=odds.map((_,i)=>odds.slice(i).reduce((sum,tier)=>sum+tier.weight,0));
- const canLegendary=cumulative[legendaryIndex]>0,canMythic=cumulative[mythicIndex]>0;
- const bonus=Math.round(bonusChance(wallet.bonus)*100),focusSlots=Math.round(focusChance*tickets);
+ const canLegendary=tables.get(legendaryIndex).total>0,canMythic=tables.get(mythicIndex).total>0;
+ const bonus=Math.round(bonusChance(wallet.bonus)*100);
  for(let draw=0;draw<quantity;draw++){
   const size=bonus>0&&random(10000)<bonus?6:5;
   let topIndex=0;
@@ -173,23 +192,28 @@ export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force,previ
   if(floor)guarantees.push({draw,tier:cardRarities[floor].id});
   sizes.push(size);
   for(let slot=0;slot<size;slot++){
-   const first=slot===0,min=first?floor:0,total=cumulative[min];
+   const first=slot===0,min=first?floor:0,table=tables.get(min),{weights,total}=table;
    let ticket=random(total),tier=odds[min];
    for(const candidate of odds.slice(min)){
     tier=candidate;
-    if(ticket<tier.weight)break;
-    ticket-=tier.weight;
+    const weight=weights[tier.index];
+    if(ticket<weight)break;
+    ticket-=weight;
    }
    const i=tier.index,group=groups[i],focused=i===focus;
-   let row=focused&&random(tickets)<focusSlots?target:group[random(group.length)];
-   let rarityPercent=tier.weight*100/total;
-   let chance=(focused?(1-focusChance)/group.length+Number(row===target)*focusChance:1/group.length)*rarityPercent;
+   let row;
+   if(focused&&random(table.focusPool)<table.focusTickets)row=target;
+   else{
+    const index=random(group.length-Number(focused));
+    row=group[index+Number(focused&&index>=focusIndex)];
+   }
+   let rarityPercent=weights[i]*100/total;
+   let chance=(row===target?targetShare(table):otherShare(table,i))*rarityPercent;
    if(force&&draw===0&&first){
     row=Array.isArray(force[0])?force[random(force.length)]:force;
-    const natural=cardRarity(row).index,groupSize=groups[natural].length;
-    rarityPercent=odds[natural].percent;
-    const focusedShare=natural===focus?(1-focusChance)/groupSize+Number(row===target)*focusChance:1/groupSize;
-    chance=rarityPercent*focusedShare;
+    const natural=cardRarity(row).index;
+    rarityPercent=base.weights[natural]*100/base.total;
+    chance=rarityPercent*(row===target?targetShare(base):otherShare(base,natural));
    }
    topIndex=Math.max(topIndex,cardRarity(row).index);
    const finish=rollFinish(random(10000));

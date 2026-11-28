@@ -1,3 +1,4 @@
+import {loadingMarkup} from './loading.js';
 import {headerAmount,rewardOrigin} from './reward-flight.js';
 import {cardStations} from './card-stations.js';
 import {stat,extremeTable,extremeOdds,extremeBandOdds,bandNames,stageNames,extremeStage,compareMergeStrength} from './card-economy.js';
@@ -536,6 +537,8 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
  observeArt(root);observeArt(reveal);observeArt(byId('battleRoom'));
  async function loadCollection(){
   const stamp=++version;
+  const results=byId('binderResults');
+  if(!results.firstElementChild)results.innerHTML=loadingMarkup('Loading cards…');
   try{
    const data=await readCollection();
    if(stamp!==version||view!=='collection')return;
@@ -548,7 +551,11 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
      updateSectionAlerts();
     }).catch(()=>{}).finally(()=>{if(acknowledging===through)acknowledging=0;});
    }
-  }catch(e){failure(e)}
+  }catch(e){
+   if(stamp!==version||view!=='collection')return;
+   results.textContent=e.message;
+   failure(e);
+  }
  }
  function binder(){
   if(view!=='collection')return;
@@ -569,7 +576,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
      result.innerHTML='<p>Card odds could not load. <button class="outline" id="retryOdds">Try again</button></p>';
      byId('retryOdds').onclick=()=>{rarityFailure=false;binder()};return;
     }
-    result.textContent='Loading card odds…';
+    result.innerHTML=loadingMarkup('Loading card odds…');
     if(!rarityLoading)rarityLoading=pool('Extreme Demon')
      .then(rows=>{rankedPool=rows}).catch(()=>{rarityFailure=true})
      .finally(()=>{rarityLoading=null;if(view==='collection')binder()});
@@ -703,7 +710,7 @@ export function createPackRoom({localCover,openLevel,announce,onGuide,sound,rewa
   const last=wallet?.lastPull;
   if(!last){body.innerHTML='<div class="bt-panel"><h2>Pull results</h2><p>'+(wallet?'Open a pack to see its cards here.':'Loading your pull…')+'</p><a class="outline" href="#gacha">Pack shop</a></div>';return}
   if(body.dataset.pull===last.id)return;body.dataset.pull=last.id;
-  body.textContent='Loading pull results…';
+  body.innerHTML=loadingMarkup('Loading pull results…');
   preparePullOdds(last).then(()=>{
    if(body.isConnected&&wallet?.lastPull?.id===last.id)renderResults(body,last);
   });

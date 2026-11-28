@@ -22,6 +22,7 @@ dialog{padding:0;width:min(570px,calc(100% - 28px));max-height:90svh;overflow:au
 .star-nav{grid-template-columns:repeat(6,minmax(0,1fr))}
 .star-nav .standard-auto{--tier-color:#e5c57f}.star-nav .standard-easy{--tier-color:#70ccf7}.star-nav .standard-normal{--tier-color:#94d889}.star-nav .standard-hard{--tier-color:#f2cc74}.star-nav .standard-harder{--tier-color:#f09a73}.star-nav .standard-insane{--tier-color:#ed92c6}
 .star-nav .tier-link small{color:#d7c18d}
+.star-nav .tier-link .tier-level-count{display:block;margin-top:2px;color:#c3cce1;font-variant-numeric:tabular-nums}
 .star-nav:not([hidden])+.tier-nav:not([hidden]){margin-top:8px}
 .reward{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:#f3d990;font-variant-numeric:tabular-nums;font-weight:700}
 .reward>span{color:#ffd374}.reward.moons,.reward.moons>span{color:#b8d4ff}
@@ -50,3 +51,17 @@ img.gd-rating-icon{width:1.06em;height:1.06em;display:inline-block;object-fit:co
 .save-status .outline,.save-status .save-action{padding:5px 9px;min-height:28px;font-size:inherit}
 .save-status .save-action{text-decoration:underline;text-underline-offset:3px}
 .save-status #gameSaveNotice:empty{display:none}
+.game-loading{
+ display:grid;justify-items:center;align-content:center;gap:15px;min-height:clamp(112px,22vh,210px);
+ padding:18px;color:#e9e3ff;font:750 1rem/1.2 Barlow,sans-serif;
+}
+.game-loading i{
+ display:block;width:32px;aspect-ratio:1;border:3px solid #9c84db38;border-top-color:#d7c0ff;border-right-color:#a88bf9;
+ border-radius:7px;box-shadow:0 0 18px #be8ff63b;animation:game-loading-turn .85s ease-in-out infinite;
+}
+@keyframes game-loading-turn{from{rotate:0deg}to{rotate:360deg}}
+.game-loading:not(.kingdom-loading .game-loading){
+ border:1px solid #433e5e;border-radius:10px;
+ background:radial-gradient(ellipse at 50% 36%,#292648,#161927 77%);
+}
+@media(prefers-reduced-motion:reduce){.game-loading i{animation:none}}

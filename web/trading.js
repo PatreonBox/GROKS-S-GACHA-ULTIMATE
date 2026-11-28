@@ -1,3 +1,4 @@
+import {loadingMarkup} from './loading.js';
 import {cardCategories} from './pack-engine.js';
 import {finishLabels} from './card-finishes.js';
 import {gameCommand,tradeCommand,tradeRead} from './game-client.js';
@@ -187,7 +188,7 @@ function createRoom(room,cover,syncWallet,tradeId){
  }
  async function loadPicker(request=++modalVersion){
   const state=dialogState;
-  body.querySelector('[data-picker-results]').innerHTML=textStatus('Loading cards…');
+  body.querySelector('[data-picker-results]').innerHTML=loadingMarkup('Loading cards…');
   try{
    const {cards,more}=await tradeRead('collection',{id:partner.player.id,side:state.side,q:state.term,finish:state.finish,page:state.page,...(state.difficulty?{tier:state.difficulty}:{})});
    if(modalCurrent(request)){available=cards;state.more=more;paintPicker(cards);}
@@ -202,7 +203,7 @@ function createRoom(room,cover,syncWallet,tradeId){
  async function loadList(quiet=false){
   const request=++readVersion,view=section,output=content.querySelector('[data-trade-results]');
   if(!output)return;
-  if(!quiet)output.innerHTML=textStatus('Loading trades…');
+  if(!quiet)output.innerHTML=loadingMarkup('Loading trades…');
   try{
    const {trades,more}=await tradeRead(view,{page:viewPage});
    if(!current(request))return;
@@ -242,7 +243,7 @@ function createRoom(room,cover,syncWallet,tradeId){
  async function openTrade(id,cached,linked=false){
   const request=openDialog('Trade details');
   if(cached){drawTrade(cached);return;}
-  dialogState=null;body.innerHTML=textStatus('Loading trade…');
+  dialogState=null;body.innerHTML=loadingMarkup('Loading trade…');
   try{
    const {trade}=await tradeRead('detail',{id});
    if(modalCurrent(request)){
@@ -286,7 +287,7 @@ function createRoom(room,cover,syncWallet,tradeId){
  }
  async function loadMarket(){
   const request=++readVersion,output=content.querySelector('[data-trade-results]');
-  output.innerHTML=textStatus('Loading market…');
+  output.innerHTML=loadingMarkup('Loading market…');
   try{
    const data=await tradeRead('market',{q:marketTerm,finish:marketFinish,page:viewPage,...(marketTier?{tier:marketTier}:{})});
    if(current(request)){

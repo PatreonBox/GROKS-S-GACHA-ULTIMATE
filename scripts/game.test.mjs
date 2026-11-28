@@ -24,7 +24,7 @@ import {coinEconomyVersion,startingCoins} from '../web/coin-economy.js';
 import {playerProgress,playerXpAtLevel as playerXpAt,packPlayerXp,packXpAllowance} from '../web/player-progression.js';
 import {dropAccess,dropEligible,dropAccessSummary} from '../web/drop-access.js';
 import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-access.js';
-import {buildingFootprint,collectForge,forgePlan,gemMine,gemMinePlan,housePlacementError,housePlan,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,visitorSlots} from '../web/kingdom-rules.js';
+import {buildingFootprint,buildingPlacementError,campfirePrice,collectForge,forgePlan,gemMine,gemMinePlan,housePlacementError,housePlan,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,kingdomTrail,visitorSlots} from '../web/kingdom-rules.js';
 import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
 import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
@@ -37,6 +37,7 @@ import {cardRarity} from '../web/card-rarity.js';
 import {kingdomVisitors} from '../server/kingdom-visitors.mjs';
 import {kingdomNavigation} from '../client/kingdom-navigation.js';
 import {createKingdomWalker,kingdomCubeAnimations} from '../client/kingdom-walkers.js';
+import {routeKingdomTrail} from '../client/kingdom-trail.js';
 
 const origin='https://game.example';
 const pool=createCardPool(path=>JSON.parse(fs.readFileSync(new URL('../web'+path,import.meta.url),'utf8')));
@@ -453,7 +454,7 @@ test('house lots unlock after the 75K coin and 500 Mana one-minute tower upgrade
  assert.equal((await f.command(player,'kingdom.house',args)).status,400);
  assert.deepEqual((await f.wallet(player)).discoveredVisitors,[]);
  f.store(player.id,w=>{w.coins=127_500;w.playerXp=playerXpAt(8)});
- for(const invalid of [{x:-2.65,z:0,rotation:0},{x:6.5,z:2.1,rotation:0},{x:30,z:7,rotation:0},{x:0,z:0,rotation:4}]){
+ for(const invalid of [{x:-2.65,z:0,rotation:0},{x:30,z:7,rotation:0},{x:0,z:0,rotation:4}]){
   assert.equal((await f.command(player,'kingdom.house',invalid)).status,400);
  }
  const requestId=crypto.randomUUID();
@@ -576,7 +577,7 @@ test('the six-minute phases advance with the clock and cubes can use rotated hou
  const walker=createKingdomWalker(model,{x:-3,z:8},0);
  let door=false,inside=false,left=false;
  for(let i=0;i<800;i++){
-  if(walker.update(nav,.04,()=>0,true,hit,true)==='home')door=true;
+  if(walker.update(nav,.04,()=>0,true,hit,i<550)==='home')door=true;
   if(!model.resident.visible){
    assert.ok(door&&hit.userData.inactive);
    assert.ok(Math.abs(model.resident.position.x-house.x)<.5);
@@ -585,6 +586,59 @@ test('the six-minute phases advance with the clock and cubes can use rotated hou
   }else if(inside&&model.resident.position.x>=-5.46){left=true;break}
  }
  assert.ok(door&&inside&&left);
+});
+
+test('Kingdom trails persist, route around new footprints, and can be restored without changing follow settings',async()=>{
+ const f=fixture(),player=await f.open();
+ f.store(player.id,w=>{w.coins=30_000;w.playerXp=playerXpAt(8);});
+ const points=[[0,4.3],[3.1,4.3],[6.3,4.3]],bounds=kingdomBounds();
+ const original=await f.wallet(player);
+ assert.ok(kingdomTrail(original).follow);
+ const draw=await f.command(player,'kingdom.trail',{points,follow:true});
+ assert.equal(draw.status,200);
+ assert.deepEqual(kingdomTrail(await f.wallet(player)),{points,closed:false,follow:true,custom:true});
+ assert.equal((await f.command(player,'kingdom.trail',{points:[[0,0],[99,3]]})).status,400);
+ const house={x:3.1,z:4.3,rotation:.5,expectedPrice:7500};
+ assert.equal((await f.command(player,'kingdom.house',house)).status,200);
+ const plot=kingdomStats(await f.wallet(player)),nav=kingdomNavigation(bounds,plot.buildings,[],false);
+ const trail=routeKingdomTrail(plot.trail,nav,bounds);
+ assert.equal(trail.length,1);
+ assert.ok(trail[0].points.length>4);
+ assert.ok(trail[0].points.some(point=>Math.abs(point.z-4.3)>1));
+ assert.ok(trail[0].points.every((point,i,list)=>!i||nav.clear(list[i-1],point)));
+ assert.equal(buildingPlacementError([{x:8,z:0,rotation:0}],{x:11.31,z:0,rotation:0}),'');
+ assert.match(buildingPlacementError([{x:8,z:0,rotation:0}],{x:10.9,z:0,rotation:0}),/already a building/);
+ const reset=await f.command(player,'kingdom.trail',{points:null,follow:false});
+ assert.equal(reset.status,200);
+ const fallback=kingdomTrail(await f.wallet(player));
+ assert.equal(fallback.custom,false);
+ assert.equal(fallback.follow,false);
+ assert.equal(fallback.closed,true);
+});
+
+test('campfires charge 2,500 once, and tired cubes can sleep outdoors until dawn',async()=>{
+ const f=fixture(),player=await f.open(),requestId=crypto.randomUUID();
+ f.store(player.id,w=>{w.coins=30_000;w.playerXp=playerXpAt(8);});
+ const spot={x:5.5,z:1,rotation:0,expectedPrice:campfirePrice};
+ const fire=await f.command(player,'kingdom.campfire',spot,requestId);
+ assert.equal(fire.status,200);
+ assert.equal((await f.command(player,'kingdom.campfire',spot,requestId)).status,200);
+ const wallet=await f.wallet(player),plot=kingdomStats(wallet);
+ assert.equal(wallet.coins,27_500);
+ assert.equal(plot.campfires.length,1);
+ assert.equal((await f.command(player,'kingdom.campfire',spot)).status,400);
+ const nav=kingdomNavigation(plot.land.bounds,plot.buildings,[],null);
+ assert.ok(nav.targets.campfire.length);
+ for(const [seed,sleepy] of [[0,true],[1,false]]){
+  const model={resident:new Group(),body:new Group()},hit=new Group();
+  const cube=createKingdomWalker(model,{x:4,z:-4},seed);
+  for(let i=0;i<600;i++)cube.update(nav,.04,()=>0,false,hit,true);
+  assert.equal(Boolean(cube.position.sleeping),sleepy);
+  assert.ok(model.resident.visible);
+  assert.ok(nav.passable(cube.position));
+  cube.update(nav,.04,()=>0,false,hit,false);
+  assert.equal(Boolean(cube.position.sleeping),false);
+ }
 });
 
 test('Mana Forges give a placement grant and collect server-timed mana while land expands five times',async t=>{
@@ -1273,7 +1327,7 @@ test('An arriving cube walks in from the plot edge and waves on the trail',()=>{
   const {z}=walker.position;
   assert.ok(Math.abs(before-z)<=.15);
   furthest=Math.min(z,furthest);
-  if(z===4&&model.body.rotation.z>.27)welcomed=true;
+  if(z===4&&model.body.rotation.z>.27){welcomed=true;break;}
  }
  assert.equal(furthest,4);
  assert.equal(welcomed,true);
@@ -1661,6 +1715,15 @@ test('Demon banner groups, feature gates, key prices and pity are server-proven'
  const focused=catalogue.groups[0].at(-1);
  const prepared=await prepareDemonPull({banner:'special',targetId:focused[0]},pool);
  assert.equal(rollDemonBanner('special',1,wallet,prepared,()=>0).rows[0][0],focused[0]);
+ const fullWallet={...wallet,playerXp:playerXpAt(20),bonus:0};
+ const natural=rollDemonBanner('special',1,fullWallet,{catalogue},cap=>cap===catalogue.groups[0].length?cap-1:0);
+ const target=rollDemonBanner('special',1,fullWallet,prepared,()=>0);
+ assert.equal(natural.rows[0][0],focused[0]);
+ assert.ok(Math.abs(target.drawPercents[0]/natural.drawPercents[0]-15)<1e-10);
+ const apex=catalogue.groups.at(-2)[0];
+ const apexChance=rollDemonBanner('special',1,fullWallet,{catalogue,force:apex},()=>0).drawPercents[0];
+ const featuredApex=rollDemonBanner('special',1,fullWallet,{catalogue,force:apex,target:apex},()=>0).drawPercents[0];
+ assert.ok(Math.abs(featuredApex/apexChance-15)<1e-10);
 
  const f=fixture(),player=await f.open(),pull=(banner,quantity,id=crypto.randomUUID())=>f.command(player,'demon.pull',{banner,quantity},id);
  assert.equal((await pull('special',1)).status,400);

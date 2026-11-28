@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {houseEntry,houseSize,towerPlot,trailCorners} from '../web/kingdom-rules.js';
+import {houseEntry,houseSize,towerPlot} from '../web/kingdom-rules.js';
 
 const vertex=(x,y,z)=>new THREE.Vector3(x,y,z);
 const material=(color,options={})=>new THREE.MeshStandardMaterial({color,roughness:.9,...options});
@@ -117,27 +117,7 @@ function makeGround(loader,bounds){
  return ground;
 }
 
-export function residentPath(){
- return new THREE.CatmullRomCurve3(trailCorners.map(([x,z])=>vertex(x,0,z)),true,'centripetal');
-}
-function makeTrail(path){
- const rows=180,lanes=[-1,-.65,0,.65,1],positions=[],uv=[],colors=[],indices=[];
- for(let i=0;i<=rows;i++){
-  const t=i/rows,p=path.getPointAt(t),dir=path.getTangentAt(t);
-  const width=.55+.09*Math.sin(i*.19)+.06*Math.cos(i*.43);
-  for(const lane of lanes){
-   const x=p.x+dir.z*lane*width,z=p.z-dir.x*lane*width;
-   positions.push(x,groundHeight(x,z)+.014,z);
-   uv.push((lane+1)*.5,t*12);
-   colors.push(1,1,1,Math.abs(lane)===1?0:.82);
-  }
-  if(i===0)continue;
-  const start=(i-1)*lanes.length;
-  for(let j=0;j<lanes.length-1;j++){
-   const a=start+j,b=a+lanes.length;
-   indices.push(a,b,a+1,a+1,b,b+1);
-  }
- }
+export function makeKingdomTrail(){
  const texture=grainMap(128,128,(ctx,w,h)=>{
   ctx.fillStyle='#a2966d';ctx.fillRect(0,0,w,h);
   const random=randomFor(842);
@@ -147,14 +127,51 @@ function makeTrail(path){
   }
  });
  texture.wrapT=THREE.RepeatWrapping;texture.anisotropy=4;
- const geometry=new THREE.BufferGeometry();
- geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
- geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
- geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,4));
- geometry.setIndex(indices);geometry.computeVertexNormals();
- const trail=new THREE.Mesh(geometry,material('#ffffff',{map:texture,vertexColors:true,side:THREE.DoubleSide,transparent:true,depthWrite:false}));
- trail.receiveShadow=true;
- return trail;
+ const finish=material('#ffffff',{map:texture,vertexColors:true,side:THREE.DoubleSide,transparent:true,depthWrite:false});
+ const mesh=new THREE.Mesh(new THREE.BufferGeometry(),finish);
+ mesh.receiveShadow=true;
+ function render(legs,preview=false){
+  const lanes=[-1,-.65,0,.65,1],positions=[],uv=[],colors=[],indices=[];
+  for(const {points,closed} of legs){
+   const polyline=closed?[...points,points[0]]:points;
+   const samples=[{...polyline[0],distance:0}];
+   let length=0;
+   for(let i=1;i<polyline.length;i++){
+    const a=polyline[i-1],b=polyline[i],span=Math.hypot(b.x-a.x,b.z-a.z),steps=Math.max(1,Math.ceil(span/.19));
+    for(let j=1;j<=steps;j++){
+     const t=j/steps;
+     samples.push({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t,distance:length+span*t});
+    }
+    length+=span;
+   }
+   for(const [i,{x,z,distance}] of samples.entries()){
+    const previous=samples[i-1]??(closed?samples.at(-2):samples[i]);
+    const next=samples[i+1]??(closed?samples[1]:samples[i]);
+    let dx=next.x-previous.x,dz=next.z-previous.z;
+    if(Math.hypot(dx,dz)<.001){dx=x-previous.x;dz=z-previous.z;}
+    const span=Math.max(.001,Math.hypot(dx,dz)),taper=closed?1:THREE.MathUtils.smoothstep(Math.min(distance,length-distance),-.23,.34);
+    const width=(.51+.045*Math.sin(distance*2.2))*taper;
+    const first=positions.length/3;
+    for(const lane of lanes){
+     const px=x+dz/span*lane*width,pz=z-dx/span*lane*width;
+     positions.push(px,groundHeight(px,pz)+(preview?.045:.023),pz);
+     uv.push((lane+1)*.5,distance*.44);
+     colors.push(1,1,1,Math.abs(lane)===1?0:.91*taper);
+    }
+    if(i>0)for(let j=0;j<lanes.length-1;j++){
+     const b=first+j,a=b-lanes.length;
+     indices.push(a,b,a+1,a+1,b,b+1);
+    }
+   }
+  }
+  const geometry=new THREE.BufferGeometry().setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geometry.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,4));
+  geometry.setIndex(indices);geometry.computeVertexNormals();
+  mesh.geometry.dispose();mesh.geometry=geometry;mesh.visible=Boolean(indices.length);
+  finish.color.set(preview?'#fff0b0':'#ffffff');
+ }
+ return {mesh,render};
 }
 
 function leafTexture(){
@@ -294,10 +311,10 @@ function vegetation(group,trees,bounds){
  group.add(grass);
 }
 
-export function makeLandscape(loader,path,bounds,trees){
+export function makeLandscape(loader,bounds,trees){
  const ground=new THREE.Group();
  const surface=makeGround(loader,bounds);
- ground.add(surface,makeTrail(path));
+ ground.add(surface);
  vegetation(ground,trees,bounds);
  const random=randomFor(371),hills=['#6f9f99','#6e9b97','#7a9e96','#89adab'].map(color=>material(color,{flatShading:true}));
  const geometry=new THREE.IcosahedronGeometry(1,2);

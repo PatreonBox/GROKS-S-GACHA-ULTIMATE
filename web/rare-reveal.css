@@ -67,7 +67,7 @@ dialog.rare-reveal[open]{
  50%{transform:translateY(-9px) rotateY(0) rotateZ(0)}
  75%{transform:translateY(-5px) rotateY(-2.5deg) rotateZ(-.5deg)}
 }
-.rare-deck{display:grid;position:relative;width:clamp(118px,min(75vw,46dvh),325px);transform-style:preserve-3d;transform:rotateY(180deg)}
+.rare-deck{display:grid;position:relative;width:clamp(130px,min(82vw,50.6dvh),358px);aspect-ratio:1.04;grid-template:minmax(0,1fr)/minmax(0,1fr);transform-style:preserve-3d;transform:rotateY(180deg)}
 .rare-back,.rare-front{grid-area:1/1;display:grid;place-items:stretch;-webkit-backface-visibility:hidden;backface-visibility:hidden;border-radius:13px}
 .rare-edge{position:absolute;inset:1px;border-radius:12px;transform-style:preserve-3d;background:var(--rarity)}
 .rare-edge::before,.rare-edge::after{content:"";position:absolute;top:7px;bottom:7px;width:8px;transform:rotateY(90deg);
@@ -75,11 +75,12 @@ dialog.rare-reveal[open]{
 .rare-edge::before{left:-4px}.rare-edge::after{right:-4px}
 .rare-front{position:relative;transform:translateZ(4px);overflow:hidden;background:#11111d;
  box-shadow:0 19px 43px #010108bb,0 0 38px color-mix(in srgb,var(--flare) 33%,transparent)}
-.rare-deck .level-card{width:100%;min-height:0;padding:7px 7px 12px;border-width:2px;border-radius:inherit}
+.rare-deck .level-card{width:100%;height:100%;min-height:0;padding:7px 7px 9px;border-width:2px;border-radius:inherit}
 .rare-deck .level-card:not(.holo-card,.antimatter-card){border-color:color-mix(in srgb,var(--rarity) 78%,#332b56)}
-.rare-deck .card-art{aspect-ratio:1.62}
-.rare-deck .level-card>strong{font-size:clamp(18px,3vw,31px);line-height:1.05;overflow-wrap:anywhere}
-.rare-deck .level-card small{line-height:1.22}
+.rare-deck .card-art{flex:1 1 61%;min-height:0;aspect-ratio:auto}
+.rare-deck .level-card>strong,.rare-deck .level-card>small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rare-deck .level-card>strong{font-size:clamp(17px,3vw,29px);line-height:1.08}
+.rare-deck .level-card>small{line-height:1.22}
 .rare-front::after{content:"";position:absolute;inset:0;pointer-events:none;
  background:linear-gradient(113deg,transparent 36%,#fff8 48%,#fff2 52%,transparent 62%);
  transform:translateX(-120%);opacity:.68}
@@ -158,7 +159,7 @@ dialog.rare-reveal[open]{
 @media(max-height:540px){
  dialog.rare-reveal[open]{gap:8px;padding-block:max(9px,env(safe-area-inset-top)) max(9px,env(safe-area-inset-bottom))}
  .rare-head{gap:4px}.rare-head span{padding-block:3px}.rare-head strong{font-size:clamp(25px,8dvh,47px)}.rare-head small{font-size:.72rem}
- .rare-deck{width:clamp(108px,min(68vw,39dvh),220px)}.rare-deck .level-card>strong{font-size:clamp(15px,4dvh,24px)}
+ .rare-deck{width:clamp(119px,min(74vw,43dvh),242px)}.rare-deck .level-card>strong{font-size:clamp(14px,4dvh,24px)}
  .rare-deck .level-card{padding:5px 5px 7px}
  .rare-footer{gap:7px}.rare-controls button{min-height:39px}
 }

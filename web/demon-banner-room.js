@@ -1,4 +1,5 @@
-import {demonBanners,bannerOdds,bannerPity,demonPity,demonPityUnlock,demonKeyPrice,demonKeyOffer} from './demon-banner.js';
+import {demonBanners,bannerOdds,bannerPity,demonPity,demonPityUnlock,demonKeyPrice,demonKeyOffer,featuredOddsMultiplier,proOddsMultiplier} from './demon-banner.js';
+import {loadingMarkup} from './loading.js';
 import {gameCommand} from './game-client.js';
 import {cardCategories,difficulties} from './pack-engine.js';
 import {cardFace} from './pack-model.js';
@@ -14,9 +15,9 @@ const gem='<img class="gd-gem" src="/assets/packs/gem.png" alt="">';
 const format=n=>(Number(n)||0).toLocaleString('en-US');
 const percentage=n=>n.toLocaleString('en-US',{maximumFractionDigits:6})+'%';
 const descriptions={
- standard:'Open a five-card chest for one Demon Key.',
- special:'Choose a featured level to improve your chance of pulling it.',
- pro:'Open a chest for five Demon Keys.'
+ standard:'Open for 1 key!',
+ special:'Choose a featured level to make it '+featuredOddsMultiplier+'× more likely to appear.',
+ pro:'Open for 5 keys!'
 };
 const orderedBanners=['standard','special','pro'];
 const bannerScenes={
@@ -77,6 +78,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
  function poster(){
   const scene=banner==='special'&&target?{name:target[1],difficulty:target[6],cover:coverSource(target[0])}:bannerScenes[banner];
   return '<div class="demon-banner-art" aria-hidden="true">'+levelShot(scene.cover,'banner-scenery')+'</div>'+
+   (banner!=='special'?'<img class="banner-chest" src="/assets/packs/banner-'+banner+'-chest.webp" alt="">':'')+
    '<figure class="banner-level-card">'+levelShot(scene.cover,'banner-level-shot')+
    '<figcaption>'+levelFace(scene.difficulty)+'<div><strong>'+esc(scene.name)+'</strong><small>'+esc(scene.difficulty)+'</small></div></figcaption></figure>';
  }
@@ -84,7 +86,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   if(banner!=='special')return '';
   const rarity=target&&cardRarity(target);
   return '<div class="banner-featured">'+(target?levelFace(target[6])+'<div><b>'+esc(target[1])+'</b>'+rarityBadge(rarity)+'</div>':
-   '<div><b>Featured level</b><small>Pick a level to boost its individual odds.</small></div>')+
+   '<div><b>Featured level</b><small>'+featuredOddsMultiplier+'× odds for the level you pick</small></div>')+
    '<button type="button" class="outline" data-banner-action="featured" '+(!canPull()?'disabled':'')+'>'+(target?'Change':'Choose level')+'</button></div>';
  }
  function bannerMarkup(){
@@ -94,7 +96,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
     (playerLevel()<demonBanners[key].level?lockBadge(demonBanners[key].level):'')+'</button>').join('')+
    '</div><a class="outline demon-shop-link" href="#gacha/keys">'+demonKeyIcon+' Key Shop</a></div>'+
    '<section class="demon-hero" aria-label="'+displayName(banner)+' Demon Banner"><div class="demon-hero-copy"><h2>'+displayName(banner)+'</h2>'+
-   '<p>'+descriptions[banner]+'</p>'+ (banner==='pro'?'<div class="banner-twenty"><strong>20×</strong> Legendary+ odds</div>':'')+
+   '<p>'+descriptions[banner]+'</p>'+ (banner==='pro'?'<div class="banner-twenty"><strong>'+proOddsMultiplier+'x</strong> More Lucky!</div>':'')+
    featured()+'</div>'+poster()+'</section>'+
    '<section class="banner-pull-controls" aria-label="Opening controls"><div class="banner-pull-heading"><h3>Guaranteed pulls</h3>'+
    '<button type="button" class="outline" data-banner-action="odds">'+ico('info')+' Odds &amp; pity</button>'+
@@ -157,9 +159,11 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   return el;
  }
  function showOdds(){
-  const rows=bannerOdds(banner,playerLevel(),{target:banner==='special'&&Boolean(target),luck:wallet?.luck||0}).filter(row=>row.id!=='impossible'&&row.weight);
+  const rows=bannerOdds(banner,playerLevel(),{luck:wallet?.luck||0}).filter(row=>row.id!=='impossible'&&row.weight);
   const html=rows.map(({id,label,color,percent})=>'<tr><th scope="row"><span style="--odds-color:'+color+'">'+esc(label)+'</span></th><td>'+percentage(percent)+(percent>0&&percent<.001?' · 1 in '+format(Math.round(100/percent)):'')+'</td></tr>').join('');
-  modal(displayName(banner)+' banner odds','<p>'+dropAccessSummary(playerLevel())+' Listed odds are per card before guarantees.'+(banner==='special'&&target?' Your chosen card gets a 6% chance within its rarity group, plus its usual chance.':'')+'</p>'+
+  modal(displayName(banner)+' banner odds','<p>'+dropAccessSummary(playerLevel())+' Listed odds are per card before guarantees or featured boosts.'+
+   (banner==='pro'?' Legendary and higher rarities each have '+proOddsMultiplier+'× the Standard chance.':'')+
+   (banner==='special'&&target?' Your featured level has '+featuredOddsMultiplier+'× its usual chance.':'')+'</p>'+
    '<table class="banner-odds"><thead><tr><th>Rarity</th><th>Per card</th></tr></thead><tbody>'+html+'</tbody></table>'+
    '<p>Legendary or better comes within '+format(demonPity.legendary)+' eligible draws from Level '+demonPityUnlock.legendary+'. Mythic or better comes within '+format(demonPity.mythic)+' eligible draws from Level '+demonPityUnlock.mythic+'.</p>');
  }
@@ -206,8 +210,8 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
   const previous=el.querySelector('[data-featured-previous]'),next=el.querySelector('[data-featured-next]'),pageLabel=el.querySelector('[data-featured-page]');
   let found=[],currentPage=1,controller,timer;
   function clearResults(){
-   found=[];results.replaceChildren();results.setAttribute('aria-busy','true');
-   previous.disabled=next.disabled=true;status.textContent='Loading levels…';
+   found=[];results.innerHTML=loadingMarkup('Loading levels…');results.setAttribute('aria-busy','true');
+   previous.disabled=next.disabled=true;status.textContent='';
   }
   async function load(page){
    clearTimeout(timer);controller?.abort();clearResults();
@@ -232,6 +236,7 @@ export function createDemonBannerRoom({sound,applyWallet,begin,preview,coverSour
     next.disabled=currentPage>=data.pages;
    }catch(error){
     if(request.signal.aborted||!el.open)return;
+    results.replaceChildren();
     status.textContent=error.message;
     pagination.hidden=true;
    }finally{

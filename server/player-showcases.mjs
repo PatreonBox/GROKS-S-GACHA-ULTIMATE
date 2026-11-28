@@ -12,7 +12,7 @@ export function kingdomShowcase(wallet,clock=Date.now()){
  const plot=kingdomStats(wallet,clock);
  return {
   clock,cube:equippedCube(wallet).id,stars:plot.stars,landLevel:plot.land.level,
-  towerLevel:plot.tower.level,construction:plot.tower.construction,removedTrees:plot.removedTrees,
+  towerLevel:plot.tower.level,construction:plot.tower.construction,removedTrees:plot.removedTrees,trail:plot.trail,
   buildings:plot.buildings.map(({id,x,z,rotation,kind='house',...details})=>({
    id,x,z,rotation,kind,level:kind==='house'?housePlan(details,clock).level:
     kind==='forge'?forgePlan(details,clock).level:kind===spikeKind?spikePlan(details,clock).level:1,

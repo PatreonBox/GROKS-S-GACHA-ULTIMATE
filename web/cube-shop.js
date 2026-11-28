@@ -1,3 +1,4 @@
+import {loadingMarkup} from './loading.js';
 import {cubeCatalog,cubeRarities,equippedCube,ownsCube} from './cube-catalog.js';
 import {gameCommand} from './game-client.js';
 import {stat} from './card-economy.js';
@@ -53,7 +54,7 @@ export function createCubeShop({root,applyWallet,sound,announce}){
  }
  function paint(){
   if(!shown)return;
-  if(!wallet){root.innerHTML='<h1>Cube shop</h1><p>Loading your cubes…</p>';return}
+  if(!wallet){root.innerHTML='<h1>Cube shop</h1>'+loadingMarkup('Loading your cubes…');return}
   const equipped=equippedCube(wallet),owned=cubeCatalog.filter(c=>ownsCube(wallet,c.id));
   const list=ownedOnly?owned:cubeCatalog;
   const nextSignature=[equipped.id,owned.map(cube=>cube.id).join(','),wallet.coins,ownedOnly,busy].join('/');

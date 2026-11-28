@@ -4,7 +4,7 @@ import {impossibleCover} from './impossible-cards.js';
 import {moveArt} from './combat-arts.js';
 import {cubeCatalog,equippedCube} from './cube-catalog.js';
 import {ico} from './icons.js';
-import {buildingSpecs,forgePlan,gemMine,houseStars,kingdomDaylight} from './kingdom-rules.js';
+import {buildingSpecs,campfireKind,forgePlan,gemMine,houseStars,kingdomDaylight} from './kingdom-rules.js';
 import {spikeKind,spikePlan} from './kingdom-defences.js';
 import {cardRarity,displayCardRank,rarityBadge} from './card-rarity.js';
 import {serialBadge} from './card-serials.js';
@@ -51,7 +51,7 @@ export async function visitKingdom(root,plot,alias){
   '<span><img src="/assets/gd-star.png" alt=""> <b data-visit-stars></b></span>'+
   '<span>'+number.format(plot.buildings.length+1)+' buildings</span><span>'+(plot.visitors.length+1)+(plot.visitors.length?' residents':' resident')+'</span></div>'+
   '<div class="kingdom-frame"><canvas tabindex="0" aria-label="Visit '+escape(alias)+'’s Kingdom"></canvas>'+
-  '<div class="kingdom-plot-stats"><span class="kingdom-daylight"><i aria-hidden="true"></i><b></b></span></div>'+
+  '<div class="kingdom-plot-stats"><span class="kingdom-daylight"><i aria-hidden="true"></i><b></b> <time></time></span></div>'+
   '<p class="profile-visit-selection" aria-live="polite"></p>'+
   '<div class="kingdom-hover" aria-hidden="true" hidden></div>'+
   '<div class="kingdom-controls"><span>Drag to orbit · Scroll or pinch to zoom</span><div role="group" aria-label="Camera controls">'+
@@ -80,7 +80,7 @@ export async function visitKingdom(root,plot,alias){
   const extras=building?.kind==='forge'?' · '+forgePlan(building,clock()).rate+' Mana/s':
    mine?' · 1 gem every '+gemMine.interval/60_000+' min':building?.kind===spikeKind?' · '+spikePlan(building).damage+' damage per shot':'';
   const status=upgrading?' · Upgrading to Level '+(tower?(construction.level??2):(building.upgradeLevel??2)):'';
-  selection.textContent=name(id)+(tower||building&&!mine?' · Level '+(tower?towerLevel:building.level):'')+extras+status;
+  selection.textContent=name(id)+(tower||building&&!mine&&building.kind!==campfireKind?' · Level '+(tower?towerLevel:building.level):'')+extras+status;
   world.select(id);
  }
  const world=createKingdomWorld({canvas,cube,clock,onSelect:inspect,onHover(id,point){
@@ -91,14 +91,16 @@ export async function visitKingdom(root,plot,alias){
   tooltip.style.top=Math.max(33,point.y)+'px';
  }});
  function paint(){
-  world.setPlot([...items.values()],visitors,towerLevel,plot.landLevel,construction,plot.removedTrees);
+  world.setPlot([...items.values()],visitors,towerLevel,plot.landLevel,construction,plot.removedTrees,plot.trail);
   rating.textContent=number.format(stars)+' / 5';
   inspect(selected);
  }
  function tick(){
-  const now=clock(),{night}=kingdomDaylight(now);
+  const now=clock(),{night,time}=kingdomDaylight(now);
   daylight.dataset.night=String(night);
   daylight.querySelector('b').textContent=night?'Night':'Day';
+  const label=daylight.querySelector('time');
+  label.textContent=time;label.dateTime=time;
   let changed=false;
   if(construction&&now>=construction.endsAt){towerLevel=construction.level??2;construction=null;changed=true}
   for(const building of items.values()){

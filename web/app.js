@@ -17,6 +17,8 @@ import {setupLevelUps} from './level-up.js';
 import {setupAchievementBanners} from './progression.js';
 import {levelMarketDetails} from './trade-card-view.js';
 import {cardRarity,indexCardRanks,rarityBadge} from './card-rarity.js';
+import {discoveryTotals} from './data/discovery-index.js';
+import {loadingMarkup} from './loading.js';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=n=>n==null?'—':Number(n).toLocaleString('en-US');
@@ -107,14 +109,14 @@ function drawTierNav() {
   starNav.innerHTML=Object.entries(starTiers).map(([slug,tier])=>{
    const active=isStarList()&&activeTier===slug;
    const range=tier.stars.join('–');
-   return '<a class="tier-link standard-'+slug+(active?' selected':'')+'" href="#stars/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/'+slug+'.webp" alt=""><span><strong>'+tier.name+'</strong><small>'+range+' '+(range==='1'?'star':'stars')+'</small></span></a>';
+   return '<a class="tier-link standard-'+slug+(active?' selected':'')+'" href="#stars/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/'+slug+'.webp" alt=""><span><strong>'+tier.name+'</strong><small>'+range+' '+(range==='1'?'star':'stars')+'</small><small class="tier-level-count">'+num(discoveryTotals[tier.name])+' levels</small></span></a>';
   }).join('');
  }
  const nav=$('tierNav');nav.hidden=playerRanks()||['saved','gacha','battle','kingdom','trading','progression'].includes(section)||isStarList();
  if(nav.hidden)return;
  nav.innerHTML=Object.entries(tierNames).map(([slug, label])=>{
   const meta=seed.demonTiers?.[slug],active=section==='demons'&&activeTier===slug;
-  return '<a class="tier-link '+slug+(active?' selected':'')+'" href="#demons/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/demon-'+slug+'.webp" alt=""><span><strong>'+label+' Demons</strong><small>'+num(meta?.count)+(slug==='extreme'?' ranked':' levels')+'</small></span></a>';
+  return '<a class="tier-link '+slug+(active?' selected':'')+'" href="#demons/'+slug+'" '+(active?'aria-current="page"':'')+'><img src="/assets/faces/demon-'+slug+'.webp" alt=""><span><strong>'+label+' Demons</strong><small>'+num(meta?.count)+' levels</small></span></a>';
  }).join('');
 }
 const baseSorts=[['downloads','Most downloaded'],['likes','Most liked'],['newest','Newest ID'],['tier','Difficulty tier']];
@@ -266,6 +268,7 @@ async function loadPage(){
  const abort=queryAbort,filters=boardFilters(),{q,diff,s}=filters;
  if(isArchiveBoard())archiveRefresh.checked();
  searching(true);$('resultMeta').textContent='Searching…';$('retry').hidden=true;
+ if(!$('results').querySelector('.game-loading'))$('results').innerHTML=loadingMarkup('Loading levels…');
  try{
   if(isStarList()){
    const rows=await loadTier(activeTier,'stars');

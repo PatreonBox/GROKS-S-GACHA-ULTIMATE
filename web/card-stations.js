@@ -8,6 +8,7 @@ import {rewardOrigin} from './reward-flight.js';
 import {fusionPairHTML,playFusion} from './fusion-show.js';
 import {cardRarity,displayCardRank,rarityBadge} from './card-rarity.js';
 import {serialBadge} from './card-serials.js';
+import {loadingMarkup} from './loading.js';
 
 export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,openLevel,announce}){
  let current=null,all=[],pools=[],wallet=null,revision=0,category=0,filter='',status='all',page=0,selected=0,busy=false;
@@ -27,7 +28,7 @@ export function cardStations({enc,faceIcon,gem,card,rewards,applyWallet,sound,op
  async function show(view,w){
   current=view;wallet=w;const token=++revision;if(!['index','merge','vault'].includes(view))return;
   const area=body();if(!area)return;
-  if(!all.length)area.innerHTML='<p>Loading cards…</p>';
+  if(!area.firstElementChild)area.innerHTML=loadingMarkup('Loading cards…');
   try{
    const [records,lists]=await Promise.all([readIndex(),view==='vault'?pools:Promise.all(difficulties.map(pool))]);
    if(token!==revision||body()!==area)return;all=records;pools=lists;own.clear();records.forEach(c=>own.set(c.id,c));render();

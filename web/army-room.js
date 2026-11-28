@@ -1,3 +1,4 @@
+import {loadingMarkup} from './loading.js';
 import {armyChapters,armySeries,findArmySeries,seriesCleared,seriesUnlocked,seriesFinaleReward,chapterCleared,chapterUnlocked,chapterGems,trilogyStageKeys,configureTrilogy,armyLoot,armyTrialIds,armyRivals,beginArmyRun,startArmyBattle,settleArmyBattle} from './army-trilogy.js';
 import {stat} from './card-economy.js';
 import {difficulties,readCollection,pool} from './pack-engine.js';
@@ -132,7 +133,7 @@ export function createArmyRoom({root,sound,coverSource,enc,getWallet,applyWallet
   el('library').textContent=trial?'Trial cards':'Your cards';
   root.querySelector('[data-army-act="clear"]').disabled=!deployment.length;
   if(collectionError){list.innerHTML='<p>Could not load your cards.</p>';return}
-  if(!loaded){list.innerHTML='<p>Loading cards…</p>';return}
+  if(!loaded){list.innerHTML=loadingMarkup('Loading cards…');return}
   const filtered=usable.filter(c=>!filter||[c.row[1],c.row[6],c.row[0],armyStats(c.row).style].join(' ').toLowerCase().includes(filter));
   if(!filtered.length){list.innerHTML='<p>'+(filter?'No matching cards.':'Your cards are recovering.')+'</p>';return}
   list.innerHTML=filtered.slice(0,64).map(c=>{
