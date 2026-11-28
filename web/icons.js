@@ -56,6 +56,7 @@ const paths={
  spark:'<path d="m12 2 2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z"/>',
  inspect:'<path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/><path d="M8 12h8m-4-4v8"/>',
  left:'<path d="m14.5 5-7 7 7 7"/>',right:'<path d="m9.5 5 7 7-7 7"/>',down:'<path d="m5 9 7 7 7-7"/>',
+ play:'<path d="m8 5 11 7-11 7z"/>',pause:'<path d="M9 5v14m6-14v14"/>',
  crown:'<path d="m3 7 5 4 4-7 4 7 5-4-2 11H5zM6 21h12"/>',list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.5M3 12h.5M3 18h.5"/>',
  database:'<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v13c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>',
  search:'<circle cx="10" cy="10" r="6.5"/><path d="m15 15 5.5 5.5"/>',filter:'<path d="M3 6h18M6 12h12M10 18h4"/>',sort:'<path d="M3 6h11M3 11h8M3 16h5m9-12v16m-4-4 4 4 4-4"/>',

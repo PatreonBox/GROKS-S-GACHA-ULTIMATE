@@ -5,7 +5,7 @@ import {rankOddsVersion} from './card-economy.js';
 import {playerProgress} from './player-progression.js';
 import {featureLevel} from './level-access.js';
 import {impossibleCategory} from './impossible-cards.js';
-import {dropAccess,dropAccessSummary,dropEligible,dropUnlocks} from './drop-access.js';
+import {difficulties,dropAccess,dropAccessSummary,dropEligible,dropUnlocks} from './drop-access.js';
 
 export {bannerUnlockDelay,demonKeyOffer,demonKeyPrice,keyLimit} from './demon-keys.js';
 
@@ -21,6 +21,7 @@ const tickets=1_000_000;
 // Each Pro Legendary-and-higher tier has exactly twenty times its Standard odds, at the same player level.
 const baseWeights=[528000,285000,126000,42810,15000,2000,700,300,100,55,22,8,5];
 export const featuredOddsMultiplier=15;
+export const bannerSlideDifficulties=Object.freeze(difficulties.slice(1));
 export const keyBannerLevelCap=100;
 export const proOddsMultiplier=20;
 export const bannerLuckCap=500;
@@ -145,6 +146,23 @@ function availableBannerGroups(catalogue,access){
   cache.set(access.level,{groups,groupCounts});
  }
  return cache.get(access.level);
+}
+
+export async function bannerShowcaseLevels(getPool,hasArt,wallet){
+ const level=playerProgress(wallet?.playerXp).level;
+ const {groups}=availableBannerGroups(await demonCatalogue(getPool),dropAccess(level));
+ const luck=wallet?.luck||0,options={groups,luck};
+ const standard=bannerOdds('standard',level,options),pro=bannerOdds('pro',level,options);
+ const slides=new Map(bannerSlideDifficulties.map(difficulty=>[difficulty,[]]));
+ for(const [index,group] of groups.entries()){
+  if(!standard[index].weight)continue;
+  const standardWeight=standard[index].weight/group.length,proWeight=pro[index].weight/group.length;
+  for(const row of group){
+   if(!slides.has(row[6])||!hasArt(row[0]))continue;
+   slides.get(row[6]).push({id:row[0],name:row[1],standardWeight,proWeight});
+  }
+ }
+ return [...slides.values()];
 }
 
 export function rollDemonBanner(id,quantity,wallet,{catalogue,target,force,preview=false},random=randomBelow){

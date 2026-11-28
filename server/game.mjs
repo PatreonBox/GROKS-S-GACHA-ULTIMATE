@@ -19,7 +19,7 @@ import {trainingLevels} from '../web/progression-rules.js';
 import {achievementActionEvents,achievementStatistics,refreshAchievementWallet,seedAchievements,updateAchievements} from './progression.mjs';
 import {playerModeration} from './player-moderation.mjs';
 import {grantDiscordKeyBonus,playerNotifications} from './game-notifications.mjs';
-import {browseDemonTargets,demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
+import {bannerShowcaseLevels,browseDemonTargets,demonTargetSearch,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
 import {draftCardEditions} from './card-editions.mjs';
 import {initDemonKeys,keyLimit,releaseAchievementKeys,rewardDemonKeys} from '../web/demon-keys.js';
 
@@ -517,6 +517,7 @@ export function gameRoutes(readJson,hasArt){
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});
    if(view==='achievement-stats')return json({'achievement-stats':await achievementStatistics(db,{adminOwner,discordOnly:requiresSignIn})});
+   if(view==='banner-levels')return json({'banner-levels':await bannerShowcaseLevels(getPool,hasArt,JSON.parse(record.wallet))});
    if(view==='demon-featured-levels')return json(await browseDemonTargets(getPool,{
     query:url.searchParams.get('q')||'',category:url.searchParams.get('category'),page:Number(url.searchParams.get('page')),
     playerLevel:playerProgress(JSON.parse(record.wallet).playerXp).level

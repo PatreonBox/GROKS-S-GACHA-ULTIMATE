@@ -13,28 +13,58 @@
 .demon-key-link .demon-key-icon,.demon-shop-link .demon-key-icon{width:24px;height:18px}
 .demon-shop-link{min-height:44px;white-space:nowrap}
 .demon-hero{position:relative;display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);align-items:center;gap:clamp(10px,3vw,42px);min-height:311px;overflow:hidden;isolation:isolate;border:1px solid color-mix(in srgb,var(--banner) 38%,#2e344b);border-radius:15px;background:radial-gradient(ellipse at 81% 46%,var(--banner-core),transparent 74%),var(--banner-deep);padding:clamp(19px,4vw,58px)}
-.demon-hero-copy{position:relative;z-index:1;min-width:0;animation:demon-in .25s ease-out both}
-.demon-hero h2,.demon-key-header h2{margin:0;font:800 clamp(45px,8vw,104px)/.88 Cond,Barlow,sans-serif;letter-spacing:.008em;color:#f6f5ff;text-transform:uppercase}
+.banner-intro{position:relative;isolation:isolate;display:grid;align-self:stretch;align-items:center;min-width:0}
+.banner-chest{
+ position:absolute;left:48%;top:50%;transform:translate(-50%,-50%);pointer-events:none;
+ width:min(100%,420px);max-height:100%;object-fit:contain;opacity:.6;
+ filter:drop-shadow(0 18px 19px #030510bf) drop-shadow(0 0 24px color-mix(in srgb,var(--banner) 22%,transparent));
+}
+.demon-hero-copy{position:relative;z-index:1;min-width:0;text-shadow:0 2px 5px #080c18,0 0 23px #080c18e8;animation:demon-in .25s ease-out both}
+.demon-hero h2,.demon-key-header h2{margin:0;font:800 clamp(43px,7.85vw,104px)/.88 Cond,Barlow,sans-serif;letter-spacing:.008em;color:#f6f5ff;text-transform:uppercase}
 .demon-hero-copy>p,.demon-key-header p{max-width:45ch;margin:15px 0 0;color:#d7e0f4;font-size:clamp(14px,1.55vw,19px);line-height:1.4}
 .banner-twenty{display:inline-flex;align-items:center;gap:8px;margin-top:15px;color:#ffedba;font-weight:700}
 .banner-twenty strong{font:800 30px/1 Cond,Barlow,sans-serif;color:var(--banner)}
 .demon-banner-art{position:absolute;inset:0;z-index:-1;pointer-events:none}
-.banner-scenery{width:100%;height:100%;object-fit:cover;object-position:72% 50%;filter:saturate(.9);opacity:.61}
-.demon-banner-art:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#101322 0%,color-mix(in srgb,var(--banner-deep) 96%,transparent) 27%,transparent 87%),linear-gradient(0deg,var(--banner-deep),transparent 57%),repeating-linear-gradient(132deg,transparent 0 25px,#e8f1ff14 26px 27px)}
-.banner-level-card{position:relative;width:min(100%,520px);aspect-ratio:16/9;margin:0 0 0 auto;overflow:hidden;isolation:isolate;border:1px solid color-mix(in srgb,var(--banner) 61%,#2b3b57);border-radius:14px;background:radial-gradient(ellipse at 70% 16%,var(--banner-core),var(--banner-deep));box-shadow:0 18px 36px #0306119e,0 0 30px color-mix(in srgb,var(--banner-core) 76%,transparent);transform:perspective(1000px) rotateY(-8deg) rotateZ(-2deg)}
+.banner-scenery{width:100%;height:100%;object-fit:cover;object-position:72% 50%;filter:saturate(.9);opacity:.51}
+.demon-banner-art:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#101322 0%,color-mix(in srgb,var(--banner-deep) 94%,transparent) 27%,transparent 87%),linear-gradient(0deg,var(--banner-deep),transparent 57%),repeating-linear-gradient(132deg,transparent 0 25px,#e8f1ff14 26px 27px)}
+.banner-carousel{position:relative;width:min(100%,540px);min-width:0;justify-self:end}
+.banner-level-card{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;isolation:isolate;touch-action:pan-y;user-select:none;border:1px solid color-mix(in srgb,var(--banner) 61%,#2b3b57);border-radius:14px;background:radial-gradient(ellipse at 70% 16%,var(--banner-core),var(--banner-deep));box-shadow:0 18px 36px #0306119e,0 0 30px color-mix(in srgb,var(--banner-core) 76%,transparent);transform:perspective(1000px) rotateY(-7deg) rotateZ(-1.6deg)}
 .banner-level-card:after{content:"";position:absolute;inset:5px;z-index:1;pointer-events:none;border:1px solid #ffffff29;border-radius:9px}
+.banner-frames{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+.banner-slide{position:absolute;inset:0;margin:0;background:radial-gradient(ellipse at 70% 16%,var(--banner-core),var(--banner-deep));translate:var(--banner-drag,0px) 0}
 .banner-level-shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.demon-hero:has(.banner-chest){grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}
-.banner-chest{
- grid-area:1/2;justify-self:center;align-self:center;z-index:1;pointer-events:none;
- width:min(91%,440px);max-height:clamp(158px,30vw,318px);object-fit:contain;
- filter:drop-shadow(0 21px 21px #030510bf) drop-shadow(0 0 28px color-mix(in srgb,var(--banner) 24%,transparent));
+.banner-level-card[data-dragging]{cursor:grabbing}
+.banner-frames .game-loading[role="status"],.banner-preview-error{
+ align-self:stretch;width:100%;min-height:0;margin:0;border:0;box-shadow:none;background:none;
 }
-.demon-hero:has(.banner-chest) .banner-level-card{
- grid-area:1/2;justify-self:end;align-self:end;width:min(83%,432px);opacity:.52;
- transform:perspective(1000px) rotateY(-9deg) rotateZ(-6deg);
+.banner-preview-error{display:grid;place-content:center;justify-items:center;gap:8px;padding:8px;color:#e1e9fa;text-align:center}
+.banner-preview-error p{margin:0}
+.banner-arrow,.banner-rotation{
+ display:grid;place-items:center;padding:0;color:#fff;background:#090f1cdf;
+ border:1px solid #ffffff4a;border-radius:9px;
+ transition:opacity .2s,background-color .2s,border-color .2s;
 }
-.demon-hero:has(.banner-chest) figcaption{visibility:hidden}
+.banner-arrow{position:absolute;z-index:2;top:50%;transform:translateY(-50%);width:37px;height:42px}
+.banner-arrow[data-banner-step="-1"]{left:12px}
+.banner-arrow[data-banner-step="1"]{right:12px}
+.banner-arrow:disabled{opacity:0;pointer-events:none}
+.banner-arrow:hover,.banner-rotation:hover{border-color:var(--banner);background:#141e30}
+.banner-arrow svg,.banner-rotation svg{width:19px;height:19px}
+.banner-carousel-controls{display:flex;justify-content:center;align-items:center;gap:8px;min-height:36px;margin-top:10px}
+.banner-dots{display:flex;align-items:center;justify-content:center}
+.banner-dots button{display:grid;place-items:center;min-width:20px;width:clamp(20px,2.1vw,26px);height:32px;padding:0;color:#fff;border-radius:5px}
+.banner-dots button:before{content:"";width:7px;height:7px;border-radius:99px;background:currentColor;opacity:.68;transition:width .2s,opacity .2s}
+.banner-dots button:hover:before,.banner-dots button:focus-visible:before{opacity:1}
+.banner-dots button[aria-current="true"]:before{width:15px;opacity:1;box-shadow:0 0 9px var(--banner)}
+.banner-dots button:disabled{cursor:default;opacity:.3}
+.banner-rotation{flex:none;width:30px;height:30px}
+.banner-rotation:disabled{opacity:.4;cursor:default}
+.banner-rotation svg{width:15px;height:15px}
+.banner-carousel-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media(hover:hover) and (pointer:fine){
+ .banner-arrow{opacity:0;pointer-events:none}
+ .banner-level-card:hover .banner-arrow:enabled,.banner-carousel:has(:focus-visible) .banner-arrow:enabled{opacity:1;pointer-events:auto}
+}
 .banner-level-card figcaption{position:absolute;inset:auto 0 0;display:flex;align-items:center;gap:9px;padding:clamp(9px,1.5vw,19px);padding-top:clamp(14px,3vw,32px);background:linear-gradient(0deg,#070d19 0%,#070d19eb 38%,transparent 100%)}
 .banner-level-face{width:36px;height:36px;flex:none;object-fit:contain}
 .banner-level-card figcaption>div{display:grid;min-width:0}
@@ -140,13 +170,14 @@
  .demon-controls button{display:flex;flex-direction:column;gap:2px;min-height:46px;padding:5px 3px;font-size:13px}
  .demon-controls .level-lock{font-size:10px;padding:2px 3px}
  .demon-shop-link{padding-inline:7px;font-size:12px;gap:4px}
- .demon-hero{grid-template-columns:1fr;gap:16px;min-height:234px;padding:17px 12px}
+ .demon-hero{grid-template-columns:minmax(0,1fr);gap:10px;min-height:234px;padding:12px}
+ .banner-intro{min-height:137px;padding-block:12px}
+ .banner-chest{left:56%;width:min(83%,275px)}
  .demon-hero-copy>p{margin-top:8px}
  .demon-banner-art:after{background:linear-gradient(155deg,#101322f0,transparent 80%),linear-gradient(0deg,var(--banner-deep),transparent 60%)}
- .banner-level-card{width:100%;aspect-ratio:17/8;margin:0;transform:none}
- .demon-hero:has(.banner-chest){grid-template-columns:minmax(0,1fr)}
- .demon-hero:has(.banner-chest) :is(.banner-chest,.banner-level-card){grid-area:2/1}
- .banner-chest{max-height:190px}
+ .banner-level-card{transform:none}
+ .banner-carousel-controls{margin-top:5px}
+ .banner-arrow{width:33px;height:36px}
  .banner-level-card .banner-level-face{width:29px;height:29px}
  .banner-featured,.banner-twenty{margin-top:10px}
  .banner-featured{background:#181325ed;gap:5px}
@@ -165,4 +196,4 @@
  .key-shop-regular form,.key-shop-offer button{grid-column:1/-1;justify-self:end}
  .demon-key-header a{padding-inline:7px;text-align:center}
 }
-@media(prefers-reduced-motion:reduce){.demon-hero-copy,.banner-dialog[open]{animation:none}.demon-controls button{transition:none}}
+@media(prefers-reduced-motion:reduce){.demon-hero-copy,.banner-dialog[open]{animation:none}.demon-controls button,.banner-arrow,.banner-rotation,.banner-dots button:before{transition:none}}
