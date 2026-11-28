@@ -1,13 +1,16 @@
-import {waveRise} from './remix-wave.js';
-import {newTidalCube,stepTidalOverlayCube,tidalOverlayCubeEnd} from './tidal-cube-intro.js';
+import {waveRise,waveVerticalOffsets} from './remix-wave.js';
+import {newTidalCube,stepLegacyTidalCube,stepTidalOverlayCube,tidalOrbSequence,tidalOverlayCubeEnd} from './tidal-cube-intro.js';
 
 export const tidalVideoId=86407629;
 export const tidalStep=1/120;
 export const tidalLength=27.067;
 export const tidalStart=3.67;
 export const tidalWidth=800,tidalHeight=500,tidalX=304;
-export const tidalVideoMode='video-overlay';
-export const tidalVideoVersion=4;
+export const tidalWaveCeiling=40,tidalWaveFloor=422;
+export const tidalVideoMode='video-rhythm';
+export const tidalVideoVersion=5;
+const speedBoostAt=4.60,flightInsetDuration=.30;
+const waveOffsets=[false,true].map(mini=>[false,true].map(held=>waveVerticalOffsets(held,mini)));
 export const tidalPortals=[
  [14.08,true],[15.07,false],[16.43,true],[17.36,false],
  [18.84,true],[19.25,false],[21.44,true],[22.35,false],[23.52,true],[24.64,false]
@@ -16,11 +19,11 @@ export const tidalPortals=[
 // Measured by tracking horizontal movement across six bands of the shipped recording.
 export function tidalScrollSpeed(time){
  if(time<tidalStart)return 0;
- return time<4.60?392:902;
+ return time<speedBoostAt?392:902;
 }
 
 export function newTidalWave(version=tidalVideoVersion){
- return {tick:0,distance:0,y:tidalHeight/2,mini:false,held:false,pressed:false,portal:0,
+ return {version,tick:0,distance:0,y:tidalHeight/2,mini:false,held:false,pressed:false,portal:0,
   form:version===2?'wave':'cube',cube:version===2?null:newTidalCube(),crashReason:null};
 }
 export function tidalInput(run,kind,value){
@@ -32,12 +35,15 @@ export function stepTidalWave(run){
  const time=++run.tick*tidalStep;
  const pressed=run.pressed;
  run.pressed=false;
+ const legacy=run.version===2||run.version===4;
  if(run.form==='cube'){
-  if(stepTidalOverlayCube(run.cube,time,tidalStep,pressed)==='crash'){
+  const result=legacy?stepLegacyTidalCube(run.cube,time,tidalStep,pressed):
+   stepTidalOverlayCube(run.cube,time,tidalStep,pressed,tidalHeight);
+  if(result==='crash'){
    run.crashReason=run.cube.crashReason;
    return 'crash';
   }
-  if(time>=tidalOverlayCubeEnd)run.form='transition';
+  if(time>=tidalOverlayCubeEnd&&(legacy||run.cube.nextOrb===tidalOrbSequence.length))run.form='transition';
   return null;
  }
  if(run.form==='transition'){
@@ -54,10 +60,23 @@ export function stepTidalWave(run){
   const stride=speed*tidalStep;
   run.distance+=stride;
   run.y+=waveRise(stride,run.held,run.mini);
-  const radius=run.mini?11:17;
-  if(run.y-radius<0||run.y+radius>tidalHeight){
-   run.crashReason='edge';
-   return 'crash';
+  if(legacy){
+   const radius=run.mini?11:17;
+   if(run.y-radius<0||run.y+radius>tidalHeight){
+    run.crashReason='edge';
+    return 'crash';
+   }
+  }else{
+   const [top,bottom]=waveOffsets[Number(run.mini)][Number(run.held)];
+   const inset=Math.min(1,Math.max(0,1+(time-speedBoostAt)/flightInsetDuration));
+   const minY=tidalWaveCeiling*inset-top;
+   const maxY=tidalHeight-(tidalHeight-tidalWaveFloor)*inset-bottom;
+   if(run.y<=minY||run.y>=maxY){
+    const up=run.y<=minY;
+    run.y=up?minY:maxY;
+    run.crashReason=up?'ceiling':'floor';
+    return 'crash';
+   }
   }
  }
  return time>=tidalLength?'clear':null;

@@ -1,5 +1,9 @@
 const defaultColor='#65f6e1';
 const accents=new Map();
+const outerTail=[[-5,-10],[-21,-12],[-16,0],[-21,12],[-5,10],[1,0]];
+const outerBody=[[23,0],[-12,17],[-17,16],[-10,0],[-17,-16],[-12,-17]];
+const outerPoints=[...outerTail,...outerBody];
+const miniScale=.62;
 
 function accent(color){
  if(!accents.has(color)){
@@ -12,6 +16,14 @@ function accent(color){
 }
 
 export const waveRise=(speed,held,mini=false)=>(held?-1:1)*speed*(mini?2:1);
+export const waveAngle=(held,mini)=>Math.atan(waveRise(1,held,mini));
+
+export function waveVerticalOffsets(held,mini){
+ const angle=waveAngle(held,mini), sin=Math.sin(angle), cos=Math.cos(angle);
+ const size=mini?miniScale:1;
+ const ys=outerPoints.map(([x,y])=>(x*sin+y*cos)*size);
+ return [Math.min(...ys),Math.max(...ys)];
+}
 
 export function keepWavePoint(points,x,y,screenX){
  const tip=points.at(-1),corner=points.at(-2);
@@ -33,11 +45,11 @@ function polygon(ctx,points,color){
 
 export function drawWave(ctx,{x,y,angle=0,mini=false,skin,scale=1}){
  const primary=skin?.color??defaultColor,secondary=skin?.secondaryColor??accent(primary);
- const size=scale*(mini?.62:1);
+ const size=scale*(mini?miniScale:1);
  ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.scale(size,size);
- polygon(ctx,[[-5,-10],[-21,-12],[-16,0],[-21,12],[-5,10],[1,0]],'#071120');
+ polygon(ctx,outerTail,'#071120');
  polygon(ctx,[[-7,-7],[-17,-8],[-13,0],[-17,8],[-7,7],[-2,0]],secondary);
- polygon(ctx,[[23,0],[-12,17],[-17,16],[-10,0],[-17,-16],[-12,-17]],'#071120');
+ polygon(ctx,outerBody,'#071120');
  polygon(ctx,[[18,0],[-11,13],[-6,0],[-11,-13]],primary);
  polygon(ctx,[[18,0],[-11,-13],[-8,-7],[1,-3]],secondary);
  ctx.restore();

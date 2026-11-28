@@ -379,7 +379,7 @@ const rules={
   const video=id===tidalVideoId&&requestedMode===tidalVideoMode?tidalVideoVersion:0;
   const mode=video?'normal':requestedMode??'normal';
   requireRule(remix,'Choose a featured level.');
-  requireRule(id!==tidalVideoId||!['video','video-sync','video-orbs'].includes(requestedMode),'Refresh the page to play the updated Tidal Wave.');
+  requireRule(id!==tidalVideoId||!['video','video-sync','video-orbs','video-overlay'].includes(requestedMode),'Refresh the page to play the updated Tidal Wave.');
   requireRule(video||requestedMode===undefined||requestedMode==='normal'||requestedMode==='endless','Choose Normal or Endless mode.');
   const token=crypto.randomUUID();
   const version=requestedMode===undefined?1:mode==='endless'?2:remixPhysicsVersion;

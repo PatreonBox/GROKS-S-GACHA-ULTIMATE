@@ -1,20 +1,28 @@
 import {ico} from './icons.js';
 import {starterCube} from './cube-catalog.js';
 import {bindRunnerControls} from './remix-controls.js';
-import {drawWave,drawWaveTrail,keepWavePoint,waveRise} from './remix-wave.js';
+import {drawWave,drawWaveTrail,keepWavePoint,waveAngle} from './remix-wave.js';
 import {tidalCubeRadius} from './tidal-cube-intro.js';
 import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep,tidalWidth,tidalHeight,tidalX,tidalVideoMode} from './tidal-video-rules.js';
 
 const source='/arcade-video/tidal-wave.mp4';
 const waveDuration=Math.ceil(tidalLength/tidalStep);
-const introInstructions='Tap on the pink orb flash, then the green flash.';
-const greenInstruction='Tap the green flash to flip gravity.';
+const introInstructions='Tap the flashes in order. Pink, green, green, pink, pink.';
 const transitionInstruction='Get ready for the wave portal.';
-const waveInstructions='Hold to climb. Release to dive. Stay inside the frame.';
+const cubeInstructions=[
+ introInstructions,
+ 'Tap the first green flash to flip gravity.',
+ 'Tap the second green flash to flip back.',
+ 'Tap both pink flashes to jump.',
+ 'Tap the last pink flash.',
+ transitionInstruction
+];
+const waveInstructions='Hold to climb. Release to dive. Stay between the floor and ceiling.';
 
 function paintCube(ctx,cube,avatar,icon){
  const r=tidalCubeRadius;
  ctx.save();ctx.translate(tidalX,cube.y);ctx.rotate(cube.angle);
+ ctx.scale(1,cube.gravity);
  ctx.shadowBlur=13;ctx.shadowColor=avatar.color;
  if(icon.naturalWidth)ctx.drawImage(icon,-r,-r,r*2,r*2);
  else{
@@ -65,7 +73,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
     ctx.shadowBlur=18*(1-age/.28);
     ctx.shadowColor=run.mini?'#ff82e5':'#97ffc5';
    }
-   drawWave(ctx,{x:tidalX,y:run.y,angle:Math.atan(waveRise(1,run.held,run.mini)),mini:run.mini,skin:avatar});
+   drawWave(ctx,{x:tidalX,y:run.y,angle:waveAngle(run.held,run.mini),mini:run.mini,skin:avatar});
    ctx.restore();
   }
   size.textContent=run.form==='cube'?'CUBE':run.form==='transition'?'GET READY':run.mini?'MINI WAVE':'WAVE';
@@ -74,6 +82,12 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  function updateControls(){
   pad.textContent=run.form==='cube'?'Tap orb':'Hold to climb';
   pad.hidden=phase!=='running'||run.form==='transition'||!touch.matches;
+ }
+ function instructions(){
+  if(run.form==='wave')return waveInstructions;
+  if(run.form==='transition')return transitionInstruction;
+  if(run.cube.missedOrb)return 'Missed the '+run.cube.missedOrb+' orb.';
+  return cubeInstructions[run.cube.nextOrb];
  }
  function show(next,message){
   phase=next;output.textContent=message;
@@ -88,7 +102,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
   video.pause();stopFrame();
   const attempt=token;
   const reason=run.crashReason;
-  const message=reason==='edge'?'The wave touched the edge of the screen.':reason;
+  const message=run.form==='wave'?'The wave hit the '+reason+'.':reason;
   show(result,result==='clear'?'Tidal Wave cleared!':message);
   if(result==='crash'&&!video.muted){
    sound.playGameReady?.('gdDeath',{level:.76},()=>!closed&&phase==='crash'&&token===attempt&&!video.muted);
@@ -108,15 +122,16 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
     const [,kind,value]=trace[applied++];
     tidalInput(run,kind,value);
    }
-   const before=run.portal,form=run.form,orb=run.cube.nextOrb;
+   const before=run.portal,form=run.form,orb=run.cube.nextOrb,missed=run.cube.missedOrb;
    const status=stepTidalWave(run);
    if(run.cube.nextOrb!==orb){
-    output.textContent=run.cube.nextOrb===1?greenInstruction:transitionInstruction;
+    output.textContent=instructions();
     if(!video.muted)sound.playGame?.('orb',{level:.55});
    }
+   if(run.cube.missedOrb!==missed)output.textContent=instructions();
    if(run.form!==form){
     updateControls();
-    output.textContent=run.form==='wave'?waveInstructions:transitionInstruction;
+    output.textContent=instructions();
     if(run.form==='wave'&&!video.muted)sound.playGame?.('portal',{level:.55});
    }
    if(run.portal!==before)lastPortal=run.tick*tidalStep;
@@ -157,8 +172,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
   show('paused','Paused.');
  }
  function play(){
-  const cubeHints=[introInstructions,greenInstruction,transitionInstruction];
-  show('running',run.form==='cube'?cubeHints[run.cube.nextOrb]:run.form==='wave'?waveInstructions:transitionInstruction);
+  show('running',instructions());
   canvas.focus({preventScroll:true});
   video.play().then(scheduleFrame).catch(()=>{
    if(phase==='running')show('paused','Press Resume to play the recording.');

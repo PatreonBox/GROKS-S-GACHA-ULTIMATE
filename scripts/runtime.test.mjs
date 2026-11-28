@@ -18,9 +18,9 @@ import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
-import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion} from '../web/tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion,tidalWaveCeiling,tidalWaveFloor} from '../web/tidal-video-rules.js';
 import {replayTidalVideo} from '../web/game-replay.js';
-import {keepWavePoint} from '../web/remix-wave.js';
+import {keepWavePoint,waveVerticalOffsets} from '../web/remix-wave.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
@@ -68,56 +68,91 @@ test('Recorded wave follows the measured speed transition and replays through th
  assert.throws(()=>replayTidalVideo({start:0,video:true},{ticks:487,trace:[]},tidalLength*1000),/expired/);
 });
 
-test('Recorded flight begins with two separate orb taps and reveals the wave at its portal',()=>{
+const introTaps=[51,78,106,134,161];
+function tidalTraceInput(run,trace,held){
+ trace.push([run.tick,'held',held]);
+ tidalInput(run,'held',held);
+}
+function tapTidalOrb(run,trace){
+ tidalTraceInput(run,trace,true);
+ tidalTraceInput(run,trace,false);
+}
+
+test('The cube falls on missed pink taps and rises into the ceiling when only one green orb is hit',()=>{
  const session={start:0,video:tidalVideoVersion};
- for(const [taps,missed] of [[[],'pink'],[[53],'green']]){
+ for(const [count,missed,edge] of [[0,'pink','floor'],[1,'green','floor'],[2,'green','ceiling'],[3,'pink','floor'],[4,'pink','floor']]){
   const run=newTidalWave(),trace=[];
-  let result;
+  const taps=introTaps.slice(0,count);
+  let result,missY;
   while(!result){
-   if(taps.includes(run.tick)){
-    trace.push([run.tick,'held',true]);
-    tidalInput(run,'held',true);
-   }
+   if(taps.includes(run.tick))tapTidalOrb(run,trace);
    result=stepTidalWave(run);
+   if(run.cube.missedOrb)missY??=run.cube.y;
+   assert.equal(run.form,'cube');
   }
   assert.equal(result,'crash');
-  assert.equal(run.form,'cube');
-  assert.equal(run.cube.crashReason,'You missed the '+missed+' orb.');
+  assert.equal(run.cube.nextOrb,count);
+  assert.equal(run.cube.gravity,edge==='ceiling'?-1:1);
+  assert.ok(edge==='ceiling'?run.cube.y<missY:run.cube.y>missY);
+  assert.equal(run.crashReason,'You missed the '+missed+' orb and hit the '+edge+'.');
   assert.equal(replayTidalVideo(session,{ticks:run.tick,trace},30000),Math.floor(run.tick*tidalStep/tidalLength*100));
  }
- const run=newTidalWave();
+});
+
+test('Five separate orb taps bounce and flip the cube before the wave portal',()=>{
+ const run=newTidalWave(),trace=[],orbVelocities=[];
  while(run.form==='cube'){
-  if(run.tick===53||run.tick===83){
-   tidalInput(run,'held',true);
-   tidalInput(run,'held',false);
-  }
+  const before=run.cube.nextOrb;
+  if(introTaps.includes(run.tick))tapTidalOrb(run,trace);
   assert.equal(stepTidalWave(run),null);
+  if(run.cube.nextOrb!==before)orbVelocities.push([run.cube.gravity,Math.sign(run.cube.vy)]);
  }
- assert.equal(run.cube.nextOrb,2);
- assert.equal(run.cube.gravity,-1);
+ assert.deepEqual(orbVelocities,[[1,-1],[-1,-1],[1,1],[1,-1],[1,-1]]);
  assert.equal(run.form,'transition');
  while(run.form==='transition')assert.equal(stepTidalWave(run),null);
  assert.equal(run.form,'wave');
  assert.equal(run.tick,Math.ceil(tidalStart/tidalStep));
 });
 
-test('Video overlay proofs exclude removed scenery and expire retired layouts',()=>{
- const taps=ticks=>ticks.flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
- const oldSession={start:0,video:3},session={start:0,video:tidalVideoVersion};
- const flight=[[480,'held',true],[546,'held',false]];
- const intro=taps([53,83]);
- assert.throws(()=>replayTidalVideo(oldSession,{},5000),/expired/);
- assert.throws(()=>replayTidalVideo(session,{ticks:579,trace:[...intro,...flight]},5000),/Finish the attempt/);
- assert.equal(replayTidalVideo(session,{ticks:592,trace:[...intro,...flight]},5000),18);
- const heldChanges=[
-  509,593,653,713,773,795,817,877,937,997,1054,1085,1119,1148,1177,1237,1264,1291,
-  1351,1411,1467,1495,1527,1587,1647,1698,1713,1728,1758,1771,1784,1819,1852,1886,
-  1911,1936,1964,1981,2011,2041,2070,2116,2176,2236,2278,2304,2329,2358,2409,2469,
-  2515,2561,2597,2627,2657,2673,2696,2756,2816,2848,2869,2880,2899,2929,2962,3022,
-  3077,3107,3142,3202
- ];
- const trace=[...intro,...heldChanges.map((tick,index)=>[tick,'held',index%2===0])];
- assert.equal(replayTidalVideo(session,{ticks:Math.ceil(tidalLength/tidalStep),trace},30000),100);
+test('The visible normal and mini wave stop at the ceiling or floor on contact',()=>{
+ const takeoff=newTidalWave();
+ Object.assign(takeoff,{form:'wave',tick:480,y:tidalWaveFloor});
+ assert.equal(stepTidalWave(takeoff),null);
+ assert.ok(takeoff.y>tidalWaveFloor);
+ for(const mini of [false,true]){
+  for(const held of [false,true]){
+   const run=newTidalWave();
+   Object.assign(run,{form:'wave',mini,held,tick:600});
+   const [top,bottom]=waveVerticalOffsets(held,mini);
+   const edge=held?'ceiling':'floor';
+   const boundary=held?tidalWaveCeiling:tidalWaveFloor;
+   const offset=held?top:bottom;
+   run.y=boundary-offset+(held?1:-1);
+   assert.equal(stepTidalWave(run),'crash');
+   assert.equal(run.crashReason,edge);
+   assert.ok(Math.abs(run.y+offset-boundary)<1e-9);
+  }
+ }
+});
+
+test('Updated Tidal Wave replays to the end and still verifies earlier overlay attempts',()=>{
+ const run=newTidalWave(),trace=[];
+ let result;
+ while(!result){
+  if(run.form==='cube'&&introTaps.includes(run.tick))tapTidalOrb(run,trace);
+  if(run.form==='wave'){
+   const center=(tidalWaveCeiling+tidalWaveFloor)/2;
+   const held=run.y>center+(run.held?-95:95);
+   if(run.held!==held)tidalTraceInput(run,trace,held);
+  }
+  result=stepTidalWave(run);
+ }
+ assert.equal(result,'clear');
+ assert.equal(run.portal,tidalPortals.length);
+ assert.equal(replayTidalVideo({start:0,video:tidalVideoVersion},{ticks:run.tick,trace},30000),100);
+ assert.throws(()=>replayTidalVideo({start:0,video:3},{},5000),/expired/);
+ const legacyTrace=[53,83].flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
+ assert.equal(replayTidalVideo({start:0,video:4},{ticks:512,trace:legacyTrace},5000),15);
 });
 
 test('The versioned death cue serves the uploaded MP3 through the game media route',async()=>{
