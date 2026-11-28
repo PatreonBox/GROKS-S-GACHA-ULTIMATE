@@ -30,7 +30,7 @@ function badge(item,material,earned){
 }
 function difficulty(stage){
  const label=achievementChallenge(stage),face=difficultyFaces[label];
- return '<span class="achievement-difficulty" data-difficulty="'+face+'" title="Challenge difficulty"><img src="/assets/faces/'+face+'.webp" alt="">'+label+'</span>';
+ return '<span class="achievement-difficulty" data-difficulty="'+face+'" title="Challenge difficulty" role="img" aria-label="'+label+' challenge"><img src="/assets/faces/'+face+'.webp" alt="">'+label+'</span>';
 }
 function boostLabel({key,percent:amount}){
  return '+'+percent.format(amount)+'% '+achievementBoostLabels[key];
