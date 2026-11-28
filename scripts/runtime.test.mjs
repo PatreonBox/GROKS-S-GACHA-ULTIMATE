@@ -21,9 +21,28 @@ import {chestOpeningSound} from '../web/pack-sound.js';
 import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion,tidalWaveCeiling,tidalWaveFloor} from '../web/tidal-video-rules.js';
 import {replayTidalVideo} from '../web/game-replay.js';
 import {keepWavePoint,waveVerticalOffsets} from '../web/remix-wave.js';
+import {breakwaterCourse,breakwaterRadius,breakwaterSawY,stepBreakwaterWave,sweepBreakwaterPolygon} from '../web/breakwater-course.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
+
+test('Breakwater sweeps through thin edges and leaves the open notch of a concave ramp clear',()=>{
+ const blade=[[8,-3],[8.25,-3],[8.25,3],[8,3]];
+ assert.equal(sweepBreakwaterPolygon(blade,0,0,32,0,.5),7.5/32);
+ const notch=[[0,0],[30,0],[30,30],[20,30],[20,10],[10,10],[10,30],[0,30]];
+ assert.equal(sweepBreakwaterPolygon(notch,15,40,0,-20,2),Infinity);
+ assert.equal(sweepBreakwaterPolygon(notch,15,40,0,-40,2),.7);
+});
+
+test('Breakwater stops at first contact with a sliding saw even when it reverses during the step',()=>{
+ const saw={kind:'saw',x:28,y:80,radius:3,travel:30,halfCycle:.5,phase:0,left:25,right:31,top:47,bottom:113};
+ const course={...breakwaterCourse,speed:56,ceiling:0,floor:200,end:200,hazards:[saw]};
+ const wave={x:0,y:80,time:0,held:false};
+ assert.equal(stepBreakwaterWave(wave,1,course),'crash');
+ assert.equal(wave.contact,'saw');
+ const distance=Math.hypot(wave.x-saw.x,wave.y-breakwaterSawY(saw,wave.time));
+ assert.ok(Math.abs(distance-breakwaterRadius-saw.radius)<1e-9);
+});
 
 test('Wave trail retains corners from beyond the left edge to the current position',()=>{
  const points=[],playerX=304;

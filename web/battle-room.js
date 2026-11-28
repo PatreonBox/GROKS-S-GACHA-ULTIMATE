@@ -17,6 +17,7 @@ import {endlessKeyInterval,endlessKeyStatus,endlessKeyLimit,endlessKeyResetHours
 import {openRunner} from './remix-runner.js';
 import {openTidalVideo} from './tidal-video-runner.js';
 import {tidalVideoId} from './tidal-video-rules.js';
+import {breakwaterMode} from './breakwater-course.js';
 import {griefPoster,watchGrief} from './remix-media.js';
 import {playCardTurn} from './card-combat.js';
 
@@ -240,7 +241,8 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   return '<section class="remix-browser mini-game-browser" style="--remix:'+r.color+'"><div class="remix-preview"><img class="scene-shot" data-id="'+r.id+'" src="'+artwork(r)+'" alt="">'+
    '<div class="remix-poster-copy"><small>'+r.mode.toUpperCase()+' · '+difficulties[r.tier]+'</small><h2>'+enc(r.name)+'</h2><p>'+enc(r.hint)+'</p><small>Based on '+enc(r.level)+' by '+enc(r.creator)+'</small></div></div>'+
    '<div class="mini-mode-grid"><article><h3>Normal</h3><p>'+ico('demonKey')+' '+clearReward+' · Best '+saved+'%</p><button type="button" class="bt-primary remix-play" data-runner="normal">Play Normal'+newBadge(remixGuideId(r))+'</button></article>'+
-   '<article><h3>Endless</h3><p>'+ico('demonKey')+' 1 key every '+interval+'s · Best '+clock(bestTime*1000)+'</p><button type="button" class="outline remix-play" data-runner="endless">Play Endless</button></article></div>'+
+   '<article><h3>Endless</h3><p>'+ico('demonKey')+' 1 key every '+interval+'s · Best '+clock(bestTime*1000)+'</p><button type="button" class="outline remix-play" data-runner="endless">Play Endless</button></article>'+
+   (r.id===tidalVideoId?'<article class="breakwater-option"><h3>Breakwater</h3><p>Original practice course with ramps and moving saws</p><button type="button" class="outline remix-play" data-runner="'+breakwaterMode+'">Play Breakwater</button></article>':'')+'</div>'+
    '<p class="mini-reward-window">'+keysRemaining+' / '+endlessKeyLimit+' Endless keys available · '+(resetsAt?'Resets '+new Date(resetsAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'Resets '+endlessKeyResetHours+' hours after your first key')+'</p>'+
    '<h3 class="mini-course-label">Choose a course</h3><div class="mini-course-grid" aria-label="Mini Games courses">'+cards+'</div>'+
    '<details class="mini-remix-arena"><summary>Remix Arena · '+win+' wins</summary><p>'+enc(r.rule)+' '+(saved===100?'Your normal clear gives +1 starting charge.':'Clear Normal for +1 starting charge.')+'</p>'+

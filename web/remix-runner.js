@@ -6,6 +6,8 @@ import {helpButton,installMinigameGuide,remixGuide} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
 import {remixMusic,remixMusicCredit} from './remix-media.js';
 import {bindRunnerControls} from './remix-controls.js';
+import {breakwaterCourse,breakwaterColor,breakwaterMode,stepBreakwaterWave} from './breakwater-course.js';
+import {createBreakwaterArt} from './breakwater-art.js';
 
 export {makeCourse,newAttempt,advanceRunner} from './remix-physics.js';
 
@@ -14,15 +16,19 @@ import {runnerInput} from './game-replay.js';
 const launchTime=.56;
 const clock=s=>Math.floor(s/60)+':'+String(Math.floor(s)%60).padStart(2,'0');
 export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,mode='normal',avatar=starterCube}){
- const endless=mode==='endless',limbo=!endless&&remix.mark==='KEY';
- let course=endless?createEndlessCourse(remix,remix.id):makeCourse(remix);
+ const breakwater=mode===breakwaterMode,endless=mode==='endless',limbo=!breakwater&&!endless&&remix.mark==='KEY';
+ const name=breakwater?'Breakwater':remix.name,musicTrack=breakwater?null:remix.music;
+ const color=breakwater?breakwaterColor:remix.color,finishPercent=breakwater?100:remix.finish||100;
+ let course=breakwater?breakwaterCourse:endless?createEndlessCourse(remix,remix.id):makeCourse(remix);
  const dialog=document.createElement('dialog');
- dialog.className='runner-modal';dialog.setAttribute('aria-label',remix.name);dialog.style.setProperty('--remix',remix.color);
+ dialog.className='runner-modal';dialog.setAttribute('aria-label',name);dialog.style.setProperty('--remix',color);
  const instruction=course.mode==='cube'?'Tap or press Space to jump.':course.mode==='wave'?'Hold Space, click, or touch to climb. Release to dive.':'Hold for thrust. Release to descend.';
  const orbHint=course.finale?' Tap again inside each pink orb.':'';
- dialog.innerHTML='<div class="runner-bar"><div class="runner-title"><img class="runner-avatar" src="'+avatar.icon+'" title="'+avatar.name+'" alt=""><div><span>MINI GAMES · '+mode.toUpperCase()+' · '+course.mode.toUpperCase()+'</span><h2>'+remix.name+'</h2>'+
-  remixMusicCredit(remix.music,remix.id)+'</div></div><div class="minigame-actions">'+
-  (remix.music?'<button type="button" class="runner-music" data-music aria-label="Level music"></button>':'')+helpButton+'<button type="button" data-close aria-label="Close level">×</button></div></div>'+
+ dialog.innerHTML='<div class="runner-bar"><div class="runner-title"><img class="runner-avatar" src="'+avatar.icon+'" title="'+avatar.name+'" alt=""><div><span>MINI GAMES · '+(breakwater?'PRACTICE':mode.toUpperCase())+' · '+course.mode.toUpperCase()+'</span><h2>'+name+'</h2>'+
+  remixMusicCredit(musicTrack,remix.id)+'</div></div><div class="minigame-actions">'+
+  (musicTrack?'<button type="button" class="runner-music" data-music aria-label="Level music"></button>':'')+
+  (breakwater?'<button type="button" class="runner-hitboxes" data-hitboxes aria-pressed="false">Hitboxes</button>':'')+
+  helpButton+'<button type="button" data-close aria-label="Close level">×</button></div></div>'+
   '<div class="runner-frame"><canvas tabindex="0" aria-label="'+course.mode+' course. Use Space, Up, the mouse, or touch."></canvas><div class="runner-status"><span class="runner-attempt">READY</span><span class="runner-progress">'+(endless?'0:00':'0%')+'</span></div></div>'+
   '<div class="runner-controls"><div class="runner-message" aria-live="polite"></div><button type="button" class="runner-touch game-touch" hidden>'+(course.mode==='cube'?'Tap to jump':'Hold to climb')+'</button><div class="runner-buttons"></div></div>';
  document.body.append(dialog);dialog.showModal();
@@ -30,36 +36,47 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
  const pad=dialog.querySelector('.runner-touch');
  const readout=dialog.querySelector('.runner-progress'),attemptLabel=dialog.querySelector('.runner-attempt');
  const viewport=dialog.querySelector('.runner-frame');
- let viewWidth=WIDTH,viewHeight=HEIGHT,scale=1;
+ const courseHeight=course.height??HEIGHT;
+ let viewWidth=WIDTH,viewHeight=courseHeight,hitboxes=false;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const particles=[];
  let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,closed=false,lastPercent=-1,highWater=0,practice=false;
  let launch=0,ticks=0,trace=[],traceStart=0,token=null,closeFinale,finalSave;
  let interval=0,keysRemaining=0,nextCheckpoint=Infinity,keysEarned=0,xpEarned=0;
- const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running'||limbo&&phase==='key',
+ const music=remixMusic(musicTrack,sound,dialog.querySelector('[data-music]'),()=>phase==='running'||limbo&&phase==='key',
   {loop:!limbo,continuous:limbo});
- const makeArt=()=>createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
+ const makeArt=()=>breakwater?createBreakwaterArt(ctx,avatar,maxRunnerPlayerX):
+  createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
  let paint=makeArt();
- const guide=installMinigameGuide(dialog,remixGuide({...remix,mode:course.mode},avatar.icon,{endless}),pause);
+ const guideInfo=remixGuide({...remix,mode:course.mode},avatar.icon,{endless});
+ if(breakwater)Object.assign(guideInfo,{id:breakwaterMode,name,color,
+  tips:[guideInfo.tips[0],['Check the collision edges','The bright ramp edges and saw rings show where you can hit. Turn on Hitboxes to see those outlines and your wave’s collision circle.']],
+  outcome:'Breakwater is a practice course.'});
+ const guide=installMinigameGuide(dialog,guideInfo,pause);
  function resize(){
   if(closed)return;
   const {clientWidth:width,clientHeight:height}=viewport;
   if(!width||!height)return;
   const dpr=Math.min(2,devicePixelRatio||1);
   canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
-  scale=Math.min(width/(width<520?378:700),height/(HEIGHT+18));
+  const scale=Math.min(width/(width<520?378:700),height/(courseHeight+18));
   viewWidth=width/scale;viewHeight=height/scale;
   ctx.setTransform(dpr*scale,0,0,dpr*scale,0,0);
   draw();
  }
  function draw(){
-  const state=phase==='running'&&!launch&&carry?{...s,x:s.x+carry*course.speed,y:s.y+carry*s.vy}:s;
+  let state=s;
+  if(phase==='running'&&!launch&&carry){
+   state={...s};
+   if(breakwater)stepBreakwaterWave(state,carry);
+   else{state.x+=carry*course.speed;state.y+=carry*s.vy}
+  }
   const progress=endless?(interval?(ticks*STEP%interval)/interval:0):s.x/course.end;
   canvas.parentElement.style.setProperty('--runner-progress',Math.min(1,progress));
-  paint(state,{phase,particles,reduced,width:viewWidth,height:viewHeight});
+  paint(state,{phase,particles,reduced,width:viewWidth,height:viewHeight,hitboxes});
  }
  function action(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=fn;buttons.append(b);return b}
- function displayed(){return Math.min(remix.finish?remix.finish-1:99,Math.floor((remix.finish||100)*s.x/course.end))}
+ function displayed(){return Math.min(finishPercent-1,Math.floor(finishPercent*s.x/course.end))}
  function persist(value,key=null){
   if(practice||!token||key==null&&value<=highWater)return;
   highWater=value;
@@ -142,13 +159,15 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
    burst(s.x,s.y,won?26:18,remix.color);
    if(won)sound.play(remix.cue);
   }else if(won){
-   persist(100,key);readout.textContent=remix.finish?remix.finish+'% · CUT!':'100%';
-   message.textContent=practice?'Finale cleared in practice.':remix.quote;
-   burst(s.x,s.y,26,remix.color);sound.play(remix.cue);
+   persist(100,key);readout.textContent=breakwater||!remix.finish?'100%':remix.finish+'% · CUT!';
+   message.textContent=breakwater?'Breakwater cleared.':practice?'Finale cleared in practice.':remix.quote;
+   burst(s.x,s.y,26,color);sound.play(breakwater?'victory':remix.cue);
   }else{
    const n=displayed(),wrong=remix.mark==='KEY'&&s.x>=course.end;
-   readout.textContent=n+'%';persist(n,key);burst(s.x,s.y,24,remix.color);
-   message.textContent=(practice?'Practice':'Attempt '+attempt)+' · '+n+'%. '+(wrong?'Wrong key.':s.x>=course.end&&course.finale?'Tap all three pink orbs.':'Try again.');
+   readout.textContent=n+'%';persist(n,key);burst(s.x,s.y,24,color);
+   const retryHint=breakwater?'Hit '+(s.contact==='ramp'?'a ramp.':s.contact==='saw'?'a saw.':'the '+s.contact+'.'):
+    wrong?'Wrong key.':s.x>=course.end&&course.finale?'Tap all three pink orbs.':'Try again.';
+   message.textContent=(practice?'Practice':'Attempt '+attempt)+' · '+n+'%. '+retryHint;
   }
   action(endless?'Try endless again':won?'Replay level':'Retry',()=>start(practice)).focus({preventScroll:true});
   if(course.finale)action(practice?'Start full level':'Practice finale',()=>start(!practice));
@@ -196,7 +215,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   }
   carry+=elapsed;
   while(carry>=STEP&&phase==='running'){
-   const {passed,x,y}=s,status=advanceRunner(s,course,remix,STEP);
+   const {passed,x,y}=s,status=breakwater?stepBreakwaterWave(s,STEP):advanceRunner(s,course,remix,STEP);
    ticks++;carry-=STEP;stepParticles(STEP);
    if(s.passed!==passed){
     if(course.mode!=='cube')burst(s.x-10,s.y,5,avatar.color);
@@ -234,7 +253,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   if(limbo)music?.prime();
   try {
    if(finalSave)await finalSave;
-   const session=isPractice?null:await onStart(mode);
+   const session=breakwater||isPractice?null:await onStart(mode);
    if(closed)return;
    token=session?.token||null;
    ticks=0;trace=[];traceStart=0;particles.length=0;
@@ -272,6 +291,12 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   onPress:()=>{sound.unlock();control('press');},onHeld:held=>control('held',held),onPause:pause});
  document.addEventListener('visibilitychange',hidden);
  dialog.querySelector('[data-close]').onclick=()=>dialog.close();
+ const hitboxButton=dialog.querySelector('[data-hitboxes]');
+ if(hitboxButton)hitboxButton.onclick=()=>{
+  hitboxes=!hitboxes;hitboxButton.setAttribute('aria-pressed',String(hitboxes));
+  if(phase==='running')canvas.focus({preventScroll:true});
+  draw();
+ };
  const observer=new ResizeObserver(resize);observer.observe(viewport);
  dialog.addEventListener('close',()=>{
   closed=true;
@@ -279,7 +304,8 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   closeFinale?.();music?.close();input.dispose();observer.disconnect();cancelAnimationFrame(frame);sound.stop();
   document.removeEventListener('visibilitychange',hidden);dialog.remove();
  },{once:true});
- resize();message.textContent=(endless?'Survive as long as you can. Keys are shared across all courses and reset every six hours.':remix.hint)+' '+instruction;
+ resize();message.textContent=breakwater?instruction:
+  (endless?'Survive as long as you can. Keys are shared across all courses and reset every six hours.':remix.hint)+' '+instruction;
  action(endless?'Start endless':'Start level',()=>start()).focus({preventScroll:true});
  if(course.finale)action('Practice finale',()=>start(true));
  guide.welcome();
