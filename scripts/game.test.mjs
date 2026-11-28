@@ -561,7 +561,12 @@ test('house upgrades spend 30 Mana once and add 0.02 stars after ten seconds',as
 });
 
 test('the six-minute phases advance with the clock and cubes can use rotated house doors',()=>{
- assert.deepEqual(kingdomDaylight(360_000),{night:true,remaining:360_000,light:.44});
+ assert.equal(kingdomDaylight(0).time,'06:00');
+ assert.equal(kingdomDaylight(359_999).time,'17:59');
+ assert.deepEqual(kingdomDaylight(360_000),{night:true,time:'18:00',remaining:360_000,light:.44});
+ assert.equal(kingdomDaylight(539_999).time,'23:59');
+ assert.equal(kingdomDaylight(540_000).time,'00:00');
+ assert.equal(kingdomDaylight(719_999).time,'05:59');
  assert.equal(kingdomDaylight(180_000).light,1);
  assert.equal(kingdomDaylight(540_000).light,0);
  assert.equal(kingdomDaylight(719_999).remaining,1);

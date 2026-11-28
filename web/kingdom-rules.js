@@ -62,7 +62,10 @@ export function kingdomDaylight(now){
  const elapsed=cycle%phaseDuration;
  const edge=Math.min(1,elapsed/25_000,(phaseDuration-elapsed)/25_000);
  const light=edge*edge*(3-2*edge);
- return {night,remaining:phaseDuration-elapsed,light:night?.44*(1-light):.44+.56*light};
+ const minutesPerDay=24*60;
+ const minutes=(6*60+Math.floor(cycle*minutesPerDay/(2*phaseDuration)))%minutesPerDay;
+ const time=String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
+ return {night,time,remaining:phaseDuration-elapsed,light:night?.44*(1-light):.44+.56*light};
 }
 export function landPlan(wallet){
  const saved=wallet?.kingdom?.landLevel;
