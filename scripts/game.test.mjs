@@ -8,7 +8,7 @@ import {createCardPool,difficulties,oddsFor,packs,rollPacks,packOddsVersion} fro
 import {armyFrame,armyTacticsVersion,makeArmyBattle,stepArmy} from '../web/army-battle.js';
 import {armySeries,armySignatureVersion,beginArmyRun,seriesFinaleReward,trilogyStageKeys} from '../web/army-trilogy.js';
 import {armyOrbit} from '../web/army-world.js';
-import {makeBattle,playTurn,statsFor} from '../web/battle-engine.js';
+import {arenaPlayerXp,makeBattle,playTurn,statsFor} from '../web/battle-engine.js';
 import {attackTiming,paintArmyCast} from '../web/combat-scene.js';
 import {classicCampaignMoves,previousBossMoves} from '../web/main-list-moves.js';
 import {skillsFor} from '../web/card-skills.js';
@@ -740,6 +740,7 @@ test('arena scores use server-owned turns and reject client-only records',async(
  const finalWallet=await f.wallet(player);
  assert.equal(posted[0].level,playerProgress(finalWallet.playerXp).level);
  assert.equal(nonAchievementXp(finalWallet),49);
+ assert.equal(arenaPlayerXp(battle),nonAchievementXp(finalWallet));
  assert.deepEqual(f.sqlite.prepare('SELECT tier,turns FROM game_scores WHERE player_id=?').get(player.id).turns,battle.seq);
 });
 
@@ -1059,9 +1060,11 @@ test('campaign first clears and replays award different bounties once',async()=>
  assert.equal(first.battle.earned,first.base*12+(stageFor(1).first+stageFor(1).master)*12);
  assert.equal(first.battle.campaignReceipt.clearPrize,720);
  assert.equal(first.battle.campaignReceipt.demonKeys,10);
+ assert.equal(arenaPlayerXp(first.battle),120);
  assert.equal(second.battle.earned,Math.floor(second.base*.8));
  assert.equal(second.battle.campaignReceipt.clearPrize,0);
  assert.equal(second.battle.campaignReceipt.demonKeys,undefined);
+ assert.equal(arenaPlayerXp(second.battle),49);
 });
 test('the final campaign stage pays its scaled prize once and preserves active legacy battles',()=>{
  const w={coins:80};
@@ -1432,13 +1435,20 @@ test('All 65 achievements use staged server progress including legacy collection
  assert.deepEqual(achievementXp,{Easy:20,Normal:45,Hard:70,Harder:85,Insane:100,Demon:150});
  for(const item of achievements){
   assert(item.stages.length>=2);
+  let previousRating=-1;
   for(const [i,stage] of item.stages.entries()){
    assert.equal(stage.stage,i+1);
    assert(stage.goal>(item.stages[i-1]?.goal||0));
    assert.equal(stage.xp,achievementXp[stage.difficulty]);
    assert.equal(achievementById(stage.id).name,item.name);
+   const rating=difficulties.indexOf(achievementChallenge(stage));
+   assert(rating>0&&rating>=previousRating,item.name+' stage '+stage.stage);
+   previousRating=rating;
   }
  }
+ const pity=achievementById('pity-insurance');
+ assert.equal(achievementChallenge(pity),'Hard Demon');
+ assert.equal(pity.keys,7);
  const f=fixture(),player=await f.open();
  const picks=await Promise.all(difficulties.map(async difficulty=>(await pool(difficulty)).slice(0,5)));
  f.addCards(player.id,picks.flat());

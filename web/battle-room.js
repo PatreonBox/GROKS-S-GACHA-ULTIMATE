@@ -3,7 +3,7 @@ import {stat} from './card-economy.js';
 import {impossibleCategory} from './impossible-cards.js';
 import {bestFinish,finishClass} from './card-finishes.js';
 import {difficulties,cardCategories,readCollection,feedLevelCard} from './pack-engine.js';
-import {arenas,statsFor,saveSquad,enterArena,battleAction,equipTechnique,leaveResults,startRemix,startLimboFinale,recordRemix,checkpointRemix,enemyIntent,liveOrb,linkOrbs,liveRiposte,tacticDescription,startDrill,checkpointDrill,finishDrill} from './battle-engine.js';
+import {arenas,arenaPlayerXp,statsFor,saveSquad,enterArena,battleAction,equipTechnique,leaveResults,startRemix,startLimboFinale,recordRemix,checkpointRemix,enemyIntent,liveOrb,linkOrbs,liveRiposte,tacticDescription,startDrill,checkpointDrill,finishDrill} from './battle-engine.js';
 import {campaignStages,stageFor,stageCleared,stageUnlocked,stageRules} from './campaign.js';
 import {campaignView,campaignOutcome} from './campaign-view.js';
 import {arenaDeck,cardChassis,cameraTools,bindArenaCamera} from './arena-stage.js';
@@ -315,22 +315,28 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
   const mast='<div class="arena-mast"><a class="arena-home" href="#leaderboard" aria-label="Return to levels"><img class="brand-emblem" src="/assets/gd-kingdom-castle-icon.png" width="96" height="96" alt=""></a><div class="mast-title"><small>'+(stage?'CAMPAIGN · STAGE '+b.campaign:remix?'REMIX ARENA':'BATTLE MODE')+'</small><h1>'+enc(title)+'</h1></div><div class="mast-tools"><button type="button" class="iconbtn arena-help" data-section-help aria-label="Battle help" title="Battle help" aria-haspopup="dialog">?</button>'+mutedBtn()+arenaActivities(playerLevel)+'<a class="outline leave-field" href="#gacha">Packs</a></div></div>';
   const side=(units,key,title,tip)=>'<div class="battle-side"><h3><span>'+title+'</span><small>'+enc(tip)+'</small></h3><div class="formation">'+units.map((u,i)=>tile(u,i,key,b)).join('')+'</div></div>';
   const relayWait=Math.max(0,(b.relayAt||0)-b.seq);
-  const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><i></i><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span><i></i></div>';
+  const center='<div class="versus" title="Drag to orbit, scroll to zoom, or double-click here to reset."><span data-cast aria-live="polite">'+(playback?'WINDUP':done?'ARENA CLOSED':'TURN '+(b.seq+1))+'</span></div>';
   const field='<div class="battlefield live-field" style="--arena:'+colors[b.tier]+'"><div class="battle-lanes arena-view"><div class="arena-world">'+arenaDeck+side(b.enemies,'enemies','Opposing squad',done?'':b.kills+' / 4 defeated · Tap a target')+center+side(b.allies,'allies','Your squad',done?'':relayWait?'Relay in '+relayWait+' turns':'Tap a teammate to relay')+'</div></div></div>';
+  const earnings='<div class="arena-earnings" aria-label="Battle earnings" aria-live="polite">'+
+   '<span class="arena-coins"><img src="/assets/packs/coin.png" alt=""><b>'+fmt(b.earned)+'</b> <span>coins earned</span></span>'+
+   '<span class="arena-xp">'+ico('spark')+'<b>'+fmt(arenaPlayerXp(b))+'</b> <span>XP earned</span></span></div>';
   const next=b.status==='won'&&stage&&stageFor(b.campaign+1);
-  const controls=done?'<section class="live-console outcome"><div><small>'+b.kills+' / 4 DEFEATED</small><h2>'+(b.status==='won'?'Victory':b.status==='lost'?'Squad defeated':'Retreated')+'</h2><p>'+coin+' '+fmt(b.earned)+' coins earned</p>'+campaignOutcome(b)+'</div><div class="outcome-actions">'+
+  const controls=done?'<section class="live-console outcome"><div><small>'+b.kills+' / 4 DEFEATED</small><h2>'+(b.status==='won'?'Victory':b.status==='lost'?'Squad defeated':'Retreated')+'</h2>'+campaignOutcome(b)+'</div><div class="outcome-actions">'+
    (next?'<button class="bt-primary" data-next-stage="'+(b.campaign+1)+'">Next stage</button>':'')+
    '<button class="'+(next?'outline':'bt-primary')+'" data-finish>'+(stage?'Return to campaign':'Return to arenas')+'</button></div></section>':consoleView(b,actor,target,enc);
   const intel=done?'<div class="arena-closed">Battle complete</div>':intentView(b,actor,target,enc);
-  const tools='<div class="console-toolbar"><span>'+coin+' '+short(b.earned)+' <span class="desktop-label">earned</span></span>'+cameraTools+(!done&&!playback?'<button class="outline" data-orders>'+ico('list')+' Tactics &amp; log</button>':'')+'</div>';
-  return '<section class="live-arena" data-encounter="'+enc(b.id)+'" aria-label="Battle arena">'+mast+'<div class="arena-grid">'+intel+field+controls+tools+'</div></section>';
+  const tools='<div class="console-toolbar">'+cameraTools+(!done&&!playback?'<button class="outline" data-orders>'+ico('list')+' Tactics &amp; log</button>':'')+'</div>';
+  return '<section class="live-arena" data-encounter="'+enc(b.id)+'" aria-label="Battle arena">'+mast+'<div class="arena-grid">'+intel+'<div class="arena-board">'+field+earnings+'</div>'+controls+tools+'</div></section>';
  }
  function syncArena(live,markup){
   const template=document.createElement('template');template.innerHTML=markup;
   const next=template.content;
-  for(const selector of ['.live-intent,.arena-closed','.live-console','.console-toolbar>span']){
+  for(const selector of ['.live-intent,.arena-closed','.live-console']){
    live.querySelector(selector).replaceWith(next.querySelector(selector));
   }
+  const earnings=live.querySelector('.arena-earnings');
+  const amounts=next.querySelectorAll('.arena-earnings b');
+  earnings.querySelectorAll('b').forEach((amount,i)=>{if(amount.textContent!==amounts[i].textContent)amount.textContent=amounts[i].textContent;});
   const oldOrders=live.querySelector('[data-orders]'),newOrders=next.querySelector('[data-orders]');
   if(!newOrders)oldOrders?.remove();
   else if(!oldOrders)live.querySelector('.console-toolbar').append(newOrders);

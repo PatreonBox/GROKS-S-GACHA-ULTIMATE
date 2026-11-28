@@ -17,6 +17,12 @@ const messages={
 };
 const timeFormat=new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'});
 const empty=()=>({unread:0,list:[]});
+function tabFlag(name,value){
+ try{
+  if(value)sessionStorage.setItem(name,'1');
+  return sessionStorage.getItem(name)==='1';
+ }catch{return false;}
+}
 
 function noticeItem(notice){
  const [heading,icon,description]=kindContent[notice.kind];
@@ -40,10 +46,55 @@ export function setupNotifications({load,mark,membershipResult}){
  const panel=document.getElementById('gameNotifications'),bell=document.getElementById('notificationBell');
  const badge=document.getElementById('notificationUnread'),list=document.getElementById('notificationList');
  const readAll=document.getElementById('readNotifications'),status=document.getElementById('notificationsStatus');
- const check=document.getElementById('discordKeyCheck'),reward=document.querySelector('[data-discord-invite-reward]');
- let account=false,claimed=false,changing=false,loading=false,serial=0,seenData=false,previous='',state=empty(),pollId;
+ const check=document.getElementById('discordKeyCheck'),invite=document.getElementById('officialDiscord');
+ const joined=document.createElement('span');
+ joined.className='discord-invite discord-joined';
+ joined.setAttribute('role','status');
+ joined.hidden=true;
+ invite.after(joined);
+ let account=false,discordAccount=false,verified=false,claimed=false,changing=false,loading=false,serial=0,seenData=false,previous='',state=empty(),pollId;
+ let confirmTimer,username='',checking=false,recheckInvite=false;
  let result=membershipResult;
  const hide=()=>{if(panel.matches(':popover-open'))panel.hidePopover();};
+ function membershipAction(automatic){
+  const params=new URLSearchParams({return_to:'/'+(location.hash||'#gacha')});
+  if(automatic)params.set('automatic','1');
+  check.action='/api/auth/discord/membership?'+params;
+ }
+ function checkAutomatically(){
+  if(!discordAccount||!username||verified||checking||document.hidden||!document.hasFocus())return;
+  const key='gdk-discord-checked:'+username;
+  if(!recheckInvite&&(membershipResult||tabFlag(key)))return;
+  recheckInvite=false;checking=true;
+  tabFlag(key,true);
+  membershipAction(true);
+  check.submit();
+ }
+ function paintMembership(){
+  check.hidden=!discordAccount||verified;
+  invite.hidden=verified;
+  const flag='gdk-discord-joined:'+username;
+  if(!verified||tabFlag(flag)){
+   clearTimeout(confirmTimer);confirmTimer=undefined;
+   joined.classList.remove('is-fading');joined.hidden=true;
+   return;
+  }
+  if(!joined.hidden)return;
+  joined.hidden=false;
+  joined.innerHTML=ico('check')+'<b>Joined</b>';
+  const finish=()=>{
+   tabFlag(flag,true);
+   joined.hidden=true;
+   joined.classList.remove('is-fading');
+  };
+  confirmTimer=setTimeout(()=>{
+   if(matchMedia('(prefers-reduced-motion: reduce)').matches)finish();
+   else{
+    joined.classList.add('is-fading');
+    confirmTimer=setTimeout(finish,450);
+   }
+  },10_000);
+ }
  function paint(){
   badge.hidden=!state.unread;
   badge.textContent=state.unread||'';
@@ -106,16 +157,23 @@ export function setupNotifications({load,mark,membershipResult}){
   if(link.matches('a'))hide();
  });
  readAll.addEventListener('click',()=>{result=null;markRead({through:state.list[0]?.id});});
- check.addEventListener('submit',()=>{
-  check.action='/api/auth/discord/membership?'+new URLSearchParams({return_to:'/'+(location.hash||'#gacha')});
- });
- document.addEventListener('visibilitychange',refresh);
- window.addEventListener('focus',refresh);
+ check.addEventListener('submit',()=>membershipAction(false));
+ invite.addEventListener('click',()=>{recheckInvite=true;});
+ document.addEventListener('visibilitychange',()=>{refresh();checkAutomatically();});
+ window.addEventListener('focus',()=>{refresh();checkAutomatically();});
  window.addEventListener('resize',()=>{if(panel.matches(':popover-open'))position();});
- return {refresh,setAccount({signedIn,discord,keyBonusClaimed}){
+ return {refresh,setAccount({signedIn,discord,username:handle,membershipVerified,keyBonusClaimed}){
+  const nextDiscord=Boolean(signedIn&&discord);
+  if(discordAccount!==nextDiscord||(handle&&handle!==username)){
+   verified=claimed=false;
+   checking=false;
+   username=handle||'';
+  }
+  discordAccount=nextDiscord;
+  if(typeof membershipVerified==='boolean')verified=membershipVerified;
   if(typeof keyBonusClaimed==='boolean')claimed=keyBonusClaimed;
-  check.hidden=!discord||claimed;
-  reward.textContent=claimed?'15 free keys claimed':'Get 15 free keys!';
+  paintMembership();
+  if(membershipVerified===false)queueMicrotask(checkAutomatically);
   if(account===signedIn)return;
   account=signedIn;
   bell.hidden=!account;
@@ -125,6 +183,6 @@ export function setupNotifications({load,mark,membershipResult}){
   }
   refresh();
   pollId=setInterval(refresh,30_000);
-  if(result)queueMicrotask(()=>{if(account&&!panel.matches(':popover-open'))panel.showPopover();});
+  if(result&&result!=='not-member')queueMicrotask(()=>{if(account&&!panel.matches(':popover-open'))panel.showPopover();});
  }};
 }

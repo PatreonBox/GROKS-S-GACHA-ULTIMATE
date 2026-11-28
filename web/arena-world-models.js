@@ -78,63 +78,43 @@ function paintTowers(g,w,h,m){
  }
 }
 
-function paintGate(g,w,h,y,half,accent,time,slots){
- const cx=w/2,radius=Math.min(57,w*.099,half*.9);
+function paintGate(g,w,y,half,accent,time){
+ const cx=w/2,radius=Math.min(45,w*.105,half*.94);
  const cold=ally.lit,hot=enemy.lit;
  g.box(cx,y,-29.7,w+3,half*2-3,4,'#1c2541');
  for(const dy of [-half,half]){
   const tone=dy<0?'#653b65':'#285776';
   g.beam([6,y+dy,-29],[w-6,y+dy,-29],1.8,tone,{light:.95});
  }
- g.ring(cx,y,-28,radius+3,radius*.76,4,'#4c5680',{segments:16});
- g.ring(cx,y,-25.7,radius,radius*.90,1.3,accent,{light:.96,segments:16});
- g.ring(cx,y,-25.2,radius*.62,radius*.55,.9,'#7d94c0',{light:.88,segments:12,yaw:Math.PI/12});
+ g.ring(cx,y,-28,radius+3,radius*.78,4,'#4c5680',{segments:8,yaw:Math.PI/8});
+ g.ring(cx,y,-25.7,radius,radius*.90,1.3,accent,{light:.90,segments:8,yaw:Math.PI/8});
  for(const side of [-1,1]){
   const x=cx+side*radius;
   const start=w/2+side*w*.47;
-  g.beam([x,y,-26],[start,y,-26],2,'#5a6b90',{light:.89});
-  for(const lane of [-1,1]){
-   const hue=lane<0?hot:cold;
-   g.beam([x,y+lane*2,-27],[x+side*w*.065,y+lane*half*.64,-27],1.1,hue,{light:.84});
-   g.beam([x+side*w*.065,y+lane*half*.64,-27],[start,y+lane*half*.64,-27],1.1,hue,{light:.84});
+  g.beam([x,y,-26],[start,y,-26],1.8,'#556689',{light:.89});
+  for(let i=0;i<4;i++){
+   const x1=x+(start-x)*(i+1)/5;
+   const light=.70+.30*(Math.cos(time*2-i*.9)+1)/2;
+   g.box(x1,y,-24.6,clamp(w*.014,4,10),2.2,1.2,accent,{light});
   }
-  for(let i=0;i<6;i++){
-   const pos=side*((time*.43+i*.154)%1);
-   const x1=cx+side*(radius+13)+pos*(w*.43-radius-13);
-   g.box(x1,y,-24.6,clamp(w*.012,3,10),2.3,1.2,accent,{light:1});
-  }
- }
- for(let i=0;i<4;i++){
-  const a=i*Math.PI/2+time*.24,x=cx+radius*Math.cos(a),dy=radius*Math.sin(a);
-  g.box(x,y+dy,-24.1,4.6,4.6,1.7,i%2?hot:cold,{yaw:a+Math.PI/4,light:1});
- }
- for(const s of slots){
-  if(!s.selected||s.down)continue;
-  const enemySide=s.team==='enemies',facing=enemySide?1:-1;
-  const start=clamp(s.y+facing*(s.h*.5+4),1,h-1);
-  const finish=y-facing*half*.40,lit=enemySide?hot:cold;
-  if((finish-start)*facing<2)continue;
-  const bend=s.x+(cx-s.x)*.20,between=start+(finish-start)*.55;
-  g.beam([s.x,start,-26],[s.x,between,-26],1.5,lit,{light:1});
-  g.beam([s.x,between,-26],[bend,finish,-26],1.5,lit,{light:1});
-  g.box(bend,finish,-24.4,3.4,3.4,1.8,lit,{yaw:Math.PI/4,light:1});
+  g.box(start,y,-25,5,8,1.6,side<0?cold:hot,{yaw:Math.PI/4,light:.94});
  }
 }
 
-export function paintArenaWorld(g,{width,height,tint='#a8c9ff',clock=0,slots=[]}){
+export function paintArenaWorld(g,{width,height,tint='#a8c9ff',clock=0,slots=[],gateY}){
  if(!(width>0&&height>0))return;
  const m=clamp(width*.012,4,11),columns=width>=620?8:6;
  const back=slots.filter(s=>s.team==='enemies');
  const front=slots.filter(s=>s.team==='allies');
  const start=back.length?Math.max(...back.map(s=>s.y+s.h*.5)):height*.37;
  const end=front.length?Math.min(...front.map(s=>s.y-s.h*.5)):height*.63;
- const center=clamp((start+end)*.5,height*.29,height*.71);
- const half=clamp((end-start)*.45,Math.min(14,height*.10),Math.min(56,height*.20));
+ const center=gateY??(start+end)*.5;
+ const half=clamp(Math.min(center-start,end-center),Math.min(12,height*.10),Math.min(42,height*.16));
  const time=Number.isFinite(clock)?clock:0;
  paintFrame(g,width,height,m,tint);
  floorZone(g,width,-2,center-half,enemy,columns);
  floorZone(g,width,center+half,height+2,ally,columns);
- paintGate(g,width,height,center,half,tint,time,slots);
+ paintGate(g,width,center,half,tint,time);
  for(const slot of slots)pod(g,slot,m*.66);
  paintTowers(g,width,height,m);
 }

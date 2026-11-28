@@ -462,10 +462,11 @@ export function gameRoutes(readJson,hasArt){
    const record=await profile(db,session.owner,initial);
    if(!record)reject('Open the game to start your save.',401);
    if(view==='wallet'){
-    const bonus=env.discordUser?await grantDiscordKeyBonus(db,record,env.discordUser):{record,claimed:false};
+    const bonus=env.discordUser?await grantDiscordKeyBonus(db,record,env.discordUser):{record};
     const saved=await refreshAchievementWallet(db,bonus.record);
     return json({...saved,wallet:visibleWallet(saved.wallet),...account,
-     ...(env.discordUser?{discordKeyBonusClaimed:bonus.claimed}:{}),...(bonus.keyBonus?{keyBonus:bonus.keyBonus}:{})},200,session.cookie);
+     ...(env.discordUser?{discordMembershipVerified:bonus.verified,discordKeyBonusClaimed:bonus.claimed}:{}),
+     ...(bonus.keyBonus?{keyBonus:bonus.keyBonus}:{})},200,session.cookie);
    }
    if(view==='kingdom-visitors'){const clock=Date.now();return json({'kingdom-visitors':{clock,...kingdomVisitors(JSON.parse(record.wallet),clock)}});}
    if(view==='cards')return json({cards:await inventory(db,record.player_id)});

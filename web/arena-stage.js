@@ -2,7 +2,7 @@ import {ico} from './icons.js';
 
 export const arenaDeck='<div class="arena-deck" aria-hidden="true">'+
  '<i class="deck-track deck-track-left"></i><i class="deck-track deck-track-right"></i>'+
- '<i class="deck-ring"></i><i class="deck-wall deck-wall-front"></i>'+
+ '<i class="deck-wall deck-wall-front"></i>'+
  '<i class="deck-wall deck-wall-left"></i><i class="deck-wall deck-wall-right"></i></div>';
 
 export const cardChassis='<i class="arena-card-back" aria-hidden="true"></i>'+

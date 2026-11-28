@@ -4,7 +4,7 @@ import {createMergePlanner,extremeTable,gemTenths,levelRewardTenths} from './car
 import {starterCube,cubeCatalogVersion,claimCube,ownsCube} from './cube-catalog.js';
 import {settleMine,creditMineTaps,mineTapBatch,buyMineMachine,buyMineSkill,mineMachines} from './mine-economy.js';
 import {changeCoins,coinEconomyVersion,startingCoins} from './coin-economy.js';
-import {combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
+import {arenaPlayerXp,combatStatsVersion,makeBattle,playTurn,grantTraining} from './battle-engine.js';
 import {stageFor,stageUnlocked,configureCampaignBattle} from './campaign.js';
 import {trainingCapacity,drillTypes,validTechnique} from './card-skills.js';
 import {limboChoiceAt,limboPattern} from './limbo-keys.js';
@@ -327,16 +327,10 @@ const rules={
  }},
  'arena.move':{run:({w,args:{id,seq,move,target,actor},now})=>{
   requireRule(key(id)&&within(seq,0,100000)&&(within(target,0,3)||move==='retreat')&&(actor==null||within(actor,0,3)),'Choose a valid arena move.');
-  const previous=w.battle?.kills||0;
+  const previousXp=arenaPlayerXp(w.battle);
   const battle=playTurn(w,id,seq,move,target,now,randomUnit,actor);
-  const {tier,campaignReceipt}=battle;
-  let xp=(battle.kills-previous)*(3+2*tier);
-  if(battle.status==='won'){
-   xp+=campaignReceipt?.first?55+14*tier:22+7*tier;
-   if(campaignReceipt?.mastered)xp+=24+7*tier;
-   if(campaignReceipt?.first)campaignReceipt.demonKeys=rewardDemonKeys(w,campaignKeyReward,now);
-  }
-  awardPlayerXp(w,xp);
+  if(battle.campaignReceipt?.first)battle.campaignReceipt.demonKeys=rewardDemonKeys(w,campaignKeyReward,now);
+  awardPlayerXp(w,arenaPlayerXp(battle)-previousXp);
  }},
  'arena.technique':{run:({w,args:{id,seq,actor,choice}})=>{
   const battle=w.battle,unit=battle?.allies[actor];

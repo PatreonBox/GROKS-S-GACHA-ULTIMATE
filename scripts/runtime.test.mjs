@@ -200,24 +200,25 @@ test('legacy Discord profiles refresh without signing the game session out or sw
 test('the official Discord membership grants 15 keys once and adds an unread notice',async()=>{
  const {DB,sqlite}=openGameDatabase(':memory:');
  const clientId='1570000000000000000',userId='1580000000000000000';
- let member=false,memberChecks=0;
+ let accountId=userId,member=false,memberChecks=0;
  const auth=createDiscordAuth(sqlite,{origin:publicOrigin,clientId,guildId:officialGuildId},async(url,options)=>{
   if(url.endsWith('/oauth2/token'))return Response.json({access_token:'fixture-token'});
   assert.equal(options.headers.Authorization,'Bearer fixture-token');
-  if(url==='https://discord.com/api/v10/users/@me')return Response.json({id:userId,username:'fixture'});
+  if(url==='https://discord.com/api/v10/users/@me')return Response.json({id:accountId,username:'fixture'});
   assert.equal(url,'https://discord.com/api/v10/users/@me/guilds/'+officialGuildId+'/member');
   memberChecks++;
-  return member?Response.json({joined_at:'2026-11-27T12:00:00Z',pending:false,user:{id:userId}}):new Response(null,{status:404});
+  return member?Response.json({joined_at:'2026-11-27T12:00:00Z',pending:false,user:{id:accountId}}):new Response(null,{status:404});
  });
  const request=(path,cookie,method='GET',origin=publicOrigin)=>new Request(new URL(path,publicOrigin),{
   method,headers:{...(cookie?{Cookie:cookie}:{}),...(method==='POST'?{Origin:origin}:{})}
  });
  const run=(req)=>auth.handle(req,new URL(req.url));
- async function finish(opened,session){
+ async function finish(opened,session,iss){
   const authorization=new URL(opened.headers.get('location'));
   assert.equal(authorization.searchParams.get('scope'),'identify guilds.members.read');
   const callback=new URL('/api/auth/discord/callback',publicOrigin);
-  callback.search=new URLSearchParams({state:authorization.searchParams.get('state'),code:'fixture-code',iss:'https://discord.com'});
+  callback.search=new URLSearchParams({state:authorization.searchParams.get('state'),code:'fixture-code'});
+  if(iss)callback.searchParams.set('iss',iss);
   const flow=opened.headers.get('set-cookie').split(';')[0];
   return run(request(callback,session?session+'; '+flow:flow));
  }
@@ -233,23 +234,35 @@ test('the official Discord membership grants 15 keys once and adds an unread not
   const start=await read('/api/game',session);
   assert.equal(start.wallet.demonKeys,30);
   assert.equal(start.discordKeyBonusClaimed,false);
+  assert.equal(start.discordMembershipVerified,false);
   assert.equal(start.keyBonus,undefined);
   assert.equal(run(request('/api/auth/discord/membership',session,'POST','https://other.example')).status,403);
   member=true;
-  const checked=await finish(run(request('/api/auth/discord/membership',session,'POST')),session);
+  const beginCheck=()=>run(request('/api/auth/discord/membership?automatic=1',session,'POST'));
+  const wrongIssuer=await finish(beginCheck(),session,'https://other.example');
+  assert.equal(new URL(wrongIssuer.headers.get('location')).searchParams.get('discord_membership'),'failed');
+  const automatic=beginCheck();
+  assert.equal(new URL(automatic.headers.get('location')).searchParams.get('prompt'),'none');
+  const checked=await finish(automatic,session);
   assert.equal(new URL(checked.headers.get('location')).searchParams.get('discord_membership'),'verified');
   assert.equal(checked.headers.getSetCookie().length,1);
   const credited=await Promise.all([read('/api/game',session),read('/api/game',session)]);
-  assert.ok(credited.every(data=>data.wallet.demonKeys===45&&data.discordKeyBonusClaimed));
+  assert.ok(credited.every(data=>data.wallet.demonKeys===45&&data.discordMembershipVerified&&data.discordKeyBonusClaimed));
   assert.deepEqual(credited.flatMap(data=>data.keyBonus?[data.keyBonus]:[]),[{keys:15}]);
   const notices=await read('/api/game?view=notifications',session);
   assert.equal(notices.unread,1);
   assert.deepEqual(notices.list.map(notice=>notice.kind),['discord-key-bonus']);
-  const loginAgain=await finish(run(request('/signin-with-discord')));
+  const loginAgain=await finish(run(request('/signin-with-discord')),undefined,'https://discord.com');
   const next=loginAgain.headers.getSetCookie()[1].split(';')[0];
   assert.equal((await read('/api/game',next)).wallet.demonKeys,45);
   assert.equal((await read('/api/game?view=notifications',next)).unread,1);
   assert.equal(memberChecks,2);
+  accountId='1580000000000000001';
+  const existingMember=await finish(run(request('/signin-with-discord')));
+  const afterLogin=await read('/api/game',existingMember.headers.getSetCookie()[1].split(';')[0]);
+  assert.ok(afterLogin.discordMembershipVerified);
+  assert.equal(afterLogin.wallet.demonKeys,45);
+  assert.deepEqual(afterLogin.keyBonus,{keys:15});
  }finally{sqlite.close();}
 });
 

@@ -16,6 +16,15 @@ export const arenas=[
  [4000,8000],[14000,26000],[30000,50000],[120000,200000],[400000,3200000]
 ];
 export const combatStatsVersion=2;
+export function arenaPlayerXp(battle){
+ if(!battle)return 0;
+ const {tier,kills,status,campaignReceipt}=battle;
+ const knockouts=kills*(3+2*tier);
+ if(status!=='won')return knockouts;
+ const victory=campaignReceipt?.first?55+14*tier:22+7*tier;
+ const mastery=campaignReceipt?.mastered?24+7*tier:0;
+ return knockouts+victory+mastery;
+}
 const titles=['Runner','Striker','Sentinel'];
 const clamp=(x,a,b)=>Math.max(a,Math.min(x,b));
 const directHits=new Set(['strike','pulse','retaliate']);

@@ -62,7 +62,7 @@ export function createArenaViewport(){
  const deck=createGeometry(),cards=createGeometry(),effects=createGeometry();
  const logo=new Image();logo.src=cardLogo;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
- let field=null,world=null,frame=0,observer=null,visual=null,previous='',lastFrame=-Infinity,lastDeck=-Infinity,slots=[],measure=true,tint='#76e8dc';
+ let field=null,world=null,frame=0,observer=null,visual=null,previous='',lastFrame=-Infinity,lastDeck=-Infinity,slots=[],gateY,measure=true,tint='#76e8dc';
 
  function detach(){
   cancelAnimationFrame(frame);frame=0;observer?.disconnect();observer=null;
@@ -84,6 +84,7 @@ export function createArenaViewport(){
   frame=requestAnimationFrame(render);
  }
  function updateSlots(){
+  gateY=arenaPoint(world.querySelector('.versus'),world).y;
   slots=[...world.querySelectorAll('.arena-slot')].map(element=>{
    const button=element.querySelector('.fighter'),body=element.querySelector('.arena-card-body');
    const center=arenaPoint(element,world);
@@ -110,7 +111,7 @@ export function createArenaViewport(){
   const clip=viewMatrix({width,height,origin:[...center,0],center:[world.offsetLeft+center[0],world.offsetTop+center[1]],
    vanish:style.perspectiveOrigin.split(' ').map(Number.parseFloat),lens:Number.parseFloat(style.perspective)||1200,rot});
   if(measure||now-lastDeck>(reduced?2000:180)){
-   deck.reset();paintArenaWorld(deck,{width:worldW,height:worldH,tint,clock:reduced?0:now/1000,slots});lastDeck=now;
+   deck.reset();paintArenaWorld(deck,{width:worldW,height:worldH,tint,clock:reduced?0:now/1000,slots,gateY});lastDeck=now;
   }
   // Body transforms come from the same animated elements that handle keyboard and pointer input.
   if(dimensionsChanged||animating||now-lastFrame>=85){

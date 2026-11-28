@@ -28,13 +28,17 @@ async function exchange(url, options) {
  return result;
 }
 
+function showDiscordReward(data) {
+ if(data.keyBonus)document.dispatchEvent(new CustomEvent('gdlb-discord-key-bonus',{detail:data.keyBonus}));
+}
+
 export function gameSession() {
  if (!opening) {
   const begin = () => exchange('/api/game');
   opening = (navigator.locks ? navigator.locks.request('gdlb-session', begin) : begin())
    .then(data => {
     renderAccount(data);
-    if(data.keyBonus)document.dispatchEvent(new CustomEvent('gdlb-discord-key-bonus',{detail:data.keyBonus}));
+    showDiscordReward(data);
     if(data.playerProfile?.autoRefresh)refreshDiscordProfile(true);
     return data;
    })
@@ -49,7 +53,10 @@ export async function gameRead(view) {
  if(session.banned)throw Error(session.error);
  if(session.requiresSignIn&&!session.signedIn)throw Error('Sign in with Discord to play.');
  const data = initial && view === 'wallet' ? session : await exchange('/api/game?view=' + view);
- if (view === 'wallet') renderAccount(data);
+ if (view === 'wallet') {
+  renderAccount(data);
+  if(data!==session)showDiscordReward(data);
+ }
  if(data.banned)throw Error(data.error);
  return data[view];
 }
@@ -113,7 +120,7 @@ function refreshDiscordProfile(automatic=false) {
  form.submit();
 }
 
-function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error,discordKeyBonusClaimed,achievementKeysReleased}) {
+function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerProfile,admin,saveRevision,banned,error,discordKeyBonusClaimed,discordMembershipVerified,achievementKeysReleased}) {
  const account=document.getElementById('gameAccount');
  const logout=document.getElementById('gameSignOut');
  const transfer=document.getElementById('gameTransfer');
@@ -127,7 +134,8 @@ function renderAccount({signedIn,accountProvider,requiresSignIn,wallet,playerPro
  document.getElementById('gameSignInGuide').hidden=Boolean(banned);
  if(banned)document.getElementById('gameAuthError').textContent=error;
  document.body.dataset.account=locked?'locked':'ready';
- notifications?.setAccount({signedIn:Boolean(signedIn&&!locked),discord:accountProvider==='discord'&&!locked,keyBonusClaimed:discordKeyBonusClaimed});
+ notifications?.setAccount({signedIn:Boolean(signedIn&&!locked),discord:accountProvider==='discord'&&!locked,
+  username:playerProfile?.username,membershipVerified:discordMembershipVerified,keyBonusClaimed:discordKeyBonusClaimed});
  document.getElementById('accountGate').hidden=!locked;
  document.getElementById('gameMain').hidden=locked;
  document.getElementById('gameGateLoading').hidden=true;

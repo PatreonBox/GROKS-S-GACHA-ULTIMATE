@@ -6,12 +6,12 @@ const bonusRecord=(db,id)=>one(db,'SELECT redeemed_at FROM game_discord_key_bonu
 
 export async function grantDiscordKeyBonus(db,record,id,now=Date.now()){
  const bonus=await bonusRecord(db,id);
- if(!bonus||bonus.redeemed_at!==null)return {record,claimed:Boolean(bonus)};
+ if(!bonus||bonus.redeemed_at!==null)return {record,verified:Boolean(bonus),claimed:Boolean(bonus)};
  const owner='discord:'+id;
  for(let attempt=0;attempt<4&&record?.banned_at===null;attempt++){
   const wallet=JSON.parse(record.wallet);
   initDemonKeys(wallet,now);
-  if(wallet.demonKeys>keyLimit-demonKeyDiscordBonus)return {record,claimed:false};
+  if(wallet.demonKeys>keyLimit-demonKeyDiscordBonus)return {record,verified:true,claimed:false};
   rewardDemonKeys(wallet,demonKeyDiscordBonus,now);
   const updated=JSON.stringify(wallet);
   const [credited]=await db.batch([
@@ -23,14 +23,14 @@ export async function grantDiscordKeyBonus(db,record,id,now=Date.now()){
     WHERE discord_id=? AND redeemed_at IS NULL AND changes()=1`).bind(now,id)
   ]);
   if(credited.meta.changes){
-   return {record:{...record,wallet:updated,revision:record.revision+1},claimed:true,keyBonus:{keys:demonKeyDiscordBonus}};
+   return {record:{...record,wallet:updated,revision:record.revision+1},verified:true,claimed:true,keyBonus:{keys:demonKeyDiscordBonus}};
   }
   const current=await one(db,'SELECT player_id,owner,wallet,revision,banned_at FROM game_profiles WHERE owner=?',owner);
   const receipt=await bonusRecord(db,id);
-  if(receipt?.redeemed_at!=null)return {record:current,claimed:true};
+  if(receipt?.redeemed_at!=null)return {record:current,verified:true,claimed:true};
   record=current;
  }
- return {record,claimed:false};
+ return {record,verified:true,claimed:false};
 }
 
 export async function playerNotifications(db,player,body){

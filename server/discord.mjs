@@ -67,7 +67,7 @@ export function createDiscordAuth(sqlite,{origin,clientId,guildId},send=fetch){
   if(request.headers.get('origin')!==origin)return new Response('Open the game to check Discord membership.',{status:403});
   const active=account(request);
   if(!active)return redirect(origin+destination(url.searchParams.get('return_to')));
-  return begin(request,url,hash(accountToken(request)),false,true);
+  return begin(request,url,hash(accountToken(request)),url.searchParams.get('automatic')==='1',true);
  }
 
  async function checkMembership(id,accessToken){
@@ -98,10 +98,11 @@ export function createDiscordAuth(sqlite,{origin,clientId,guildId},send=fetch){
    next.searchParams.set(membershipOnly?'discord_membership':profileSession?'discord_profile':'discord',reason);
    return redirect(next.href,[clearFlow()]);
   }
-  if(!flow||url.searchParams.get('iss')!==issuer)return failed('failed');
+  if(!flow||url.searchParams.getAll('iss').some(value=>value!==issuer))return failed('failed');
   const boundAccount=profileSession&&hash(accountToken(request)||'')===profileSession?account(request):null;
   if(profileSession&&!boundAccount)return failed('failed');
-  if(url.searchParams.get('error')==='access_denied')return failed('cancelled');
+  const error=url.searchParams.get('error');
+  if(['access_denied','consent_required','interaction_required','login_required'].includes(error))return failed('cancelled');
   const code=url.searchParams.get('code');
   if(!code||code.length>512)return failed('failed');
   try{
@@ -131,6 +132,7 @@ export function createDiscordAuth(sqlite,{origin,clientId,guildId},send=fetch){
     if(membershipOnly)next.searchParams.set('discord_membership',membership||'unavailable');
     return redirect(next.href,[clearFlow()]);
    }
+   if(membership==='not-member')next.searchParams.set('discord_membership',membership);
    const session=secret(),now=Date.now();
    sqlite.prepare('DELETE FROM game_discord_sessions WHERE expires_at<=?').run(now);
    sqlite.prepare('INSERT INTO game_discord_sessions(token_hash,discord_id,expires_at) VALUES(?,?,?)').run(hash(session),id,now+sessionSeconds*1000);
