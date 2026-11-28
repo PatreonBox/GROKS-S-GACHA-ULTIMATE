@@ -1888,6 +1888,36 @@ test('Difficulty caps apply to refocused banner and coin rolls at every unlock t
  assert.match(dropAccessSummary(14),/Level 15 unlocks/);
 });
 
+test('Banner previews cover ten difficulties and use eligible levels with art',async()=>{
+ const f=fixture(),player=await f.open(),categories=difficulties.slice(1);
+ const previews=async level=>{
+  f.store(player.id,w=>{w.playerXp=playerXpAt(level);});
+  const response=await f.call('/api/game?view=banner-levels',player);
+  assert.equal(response.status,200);
+  const groups=(await response.json())['banner-levels'];
+  assert.equal(groups.length,10);
+  return groups;
+ };
+ const starter=await previews(0),restricted=await previews(13),complete=await previews(15);
+ assert.ok(starter.slice(0,4).every(group=>group.length));
+ assert.ok(starter.slice(4).every(group=>!group.length));
+ assert.ok(complete.every(group=>group.length));
+ const catalogue=await demonCatalogue(pool),extremes=restricted.at(-1);
+ assert.ok(extremes.length&&extremes.length<complete.at(-1).length);
+ assert.ok(extremes.every(({id})=>dropEligible(catalogue.levels.get(id),dropAccess(13))));
+ for(const [index,group] of complete.entries()){
+  for(const {id,name,standardWeight,proWeight} of group){
+   const row=catalogue.levels.get(id);
+   assert.equal(row[6],categories[index]);
+   assert.equal(row[1],name);
+   assert.ok(standardWeight>0&&proWeight>0);
+   if(cardRarity(row).index>=4)assert.ok(Math.abs(proWeight/standardWeight-20)<1e-8);
+   const art=new URL('../web/assets/shots/'+id,import.meta.url);
+   assert.ok(['.webp','.avif'].some(extension=>fs.existsSync(new URL(art.href+extension))));
+  }
+ }
+});
+
 test('Owner-only chest test can select all ten Impossible cards and leaves the save untouched',async()=>{
  const regular=fixture(),member=await regular.open();
  const search=(f,user,query='')=>f.call('/api/game?view=demon-targets'+query,user);
