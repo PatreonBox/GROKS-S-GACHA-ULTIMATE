@@ -129,7 +129,10 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
    if(axis!==recordedAxis){trace.push([ticks,'axis',axis]);recordedAxis=axis;}
    stepDrill(run,drillStep,axis);ticks++;carry-=drillStep;
    if(run.event?.quality==='miss'){
-    sound.play('enemyHit',{level:.76,seed:run.score});bank('crash');return;
+    const lostAttempt=run;
+    bank('crash');
+    sound.playGameReady('gdDeath',{level:.76},()=>dialog.open&&run===lostAttempt&&phase!=='starting');
+    return;
    }
    if(run.event){
     flashAt=run.time;
@@ -145,7 +148,7 @@ export function openDrill({kind,name,best=0,sound,onStart,onCheckpoint,onFinish,
  }
  async function start(){
   if(!canvas||!['ready','done'].includes(phase))return;
-  phase='starting';actions.replaceChildren();sound.prepareGame();
+  phase='starting';actions.replaceChildren();sound.prepareGame();sound.prepareGame('gdDeath');
   try{
    const started=await onStart();
    token=started.token;

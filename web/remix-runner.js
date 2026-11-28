@@ -128,14 +128,19 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
  }
  function resetInput(){input.reset();control('reset');}
  function finish(won,key=null){
+  const died=!won&&phase!=='paused';
   music?.pause();closeFinale?.();closeFinale=null;
   phase=won?'won':'lost';pad.hidden=true;resetInput();buttons.replaceChildren();
+  if(died){
+   const lostAttempt=s;
+   sound.playGameReady('gdDeath',{level:.76},()=>!closed&&phase==='lost'&&s===lostAttempt);
+  }
   if(endless){
    readout.textContent=clock(ticks*STEP);
    message.textContent='Saving your endless run…';
    sendEndlessResult();
    burst(s.x,s.y,won?26:18,remix.color);
-   if(won)sound.play(remix.cue);else sound.playGame('gdDeath',{level:.62});
+   if(won)sound.play(remix.cue);
   }else if(won){
    persist(100,key);readout.textContent=remix.finish?remix.finish+'% · CUT!':'100%';
    message.textContent=practice?'Finale cleared in practice.':remix.quote;
@@ -144,7 +149,6 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
    const n=displayed(),wrong=remix.mark==='KEY'&&s.x>=course.end;
    readout.textContent=n+'%';persist(n,key);burst(s.x,s.y,24,remix.color);
    message.textContent=(practice?'Practice':'Attempt '+attempt)+' · '+n+'%. '+(wrong?'Wrong key.':s.x>=course.end&&course.finale?'Tap all three pink orbs.':'Try again.');
-   sound.playGame('gdDeath',{level:.62});
   }
   action(endless?'Try endless again':won?'Replay level':'Retry',()=>start(practice)).focus({preventScroll:true});
   if(course.finale)action(practice?'Start full level':'Practice finale',()=>start(!practice));
@@ -226,6 +230,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
  async function start(isPractice=false){
   cancelAnimationFrame(frame);closeFinale?.();closeFinale=null;
   phase='starting';message.textContent='Preparing attempt…';buttons.replaceChildren();
+  sound.prepareGame('gdDeath');
   if(limbo)music?.prime();
   try {
    if(finalSave)await finalSave;
@@ -242,7 +247,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
    practice=isPractice;s=newAttempt(course,practice?course.finale:0);resetInput();
    if(!limbo)music?.reset();
    attempt++;launch=limbo?0:launchTime;attemptLabel.textContent=limbo?'ATTEMPT '+attempt:'GET READY';
-   lastPercent=-1;sound.prepareGame();sound.prepareGame('gdDeath');sound.playGame('gdPlay',{level:.62});draw();running(limbo);
+   lastPercent=-1;sound.prepareGame();sound.playGame('gdPlay',{level:.62});draw();running(limbo);
   } catch(error){
    if(closed)return;
    music?.pause();

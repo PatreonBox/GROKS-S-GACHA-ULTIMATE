@@ -19,7 +19,6 @@ import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
 import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion} from '../web/tidal-video-rules.js';
-import {hitsTidalHazard,tidalHazards} from '../web/tidal-video-hazards.js';
 import {replayTidalVideo} from '../web/game-replay.js';
 import {keepWavePoint} from '../web/remix-wave.js';
 import worker from '../dist/server/index.js';
@@ -66,12 +65,12 @@ test('Recorded wave follows the measured speed transition and replays through th
  while(!stepTidalWave(fall)){}
  assert.ok(fall.y+17>tidalHeight);
  assert.ok(replayTidalVideo(session,{ticks:fall.tick,trace:[]},tidalLength*1000)<100);
- assert.equal(replayTidalVideo({start:0,video:true},{ticks:487,trace:[]},tidalLength*1000),14);
+ assert.throws(()=>replayTidalVideo({start:0,video:true},{ticks:487,trace:[]},tidalLength*1000),/expired/);
 });
 
 test('Recorded flight begins with two separate orb taps and reveals the wave at its portal',()=>{
  const session={start:0,video:tidalVideoVersion};
- for(const [taps,missed] of [[[],'pink'],[[77],'green']]){
+ for(const [taps,missed] of [[[],'pink'],[[53],'green']]){
   const run=newTidalWave(),trace=[];
   let result;
   while(!result){
@@ -88,7 +87,7 @@ test('Recorded flight begins with two separate orb taps and reveals the wave at 
  }
  const run=newTidalWave();
  while(run.form==='cube'){
-  if(run.tick===77||run.tick===148){
+  if(run.tick===53||run.tick===83){
    tidalInput(run,'held',true);
    tidalInput(run,'held',false);
   }
@@ -102,21 +101,14 @@ test('Recorded flight begins with two separate orb taps and reveals the wave at 
  assert.equal(run.tick,Math.ceil(tidalStart/tidalStep));
 });
 
-test('Wave collides with individual spikes, blocks, and the live positions of moving saws',()=>{
- for(const hazard of tidalHazards){
-  const time=1;
-  const y=hazard.y+(hazard.swing?Math.sin(time*3.1+hazard.x*.008)*hazard.swing:0);
-  assert.equal(hitsTidalHazard(hazard.x,time,y,11),true,hazard.kind);
-  assert.equal(hitsTidalHazard(hazard.x+220,time,y,17),false,hazard.kind);
- }
-});
-
-test('Recorded Tidal Wave proof covers a hazard collision and a full clear',()=>{
- const session={start:0,video:tidalVideoVersion};
- const intro=[77,148].flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
- const firstSpikes=[...intro,[480,'held',true],[546,'held',false]];
- assert.equal(replayTidalVideo(session,{ticks:579,trace:firstSpikes},5000),17);
- assert.throws(()=>replayTidalVideo(session,{ticks:580,trace:firstSpikes},5000),/continues past/);
+test('Video overlay proofs exclude removed scenery and expire retired layouts',()=>{
+ const taps=ticks=>ticks.flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
+ const oldSession={start:0,video:3},session={start:0,video:tidalVideoVersion};
+ const flight=[[480,'held',true],[546,'held',false]];
+ const intro=taps([53,83]);
+ assert.throws(()=>replayTidalVideo(oldSession,{},5000),/expired/);
+ assert.throws(()=>replayTidalVideo(session,{ticks:579,trace:[...intro,...flight]},5000),/Finish the attempt/);
+ assert.equal(replayTidalVideo(session,{ticks:592,trace:[...intro,...flight]},5000),18);
  const heldChanges=[
   509,593,653,713,773,795,817,877,937,997,1054,1085,1119,1148,1177,1237,1264,1291,
   1351,1411,1467,1495,1527,1587,1647,1698,1713,1728,1758,1771,1784,1819,1852,1886,
@@ -126,6 +118,14 @@ test('Recorded Tidal Wave proof covers a hazard collision and a full clear',()=>
  ];
  const trace=[...intro,...heldChanges.map((tick,index)=>[tick,'held',index%2===0])];
  assert.equal(replayTidalVideo(session,{ticks:Math.ceil(tidalLength/tidalStep),trace},30000),100);
+});
+
+test('The versioned death cue serves the uploaded MP3 through the game media route',async()=>{
+ const path='/assets/audio/gd-death.mp3',file=readFileSync(new URL('../web'+path,import.meta.url));
+ const response=await worker.fetch(new Request(publicOrigin+path+'?v=2'));
+ assert.equal(response.status,200);
+ assert.equal(response.headers.get('Content-Type'),'audio/mpeg');
+ assert.deepEqual(Buffer.from(await response.arrayBuffer()),file);
 });
 
 test('Demon chest openings select the uploaded sound at the correct rarity boundaries',async()=>{

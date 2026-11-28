@@ -1,6 +1,6 @@
 import {makeDrill,stepDrill,drillStep,pressForge,releaseForge,steerDrill,directDrillLane,shiftDrillLane} from './drill-physics.js';
 import {makeCourse,createEndlessCourse,newAttempt,pressRunner,advanceRunner,STEP} from './remix-physics.js';
-import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep} from './tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep,tidalVideoVersion} from './tidal-video-rules.js';
 
 const maxUnverifiedEndlessSeconds=300;
 
@@ -89,7 +89,8 @@ export function replayRemix(remix,session,proof,now,{finale=false}={}) {
 }
 
 export function replayTidalVideo(session,proof,now){
- const run=newTidalWave(session.video===true?1:session.video);
+ if(session.video!==2&&session.video!==tidalVideoVersion)throw Error('This recording attempt has expired. Start a new Tidal Wave attempt.');
+ const run=newTidalWave(session.video);
  const result=replay(proof,{
   duration:now-session.start,step:tidalStep,maxSeconds:tidalLength+tidalStep,
   apply:(kind,value)=>tidalInput(run,kind,value),
