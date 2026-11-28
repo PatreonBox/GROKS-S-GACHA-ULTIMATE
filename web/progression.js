@@ -12,7 +12,7 @@ const percent=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
 const groups=[...new Set(achievements.map(item=>item.group))];
 const allStages=achievements.flatMap(item=>item.stages);
 const difficultyFaces={Easy:'easy',Normal:'normal',Hard:'hard',Harder:'harder',Insane:'insane',
- Demon:'demon-extreme','Easy Demon':'demon-easy','Medium Demon':'demon-medium','Hard Demon':'demon-hard',
+ 'Easy Demon':'demon-easy','Medium Demon':'demon-medium','Hard Demon':'demon-hard',
  'Insane Demon':'demon-insane','Extreme Demon':'demon-extreme'};
 const groupIcons={Cards:'pack',Battle:'battle',Training:'aim',Kingdom:'tower','Coin mine':'mine'};
 const names={overview:'Overview',achievements:'Achievements'};
