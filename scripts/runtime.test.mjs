@@ -18,7 +18,8 @@ import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
-import {newTidalWave,stepTidalWave,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion} from '../web/tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalInput,tidalHeight,tidalLength,tidalPortals,tidalScrollSpeed,tidalStart,tidalStep,tidalVideoVersion} from '../web/tidal-video-rules.js';
+import {hitsTidalHazard,tidalHazards} from '../web/tidal-video-hazards.js';
 import {replayTidalVideo} from '../web/game-replay.js';
 import {keepWavePoint} from '../web/remix-wave.js';
 import worker from '../dist/server/index.js';
@@ -40,7 +41,7 @@ test('Wave trail retains corners from beyond the left edge to the current positi
 });
 
 test('Recorded wave follows the measured speed transition and replays through the ending',()=>{
- const run=newTidalWave(),trace=[];
+ const run=newTidalWave(2),trace=[];
  assert.equal(tidalScrollSpeed(tidalStart-.01),0);
  assert.equal(tidalScrollSpeed(4),392);
  assert.equal(tidalScrollSpeed(4.60),902);
@@ -58,14 +59,73 @@ test('Recorded wave follows the measured speed transition and replays through th
  assert.equal(run.portal,tidalPortals.length);
  assert.equal(run.mini,false);
  const proof={ticks:run.tick,trace};
- const session={start:0,video:tidalVideoVersion};
+ const session={start:0,video:2};
  assert.equal(replayTidalVideo(session,proof,tidalLength*1000),100);
  assert.throws(()=>replayTidalVideo(session,proof,1000),/could not be verified/);
- const fall=newTidalWave();
+ const fall=newTidalWave(2);
  while(!stepTidalWave(fall)){}
  assert.ok(fall.y+17>tidalHeight);
  assert.ok(replayTidalVideo(session,{ticks:fall.tick,trace:[]},tidalLength*1000)<100);
  assert.equal(replayTidalVideo({start:0,video:true},{ticks:487,trace:[]},tidalLength*1000),14);
+});
+
+test('Recorded flight begins with two separate orb taps and reveals the wave at its portal',()=>{
+ const session={start:0,video:tidalVideoVersion};
+ for(const [taps,missed] of [[[],'pink'],[[77],'green']]){
+  const run=newTidalWave(),trace=[];
+  let result;
+  while(!result){
+   if(taps.includes(run.tick)){
+    trace.push([run.tick,'held',true]);
+    tidalInput(run,'held',true);
+   }
+   result=stepTidalWave(run);
+  }
+  assert.equal(result,'crash');
+  assert.equal(run.form,'cube');
+  assert.equal(run.cube.crashReason,'You missed the '+missed+' orb.');
+  assert.equal(replayTidalVideo(session,{ticks:run.tick,trace},30000),Math.floor(run.tick*tidalStep/tidalLength*100));
+ }
+ const run=newTidalWave();
+ while(run.form==='cube'){
+  if(run.tick===77||run.tick===148){
+   tidalInput(run,'held',true);
+   tidalInput(run,'held',false);
+  }
+  assert.equal(stepTidalWave(run),null);
+ }
+ assert.equal(run.cube.nextOrb,2);
+ assert.equal(run.cube.gravity,-1);
+ assert.equal(run.form,'transition');
+ while(run.form==='transition')assert.equal(stepTidalWave(run),null);
+ assert.equal(run.form,'wave');
+ assert.equal(run.tick,Math.ceil(tidalStart/tidalStep));
+});
+
+test('Wave collides with individual spikes, blocks, and the live positions of moving saws',()=>{
+ for(const hazard of tidalHazards){
+  const time=1;
+  const y=hazard.y+(hazard.swing?Math.sin(time*3.1+hazard.x*.008)*hazard.swing:0);
+  assert.equal(hitsTidalHazard(hazard.x,time,y,11),true,hazard.kind);
+  assert.equal(hitsTidalHazard(hazard.x+220,time,y,17),false,hazard.kind);
+ }
+});
+
+test('Recorded Tidal Wave proof covers a hazard collision and a full clear',()=>{
+ const session={start:0,video:tidalVideoVersion};
+ const intro=[77,148].flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
+ const firstSpikes=[...intro,[480,'held',true],[546,'held',false]];
+ assert.equal(replayTidalVideo(session,{ticks:579,trace:firstSpikes},5000),17);
+ assert.throws(()=>replayTidalVideo(session,{ticks:580,trace:firstSpikes},5000),/continues past/);
+ const heldChanges=[
+  509,593,653,713,773,795,817,877,937,997,1054,1085,1119,1148,1177,1237,1264,1291,
+  1351,1411,1467,1495,1527,1587,1647,1698,1713,1728,1758,1771,1784,1819,1852,1886,
+  1911,1936,1964,1981,2011,2041,2070,2116,2176,2236,2278,2304,2329,2358,2409,2469,
+  2515,2561,2597,2627,2657,2673,2696,2756,2816,2848,2869,2880,2899,2929,2962,3022,
+  3077,3107,3142,3202
+ ];
+ const trace=[...intro,...heldChanges.map((tick,index)=>[tick,'held',index%2===0])];
+ assert.equal(replayTidalVideo(session,{ticks:Math.ceil(tidalLength/tidalStep),trace},30000),100);
 });
 
 test('Demon chest openings select the uploaded sound at the correct rarity boundaries',async()=>{

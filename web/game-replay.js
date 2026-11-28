@@ -1,6 +1,6 @@
 import {makeDrill,stepDrill,drillStep,pressForge,releaseForge,steerDrill,directDrillLane,shiftDrillLane} from './drill-physics.js';
 import {makeCourse,createEndlessCourse,newAttempt,pressRunner,advanceRunner,STEP} from './remix-physics.js';
-import {newTidalWave,stepTidalWave,tidalLength,tidalStep} from './tidal-video-rules.js';
+import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep} from './tidal-video-rules.js';
 
 const maxUnverifiedEndlessSeconds=300;
 
@@ -92,10 +92,7 @@ export function replayTidalVideo(session,proof,now){
  const run=newTidalWave(session.video===true?1:session.video);
  const result=replay(proof,{
   duration:now-session.start,step:tidalStep,maxSeconds:tidalLength+tidalStep,
-  apply(kind,value){
-   if(kind!=='held'||typeof value!=='boolean')throw Error('Invalid wave controls.');
-   run.held=value;
-  },
+  apply:(kind,value)=>tidalInput(run,kind,value),
   advance:()=>stepTidalWave(run)
  });
  if(!result)throw Error('Finish the attempt before saving it.');
