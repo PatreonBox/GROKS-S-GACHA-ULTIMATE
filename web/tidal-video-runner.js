@@ -2,19 +2,19 @@ import {ico} from './icons.js';
 import {starterCube} from './cube-catalog.js';
 import {bindRunnerControls} from './remix-controls.js';
 import {drawWave,drawWaveTrail,keepWavePoint,waveAngle} from './remix-wave.js';
-import {tidalCubeRadius} from './tidal-cube-intro.js';
+import {tidalCubeRadius,tidalPortalApproachX} from './tidal-cube-intro.js';
 import {newTidalWave,stepTidalWave,tidalInput,tidalLength,tidalStep,tidalWidth,tidalHeight,tidalX,tidalVideoMode} from './tidal-video-rules.js';
 
 const source='/arcade-video/tidal-wave.mp4';
 const waveDuration=Math.ceil(tidalLength/tidalStep);
-const introInstructions='Tap the flashes in order. Pink, green, green, pink, pink.';
-const transitionInstruction='Get ready for the wave portal.';
+const introInstructions='Tap when your cube reaches each orb.';
+const transitionInstruction='Hold as you enter the wave portal to climb.';
 const cubeInstructions=[
  introInstructions,
- 'Tap the first green flash to flip gravity.',
- 'Tap the second green flash to flip back.',
- 'Tap both pink flashes to jump.',
- 'Tap the last pink flash.',
+ 'Tap the first green orb to flip gravity.',
+ 'Tap the lower green orb to flip back.',
+ 'Tap each pink orb to jump.',
+ 'Tap the last pink orb.',
  transitionInstruction
 ];
 const waveInstructions='Hold to climb. Release to dive. Stay between the floor and ceiling.';
@@ -23,7 +23,8 @@ function paintCube(ctx,cube,avatar,icon){
  const r=tidalCubeRadius;
  ctx.save();ctx.translate(tidalX,cube.y);ctx.rotate(cube.angle);
  ctx.scale(1,cube.gravity);
- ctx.shadowBlur=13;ctx.shadowColor=avatar.color;
+ ctx.shadowBlur=cube.orbContact?20:13;
+ ctx.shadowColor=cube.orbContact==='green'?'#7fff70':cube.orbContact==='pink'?'#ff8cee':avatar.color;
  if(icon.naturalWidth)ctx.drawImage(icon,-r,-r,r*2,r*2);
  else{
   ctx.fillStyle=avatar.color;ctx.fillRect(-r,-r,r*2,r*2);
@@ -62,7 +63,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  function paint(){
   const time=run.tick*tidalStep;
   ctx.clearRect(0,0,tidalWidth,tidalHeight);
-  if(run.form==='cube')paintCube(ctx,run.cube,avatar,icon);
+  if(run.form==='cube'||run.form==='transition'&&run.cube.x>=tidalPortalApproachX)paintCube(ctx,run.cube,avatar,icon);
   if(run.form==='wave'){
    const scroll=run.distance-tidalX;
    const points=trail.map(([x,y])=>[x-scroll,y]);
@@ -73,7 +74,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
     ctx.shadowBlur=18*(1-age/.28);
     ctx.shadowColor=run.mini?'#ff82e5':'#97ffc5';
    }
-   drawWave(ctx,{x:tidalX,y:run.y,angle:waveAngle(run.held,run.mini),mini:run.mini,skin:avatar});
+   drawWave(ctx,{x:tidalX,y:run.y,angle:run.distance?waveAngle(run.held,run.mini):0,mini:run.mini,skin:avatar});
    ctx.restore();
   }
   size.textContent=run.form==='cube'?'CUBE':run.form==='transition'?'GET READY':run.mini?'MINI WAVE':'WAVE';
@@ -81,7 +82,7 @@ export function openTidalVideo(remix,{avatar=starterCube,sound,onStart,onResult}
  }
  function updateControls(){
   pad.textContent=run.form==='cube'?'Tap orb':'Hold to climb';
-  pad.hidden=phase!=='running'||run.form==='transition'||!touch.matches;
+  pad.hidden=phase!=='running'||!touch.matches;
  }
  function instructions(){
   if(run.form==='wave')return waveInstructions;

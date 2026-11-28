@@ -89,7 +89,7 @@ export function replayRemix(remix,session,proof,now,{finale=false}={}) {
 }
 
 export function replayTidalVideo(session,proof,now){
- if(![2,4,tidalVideoVersion].includes(session.video))throw Error('This recording attempt has expired. Start a new Tidal Wave attempt.');
+ if(![2,4,5,tidalVideoVersion].includes(session.video))throw Error('This recording attempt has expired. Start a new Tidal Wave attempt.');
  const run=newTidalWave(session.video);
  const result=replay(proof,{
   duration:now-session.start,step:tidalStep,maxSeconds:tidalLength+tidalStep,

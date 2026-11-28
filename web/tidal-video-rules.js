@@ -1,15 +1,15 @@
 import {waveRise,waveVerticalOffsets} from './remix-wave.js';
-import {newTidalCube,stepLegacyTidalCube,stepTidalOverlayCube,tidalOrbSequence,tidalOverlayCubeEnd} from './tidal-cube-intro.js';
+import {newTidalCube,newTidalContactCube,stepLegacyTidalCube,stepTidalOverlayCube,stepTidalContactCube,tidalOrbSequence,tidalOverlayCubeEnd,tidalPortalContactAt} from './tidal-cube-intro.js';
 
 export const tidalVideoId=86407629;
 export const tidalStep=1/120;
 export const tidalLength=27.067;
-export const tidalStart=3.67;
+export const tidalStart=tidalPortalContactAt;
 export const tidalWidth=800,tidalHeight=500,tidalX=304;
 export const tidalWaveCeiling=40,tidalWaveFloor=422;
-export const tidalVideoMode='video-rhythm';
-export const tidalVideoVersion=5;
-const speedBoostAt=4.60,flightInsetDuration=.30;
+export const tidalVideoMode='video-contact';
+export const tidalVideoVersion=6;
+const legacyWaveStart=3.67,speedBoostAt=4.60,flightInsetDuration=.30;
 const waveOffsets=[false,true].map(mini=>[false,true].map(held=>waveVerticalOffsets(held,mini)));
 export const tidalPortals=[
  [14.08,true],[15.07,false],[16.43,true],[17.36,false],
@@ -17,14 +17,14 @@ export const tidalPortals=[
 ];
 
 // Measured by tracking horizontal movement across six bands of the shipped recording.
-export function tidalScrollSpeed(time){
- if(time<tidalStart)return 0;
+export function tidalScrollSpeed(time,version=tidalVideoVersion){
+ if(time<(version===6?tidalStart:legacyWaveStart))return 0;
  return time<speedBoostAt?392:902;
 }
 
 export function newTidalWave(version=tidalVideoVersion){
  return {version,tick:0,distance:0,y:tidalHeight/2,mini:false,held:false,pressed:false,portal:0,
-  form:version===2?'wave':'cube',cube:version===2?null:newTidalCube(),crashReason:null};
+  form:version===2?'wave':'cube',cube:version===2?null:version===6?newTidalContactCube():newTidalCube(),crashReason:null};
 }
 export function tidalInput(run,kind,value){
  if(kind!=='held'||typeof value!=='boolean')throw Error('Invalid Tidal Wave controls.');
@@ -36,6 +36,18 @@ export function stepTidalWave(run){
  const pressed=run.pressed;
  run.pressed=false;
  const legacy=run.version===2||run.version===4;
+ if(run.version===6&&run.form!=='wave'){
+  const contact=stepTidalContactCube(run.cube,tidalStep,pressed,tidalHeight);
+  if(contact==='crash'){
+   run.crashReason=run.cube.crashReason;
+   return 'crash';
+  }
+  if(contact){
+   run.form=contact;
+   if(contact==='wave')run.y=run.cube.y;
+  }
+  return null;
+ }
  if(run.form==='cube'){
   const result=legacy?stepLegacyTidalCube(run.cube,time,tidalStep,pressed):
    stepTidalOverlayCube(run.cube,time,tidalStep,pressed,tidalHeight);
@@ -47,7 +59,7 @@ export function stepTidalWave(run){
   return null;
  }
  if(run.form==='transition'){
-  if(time<tidalStart)return null;
+  if(time<legacyWaveStart)return null;
   run.form='wave';
  }
  const portal=tidalPortals[run.portal];
@@ -55,9 +67,10 @@ export function stepTidalWave(run){
   run.mini=portal[1];
   run.portal++;
  }
- const speed=tidalScrollSpeed(time);
+ const speed=tidalScrollSpeed(time,run.version);
  if(speed){
   const stride=speed*tidalStep;
+  const beforeY=run.y;
   run.distance+=stride;
   run.y+=waveRise(stride,run.held,run.mini);
   if(legacy){
@@ -73,7 +86,12 @@ export function stepTidalWave(run){
    const maxY=tidalHeight-(tidalHeight-tidalWaveFloor)*inset-bottom;
    if(run.y<=minY||run.y>=maxY){
     const up=run.y<=minY;
-    run.y=up?minY:maxY;
+    const boundary=up?minY:maxY;
+    if(run.version===6){
+     const travel=Math.max(0,Math.min(1,(boundary-beforeY)/(run.y-beforeY)));
+     run.distance-=stride*(1-travel);
+    }
+    run.y=boundary;
     run.crashReason=up?'ceiling':'floor';
     return 'crash';
    }

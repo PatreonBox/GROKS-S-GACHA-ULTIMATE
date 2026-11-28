@@ -42,8 +42,9 @@ test('Wave trail retains corners from beyond the left edge to the current positi
 test('Recorded wave follows the measured speed transition and replays through the ending',()=>{
  const run=newTidalWave(2),trace=[];
  assert.equal(tidalScrollSpeed(tidalStart-.01),0);
- assert.equal(tidalScrollSpeed(4),392);
- assert.equal(tidalScrollSpeed(4.60),902);
+ assert.equal(tidalScrollSpeed(tidalStart),902);
+ assert.equal(tidalScrollSpeed(4,2),392);
+ assert.equal(tidalScrollSpeed(4.60,2),902);
  let result;
  while(!result){
   const offset=run.mini?119:139;
@@ -51,7 +52,7 @@ test('Recorded wave follows the measured speed transition and replays through th
   if(held!==run.held){trace.push([run.tick,'held',held]);run.held=held;}
   const distance=run.distance,y=run.y;
   result=stepTidalWave(run);
-  assert.ok(Math.abs(run.distance-distance-tidalScrollSpeed(run.tick*tidalStep)*tidalStep)<1e-8);
+  assert.ok(Math.abs(run.distance-distance-tidalScrollSpeed(run.tick*tidalStep,2)*tidalStep)<1e-8);
   assert.ok(Math.abs(Math.abs(run.y-y)-(run.distance-distance)*(run.mini?2:1))<1e-8);
  }
  assert.equal(result,'clear');
@@ -99,7 +100,18 @@ test('The cube falls on missed pink taps and rises into the ceiling when only on
  }
 });
 
-test('Five separate orb taps bounce and flip the cube before the wave portal',()=>{
+test('A tap can use an orb only when the cube overlaps it',()=>{
+ for(const y of [285,140]){
+  const run=newTidalWave(),trace=[];
+  while(run.tick<50)assert.equal(stepTidalWave(run),null);
+  Object.assign(run.cube,{y,vy:0,grounded:false});
+  tapTidalOrb(run,trace);
+  assert.equal(stepTidalWave(run),null);
+  assert.equal(run.cube.nextOrb,y===285?1:0);
+ }
+});
+
+test('Green kicks against flipped gravity and the form changes inside the wave portal',()=>{
  const run=newTidalWave(),trace=[],orbVelocities=[];
  while(run.form==='cube'){
   const before=run.cube.nextOrb;
@@ -107,15 +119,29 @@ test('Five separate orb taps bounce and flip the cube before the wave portal',()
   assert.equal(stepTidalWave(run),null);
   if(run.cube.nextOrb!==before)orbVelocities.push([run.cube.gravity,Math.sign(run.cube.vy)]);
  }
- assert.deepEqual(orbVelocities,[[1,-1],[-1,-1],[1,1],[1,-1],[1,-1]]);
+ assert.deepEqual(orbVelocities,[[1,-1],[-1,1],[1,-1],[1,-1],[1,-1]]);
  assert.equal(run.form,'transition');
- while(run.form==='transition')assert.equal(stepTidalWave(run),null);
+ const portalTick=Math.round(tidalStart/tidalStep);
+ while(run.tick<portalTick-1){
+  assert.equal(stepTidalWave(run),null);
+  assert.equal(run.form,'transition');
+ }
+ const outsidePortal={...run,cube:{...run.cube,y:110,vy:0}};
+ while(outsidePortal.tick<portalTick+8){
+  const result=stepTidalWave(outsidePortal);
+  assert.equal(outsidePortal.form,'transition');
+  if(result==='crash')break;
+ }
+ assert.equal(outsidePortal.crashReason,'You missed the wave portal.');
+ assert.equal(stepTidalWave(run),null);
  assert.equal(run.form,'wave');
- assert.equal(run.tick,Math.ceil(tidalStart/tidalStep));
+ assert.equal(run.tick,portalTick);
+ assert.equal(run.y,run.cube.y);
+ assert.equal(run.distance,0);
 });
 
 test('The visible normal and mini wave stop at the ceiling or floor on contact',()=>{
- const takeoff=newTidalWave();
+ const takeoff=newTidalWave(5);
  Object.assign(takeoff,{form:'wave',tick:480,y:tidalWaveFloor});
  assert.equal(stepTidalWave(takeoff),null);
  assert.ok(takeoff.y>tidalWaveFloor);
@@ -131,6 +157,7 @@ test('The visible normal and mini wave stop at the ceiling or floor on contact',
    assert.equal(stepTidalWave(run),'crash');
    assert.equal(run.crashReason,edge);
    assert.ok(Math.abs(run.y+offset-boundary)<1e-9);
+   assert.ok(Math.abs(run.distance-(mini?.5:1))<1e-9);
   }
  }
 });
@@ -153,6 +180,7 @@ test('Updated Tidal Wave replays to the end and still verifies earlier overlay a
  assert.throws(()=>replayTidalVideo({start:0,video:3},{},5000),/expired/);
  const legacyTrace=[53,83].flatMap(tick=>[[tick,'held',true],[tick,'held',false]]);
  assert.equal(replayTidalVideo({start:0,video:4},{ticks:512,trace:legacyTrace},5000),15);
+ assert.equal(replayTidalVideo({start:0,video:5},{ticks:113,trace:[]},5000),3);
 });
 
 test('The versioned death cue serves the uploaded MP3 through the game media route',async()=>{
