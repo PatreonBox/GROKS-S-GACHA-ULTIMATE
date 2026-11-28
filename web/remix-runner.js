@@ -1,6 +1,7 @@
 import {VIEW_WIDTH as WIDTH,VIEW_HEIGHT as HEIGHT,STEP,makeCourse,createEndlessCourse,newAttempt,advanceRunner} from './remix-physics.js';
 import {openLimboFinale} from './limbo-finale.js';
-import {createRemixArt} from './remix-art.js';
+import {keepWavePoint} from './remix-wave.js';
+import {createRemixArt,maxRunnerPlayerX} from './remix-art.js';
 import {helpButton,installMinigameGuide,remixGuide} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
 import {remixMusic,remixMusicCredit} from './remix-media.js';
@@ -35,7 +36,8 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
  let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,closed=false,lastPercent=-1,highWater=0,practice=false;
  let launch=0,ticks=0,trace=[],traceStart=0,token=null,closeFinale,finalSave;
  let interval=0,keysRemaining=0,nextCheckpoint=Infinity,keysEarned=0,xpEarned=0;
- const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running'||limbo&&phase==='key',{loop:!limbo});
+ const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running'||limbo&&phase==='key',
+  {loop:!limbo,continuous:limbo});
  const makeArt=()=>createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
  let paint=makeArt();
  const guide=installMinigameGuide(dialog,remixGuide({...remix,mode:course.mode},avatar.icon,{endless}),pause);
@@ -190,7 +192,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   }
   carry+=elapsed;
   while(carry>=STEP&&phase==='running'){
-   const {passed,vy,x,y}=s,status=advanceRunner(s,course,remix,STEP);
+   const {passed,x,y}=s,status=advanceRunner(s,course,remix,STEP);
    ticks++;carry-=STEP;stepParticles(STEP);
    if(s.passed!==passed){
     if(course.mode!=='cube')burst(s.x-10,s.y,5,avatar.color);
@@ -203,8 +205,10 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
    }else if(s.event==='mini'){
     burst(s.x,s.y,21,'#ffa0fc');sound.playGame('portal',{level:.69});
    }
-   if(course.mode==='wave'&&vy!==s.vy)noteTrail(x,y);
-   if(Math.floor(s.time*64)!==Math.floor((s.time-STEP)*64))noteTrail(s.x,s.y);
+   if(course.mode==='wave'){
+    if(!s.trace.length)keepWavePoint(s.trace,x,y,maxRunnerPlayerX);
+    keepWavePoint(s.trace,s.x,s.y,maxRunnerPlayerX);
+   }else if(Math.floor(s.time*64)!==Math.floor((s.time-STEP)*64))noteTrail(s.x,s.y);
    if(status==='crash'){finish(false);return}
    if(status==='clear'){onClear();return}
    collectCheckpoint();
@@ -213,14 +217,16 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   if(progress!==lastPercent){readout.textContent=progress;lastPercent=progress}
   frame=requestAnimationFrame(tick);
  }
- function running(){
+ function running(rewindMusic=false){
   phase='running';pad.hidden=false;buttons.replaceChildren();message.textContent=(launch?'Get ready. ':'')+instruction+orbHint;action('Pause',pause);
-  music?.start();
+  music?.start({rewind:rewindMusic});
   canvas.focus({preventScroll:true});last=0;carry=0;frame=requestAnimationFrame(tick);
+  if(document.hidden)pause();
  }
  async function start(isPractice=false){
   cancelAnimationFrame(frame);closeFinale?.();closeFinale=null;
   phase='starting';message.textContent='Preparing attempt…';buttons.replaceChildren();
+  if(limbo)music?.prime();
   try {
    if(finalSave)await finalSave;
    const session=isPractice?null:await onStart(mode);
@@ -234,11 +240,12 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
     readout.textContent=endlessProgress();
    }else readout.textContent='0%';
    practice=isPractice;s=newAttempt(course,practice?course.finale:0);resetInput();
-   music?.reset();
+   if(!limbo)music?.reset();
    attempt++;launch=limbo?0:launchTime;attemptLabel.textContent=limbo?'ATTEMPT '+attempt:'GET READY';
-   lastPercent=-1;sound.prepareGame();sound.prepareGame('gdDeath');sound.playGame('gdPlay',{level:.62});draw();running();
+   lastPercent=-1;sound.prepareGame();sound.prepareGame('gdDeath');sound.playGame('gdPlay',{level:.62});draw();running(limbo);
   } catch(error){
    if(closed)return;
+   music?.pause();
    phase='ready';message.textContent=error.message;action('Try again',()=>start(isPractice)).focus({preventScroll:true});
   }
  }
@@ -246,13 +253,15 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   if(phase!=='running')return;
   music?.pause();
   phase='paused';pad.hidden=true;resetInput();cancelAnimationFrame(frame);message.textContent='Paused · '+instruction;
-  buttons.replaceChildren();action('Resume',running).focus({preventScroll:true});
+  buttons.replaceChildren();action('Resume',()=>running()).focus({preventScroll:true});
   if(endless)action('Finish and save',()=>finish(false));
  }
  function hidden(){
   if(limbo&&phase==='key'){
    if(document.hidden)music?.pause();else music?.start();
-  }else if(document.hidden)pause();
+  }else if(document.hidden){
+   if(phase==='starting')music?.pause();else pause();
+  }
  }
  const input=bindRunnerControls({surface:canvas,pad,dialog,isRunning:()=>phase==='running',
   onPress:()=>{sound.unlock();control('press');},onHeld:held=>control('held',held),onPause:pause});

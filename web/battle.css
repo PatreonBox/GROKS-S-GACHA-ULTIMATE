@@ -296,23 +296,25 @@ body:has(#battleRoom:not([hidden]) .live-arena)>:is(header,footer){display:none}
  box-shadow:0 0 0 9px #ae93f111,0 0 30px #a285ff2f;transform:rotate(-12deg);pointer-events:none;
 }
 .limbo-key,.limbo-choice{position:absolute;width:25%;height:50%;top:calc(50%*var(--row));left:calc(25%*var(--column));display:grid;place-items:center}
-.limbo-key{z-index:2;pointer-events:none;color:#9ba6e5}
+.limbo-key{
+ z-index:2;pointer-events:none;--key-enamel:#ff472f;--key-inlay:#ffc257;--key-glow:#ff563976;
+}
 .limbo-key[data-moving="1"]{z-index:4}
 .limbo-key[data-moving="2"]{z-index:3}
 .limbo-key svg{
- display:block;width:min(91%,130px);height:86%;fill:currentColor;
- filter:drop-shadow(0 5px 2px #090b22b8) drop-shadow(0 0 9px #887de57d);
+ display:block;width:min(92%,145px);height:86%;
+ filter:drop-shadow(0 5px 2px #090b22ca) drop-shadow(0 0 9px var(--key-glow));
 }
-.limbo-key-iron{stroke:#090f24;stroke-width:5;stroke-linejoin:round}
-.limbo-key-bevel{fill:color-mix(in srgb,currentColor 48%,white)}
-.limbo-key-shadow{fill:color-mix(in srgb,currentColor 47%,#161b44)}
-.limbo-key-rune{fill:#f7f4ffb0}
-.limbo-finale:is([data-phase="watch"],[data-phase="answer"]) .limbo-key[data-target-key]{color:#84ee7a}
-.limbo-finale:is([data-phase="watch"],[data-phase="answer"]) .limbo-key[data-target-key] svg{
- filter:drop-shadow(0 2px 4px #0b2414) drop-shadow(0 0 10px #79ff88c4);
+.limbo-key-rim{fill:var(--key-inlay);stroke:#100b1f;stroke-width:5.5;stroke-linejoin:round}
+.limbo-key-shadow{fill:color-mix(in srgb,var(--key-enamel) 50%,#251632)}
+.limbo-key-enamel{fill:var(--key-enamel)}
+.limbo-key-inlay{fill:var(--key-inlay)}
+.limbo-key-shine{fill:#ffeabfca}
+.limbo-finale:is([data-phase="watch"],[data-phase="answer"]) .limbo-key[data-target-key]{
+ --key-enamel:#54e33f;--key-inlay:#ccff78;--key-glow:#78ff7ac4;
 }
-.limbo-finale[data-reduced-motion] .limbo-key[data-moving="1"]{color:#f6d185}
-.limbo-finale[data-reduced-motion] .limbo-key[data-moving="2"]{color:#8edbf4}
+.limbo-finale[data-reduced-motion] .limbo-key[data-moving="1"]{--key-enamel:#ffab38;--key-inlay:#ffe49c}
+.limbo-finale[data-reduced-motion] .limbo-key[data-moving="2"]{--key-enamel:#75c4f2;--key-inlay:#c3edff}
 .limbo-choice{
  color:transparent;border:1px solid #bba3ed2e;background:#211b3d29;font-size:.76rem;line-height:1;
  text-align:right;align-items:end;justify-items:end;padding:clamp(3px,.8vw,8px);border-radius:6px;

@@ -5,6 +5,8 @@ import {arcadeSprites} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
 import {drawWave,drawWaveTrail} from './remix-wave.js';
 
+export const maxRunnerPlayerX=154;
+
 const styles={
  SURF:{image:'surf',wall:'#123758',pattern:'diamond',light:'#d0fffe'},
  DRAIN:{image:'drain',wall:'#471727',pattern:'brick',light:'#ffd1be'},
@@ -344,7 +346,7 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
  }
  return function draw(s,{phase,particles,reduced,width,height}){
   if(width!==W||height!==viewHeight){
-   W=width;viewHeight=height;top=(height-H)*.49;player=Math.min(154,width*.23);
+   W=width;viewHeight=height;top=(height-H)*.49;player=Math.min(maxRunnerPlayerX,width*.23);
    sky=ctx.createLinearGradient(0,0,0,height);sky.addColorStop(0,'#0b1021');sky.addColorStop(.73,'#181b32');sky.addColorStop(1,tint+'66');
    shade=ctx.createLinearGradient(0,0,0,height);shade.addColorStop(0,'#080d1f62');shade.addColorStop(.48,'#080d1f28');shade.addColorStop(1,'#080b18c6');
   }

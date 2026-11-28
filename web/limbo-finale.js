@@ -1,10 +1,11 @@
 import {limboPattern,limboRevealMs,limboShuffleMs} from './limbo-keys.js';
 
-const keyArt='<svg viewBox="0 0 122 78" aria-hidden="true">'+
- '<path class="limbo-key-iron" fill-rule="evenodd" d="M7 23 29 8 48 11 64 28h50l4 12-8 9H99v11H86V49H64L49 68 26 71 7 56 3 39Zm22 5-9 9 5 14 15 3 11-12-9-14Z"/>'+
- '<path class="limbo-key-bevel" d="m11 27 19-14 16 3 14 17h50l2 5H57L43 23H28L16 34 13 45 9 39Z"/>'+
- '<path class="limbo-key-shadow" d="m10 48 17 14 19-3 14-16h27v11h7V43h15l-4 3H97v11H89V46H63L48 65l-21 3L11 55Z"/>'+
- '<path class="limbo-key-rune" d="m32 18 6 1 2 5-8 1-5-3ZM66 36h30v3H66Z"/></svg>';
+const keyArt='<svg viewBox="0 0 138 78" aria-hidden="true">'+
+ '<path class="limbo-key-rim" fill-rule="evenodd" d="M7 34 23 14 41 8 59 19 65 30h47l10-5 10 9-9 17h-12v10H99V51H89v15H75V50H63L48 66l-21 5L9 56Zm18 2 10-12 12 5 6 11-11 12-13-1-7-8Z"/>'+
+ '<path class="limbo-key-shadow" d="m12 46 17 14 17-3 15-16h17v17h8V43h16v11h6V43h13l4-8 3 1-8 12h-12v10H102V48H86v15h-8V47H62L46 63l-18 5-16-14Z"/>'+
+ '<path class="limbo-key-enamel" fill-rule="evenodd" d="m12 35 14-16 14-6 16 9 6 13h50l10-5 5 5-6 11h-13v10h-6V46H85v15h-7V46H62L46 61l-17 4-15-13Zm10 0 3 14 14 6 16-15-8-13-12-6Z"/>'+
+ '<path class="limbo-key-inlay" d="m33 15 7-2 16 9 6 13h50l10-5 3 3-12 7H59l-7-15Zm-14 32 9 11 9 2-7 1-12-9Z"/>'+
+ '<path class="limbo-key-shine" d="m15 35 12-15 12-4-11 7-10 12Zm56 3h30v2H71Z"/></svg>';
 
 export function openLimboFinale(viewport,seed,submit){
  const {starting,swaps,answer}=limboPattern(seed);

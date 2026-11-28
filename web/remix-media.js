@@ -13,7 +13,7 @@ export const remixTracks={
 const newgrounds=id=>'https://www.newgrounds.com/audio/listen/'+id;
 const sourceIds={'speed-of-light':467339,'ricochet-love':233860,'golden-haze':557117,carnivores:690265,epilogue:723714,reverie:787986};
 const originalSoundtracks={
- 86084399:['Isolation · NightHawk22',newgrounds(76743)],
+ 86084399:['Isolation · NightHawk22','https://nighthawk22.com/music/darkmatter/isolation/'],
  4284013:['Nine Circles · Rukkus',newgrounds(533927)],
  44062068:['What’s a Future Funk? · LemKuuja','https://soundcloud.com/lemkuuja/whats-a-future-funk'],
  34085027:['Beep Beep · Schtiffles',newgrounds(715825)],
@@ -34,32 +34,64 @@ export function remixMusicCredit(track,levelId){
   ?' · '+link('https://creativecommons.org/licenses/by-nc-sa/3.0/','CC BY-NC-SA 3.0'):
   ['speed-of-light','epilogue','carnivores'].includes(track)?' · '+link('https://creativecommons.org/licenses/by-nc/3.0/','CC BY-NC 3.0'):
    track==='reverie'?' · '+link('https://creativecommons.org/licenses/by/3.0/','CC BY 3.0'):'';
- const label=id?link(newgrounds(id),title)+' · Excerpt':track==='limbo'&&original?link(original[1],title):title;
+ const label=id?link(newgrounds(id),title)+' · Excerpt':track==='limbo'&&original?
+  title+' · '+link(original[1],'Original: '+original[0]):title;
  return '<p class="runner-track">♫ '+label+license+'</p>';
 }
 
-export function remixMusic(track,sound,button,isRunning,{loop=true}={}){
+export function remixMusic(track,sound,button,isRunning,{loop=true,continuous=false}={}){
  if(!Object.hasOwn(remixTracks,track))return null;
  const player=new Audio(remixTrackSource(track));
- player.preload='auto';player.volume=.48;player.loop=loop;
- let enabled=true;
+ const volume=continuous?.56:.48;
+ player.preload='auto';player.volume=volume;player.loop=loop;
+ let enabled=true,retry=false,request=0;
  try{enabled=localStorage.getItem('gdlb.arcadeMusic')!=='off'}catch{}
+ const audible=()=>enabled&&sound.enabled;
  function sync(){
-  const audible=enabled&&sound.enabled;
+  const playing=audible()&&!retry;
   button.disabled=!sound.enabled;
-  button.setAttribute('aria-pressed',String(audible));
-  button.title=audible?'Mute level music':sound.enabled?'Enable level music':'Enable game sound to hear the level music';
-  button.innerHTML=ico(audible?'volume':'muted');
+  button.setAttribute('aria-pressed',String(playing));
+  button.title=!sound.enabled?'Enable game sound to hear the level music':retry?'Retry level music':
+   playing?'Mute level music':'Enable level music';
+  button.setAttribute('aria-label',button.title);
+  button.innerHTML=ico(playing?'volume':'muted');
  }
- function start(){
-  if(enabled&&sound.enabled&&!document.hidden)player.play().catch(()=>{});
+ function play(){
+  if(document.hidden||!player.paused||player.ended)return;
+  const playing=++request;
+  player.play().then(()=>{
+   if(playing===request&&retry){retry=false;sync();}
+  }).catch(error=>{
+   if(playing===request&&error.name!=='AbortError'){retry=true;sync();}
+  });
  }
- function pause(){player.pause()}
+ function prime(){
+  player.currentTime=0;
+  player.volume=0;
+  player.muted=!audible();
+  play();
+ }
+ function start({rewind=false}={}){
+  if(rewind)player.currentTime=0;
+  player.volume=volume;
+  if(continuous||audible())play();
+ }
+ function pause(){request++;player.pause();}
  function applySound(){
-  if(enabled&&sound.enabled&&isRunning())start();else pause();
+  if(continuous){
+   player.muted=!audible();
+   if(isRunning())start();
+  }else if(audible()&&isRunning())start();
+  else pause();
   sync();
  }
  button.onclick=()=>{
+  if(retry){
+   retry=false;
+   if(player.error)player.load();
+   applySound();
+   return;
+  }
   enabled=!enabled;
   try{localStorage.setItem('gdlb.arcadeMusic',enabled?'on':'off')}catch{}
   applySound();
@@ -67,7 +99,7 @@ export function remixMusic(track,sound,button,isRunning,{loop=true}={}){
  document.addEventListener('gdlb-game-sound',applySound);
  sync();
  return {
-  start,pause,
+  prime,start,pause,
   reset(){pause();player.currentTime=0},
   close(){document.removeEventListener('gdlb-game-sound',applySound);pause();player.removeAttribute('src');player.load()}
  };

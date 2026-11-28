@@ -1,6 +1,6 @@
 import {ico} from './icons.js';
 import {bindRunnerControls} from './remix-controls.js';
-import {drawWave,drawWaveTrail,waveRise} from './remix-wave.js';
+import {drawWave,drawWaveTrail,keepWavePoint,waveRise} from './remix-wave.js';
 import {newTidalWave,stepTidalWave,tidalChannel,tidalLength,tidalStart,tidalStep,tidalWidth,tidalHeight,tidalX,tidalSpeed} from './tidal-video-rules.js';
 
 const source='/arcade-video/tidal-wave.mp4';
@@ -48,7 +48,8 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
    }
   }
   if(phase!=='ready'){
-   const points=trail.map(([tick,y])=>[tidalX-(run.tick-tick)*tidalStep*tidalSpeed,y]);
+   const scroll=time*tidalSpeed-tidalX;
+   const points=trail.map(([x,y])=>[x-scroll,y]);
    drawWaveTrail(ctx,points,{skin:avatar,mini:run.mini});
    drawWave(ctx,{x:tidalX,y:run.y,angle:time<tidalStart?0:Math.atan2(waveRise(tidalSpeed,run.held,run.mini),tidalSpeed),mini:run.mini,skin:avatar});
   }
@@ -93,10 +94,7 @@ export function openTidalVideo(remix,{avatar,sound,onStart,onResult}){
   while(phase==='running'&&!terminal&&run.tick<target){
    const before=run.portal,status=stepTidalWave(run);
    if(run.portal!==before)lastPortal=run.tick*tidalStep;
-   if(run.tick*tidalStep>=tidalStart){
-    trail.push([run.tick,run.y]);
-    if(trail.length>54)trail.shift();
-   }
+   if(run.tick*tidalStep>=tidalStart)keepWavePoint(trail,run.tick*tidalStep*tidalSpeed,run.y,tidalX);
    if(status==='crash')finish(status);
    if(status==='clear')terminal=true;
   }

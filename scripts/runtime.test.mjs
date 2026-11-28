@@ -20,9 +20,24 @@ import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.
 import {chestOpeningSound} from '../web/pack-sound.js';
 import {newTidalWave,stepTidalWave,tidalChannel,tidalLength,tidalPortals,tidalStep} from '../web/tidal-video-rules.js';
 import {replayTidalVideo} from '../web/game-replay.js';
+import {keepWavePoint} from '../web/remix-wave.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
+
+test('Wave trail retains corners from beyond the left edge to the current position',()=>{
+ const points=[],playerX=304;
+ for(let x=0;x<=2000;x++){
+  const distance=x%100;
+  keepWavePoint(points,x,distance<=50?distance:100-distance,playerX);
+ }
+ const left=2000-playerX;
+ assert.ok(points[0][0]<left-30);
+ assert.ok(points[1][0]>=left-30);
+ assert.deepEqual(points.filter(([x])=>x>=left),[
+  [1700,0],[1750,50],[1800,0],[1850,50],[1900,0],[1950,50],[2000,0]
+ ]);
+});
 
 test('Recorded wave flight has a reachable ending and replays its size changes',()=>{
  const run=newTidalWave(),trace=[];
