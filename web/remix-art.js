@@ -3,11 +3,12 @@ import {orbSprites} from './combat-arts.js';
 import {drillSprites} from './drill-sprites.js';
 import {arcadeSprites} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
+import {drawWave,drawWaveTrail} from './remix-wave.js';
 
 const styles={
  SURF:{image:'surf',wall:'#123758',pattern:'diamond',light:'#d0fffe'},
  DRAIN:{image:'drain',wall:'#471727',pattern:'brick',light:'#ffd1be'},
- KEY:{image:'key',wall:'#252558',pattern:'circuit',light:'#d9d3ff'},
+ KEY:{wall:'#23204a',pattern:'circuit',light:'#d9d3ff'},
  RINGS:{image:'rings',wall:'#49231f',pattern:'diamond',light:'#ffdeb6'},
  '99%':{image:'funk',wall:'#482445',pattern:'circuit',light:'#ffe9fa'},
  HIVE:{image:'hive',wall:'#48351e',pattern:'hex',light:'#fff4b0'},
@@ -87,7 +88,7 @@ function tilePattern(ctx,theme,tint){
 
 export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
  const theme=styles[remix.mark],tint=remix.color;
- const scene=image(remix.art||(theme.image?'/assets/remix/'+theme.image+'.webp':'/assets/shots/'+remix.id+'.webp'),onReady);
+ const scene=remix.mark==='KEY'?null:image(remix.art||(theme.image?'/assets/remix/'+theme.image+'.webp':'/assets/shots/'+remix.id+'.webp'),onReady);
  const icon=image(skin.icon,onReady),vehicle=course.mode==='ship'?image(arcadeSprites.ship,onReady):null;
  const pinkOrb=image(orbSprites[0],onReady),spikeSprite=image(drillSprites.spike,onReady);
  const exitPortal=image(drillSprites.exit,onReady),miniPortal=course.miniAt?image(drillSprites.mini,onReady):null;
@@ -109,7 +110,7 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
 
  function backdrop(s,reduced){
   ctx.fillStyle=sky;ctx.fillRect(0,0,W,viewHeight);
-  if(scene.complete&&scene.naturalWidth){
+  if(scene?.complete&&scene.naturalWidth){
    const cover=Math.max((W+50)/scene.naturalWidth,viewHeight/scene.naturalHeight);
    const w=scene.naturalWidth*cover,h=scene.naturalHeight*cover;
    const slide=reduced?0:(course.endless?Math.cos(s.x/840):1-2*s.x/course.end)*Math.min(72,(w-W)/2);
@@ -122,7 +123,26 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
   }
   ctx.fillStyle='#080e1f32';ctx.fillRect(0,top+12,W,H-32);
  }
+ function keyObservatory(s,reduced){
+  const spacing=290,scroll=s.x*.26%spacing;
+  for(let x=-scroll;x<W+spacing;x+=spacing){
+   const center=x+95,y=136;
+   ctx.fillStyle='#1d1c447c';ctx.fillRect(center-52,-top,104,viewHeight);
+   path(ctx,[[center-52,-top],[center-52,viewHeight-top]],null,'#7460b359',2.2);
+   path(ctx,[[center+52,-top],[center+52,viewHeight-top]],null,'#4d428675',1.2);
+   for(const radius of [83,67,49])circle(ctx,center,y,radius,null,radius===67?'#9889e783':'#7a60c449',radius===67?2:1.2);
+   const clock=reduced?0:s.time*.55;
+   for(let i=0;i<8;i++){
+    const angle=clock+i*Math.PI/4;
+    const ax=center+Math.cos(angle)*67,ay=y+Math.sin(angle)*67;
+    path(ctx,[[ax,ay-4],[ax+3,ay],[ax,ay+4],[ax-3,ay]],i%2?'#807fb7b3':'#b39ef0d2');
+   }
+   path(ctx,[[center-12,y-23],[center+8,y-23],[center+18,y-8],[center+6,y+7],[center+14,y+26],[center-14,y+26],[center-7,y+7],[center-18,y-8]],
+    '#130f31d9','#9b83e29e',2.2);
+  }
+ }
  function atmosphere(s,reduced){
+  if(remix.mark==='KEY')keyObservatory(s,reduced);
   if(remix.mark==='SURF'){
    for(let j=0;j<3;j++){
     const line=[];for(let x=0;x<=W+17;x+=17)line.push([x,156+j*18+Math.sin(x*.016+(reduced?0:s.time*3)+j*.7)*9]);
@@ -284,10 +304,15 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
  }
  function actor(s,faded){
   const trail=faded?s.trace:[...s.trace,[s.x,s.y]];
+  if(course.mode==='wave'){
+   drawWaveTrail(ctx,trail.map(([x,y])=>[drawX(x),y]),{skin,mini:s.mini,faded});
+   if(!faded)drawWave(ctx,{x:player,y:s.y,angle:s.angle,mini:s.mini,skin});
+   return;
+  }
   ctx.lineJoin='round';ctx.lineCap='round';
   for(let i=1;i<trail.length;i++){
    const [ax,ay]=trail[i-1],[bx,by]=trail[i];
-   const age=i/trail.length,size=(course.mode==='wave'?9:5)*age;
+   const age=i/trail.length,size=5*age;
    ctx.globalAlpha=age**1.45*(faded?.42:1);
    const line=[[drawX(ax),ay],[drawX(bx),by]];
    path(ctx,line,null,skin.color+'54',size+5);
@@ -300,21 +325,17 @@ export function createRemixArt(ctx,remix,course,onReady,skin=starterCube){
   const scale=s.mini?.66:1,appearance=vehicle?vehiclePaint():icon;
   ctx.scale(scale,scale);ctx.shadowColor=skin.color;ctx.shadowBlur=11;
   if(appearance&&(appearance.naturalWidth||appearance===paintedVehicle)){
-   const width=course.mode==='cube'?22:course.mode==='wave'?27:37,height=course.mode==='cube'?22:19;
+   const width=course.mode==='cube'?22:37,height=course.mode==='cube'?22:19;
    const fit=Math.min(width/appearance.width,height/appearance.height);
    const w=appearance.width*fit,h=appearance.height*fit;
    ctx.drawImage(appearance,-w/2,-h/2,w,h);
    if(vehicle&&icon.naturalWidth){
-    const size=course.mode==='wave'?8:11;
+    const size=11;
     ctx.shadowBlur=0;ctx.drawImage(icon,-size*.63,-size*.55,size,size);
    }
   }else if(course.mode==='cube'){
    ctx.fillStyle=skin.color;ctx.fillRect(-10,-10,20,20);
    ctx.strokeStyle='#eff5ff';ctx.lineWidth=1.5;ctx.strokeRect(-10,-10,20,20);
-  }else if(course.mode==='wave'){
-   path(ctx,[[-14,-9],[16,0],[-14,9],[-7,0]],'#0b142e','#f5f9ff',1.55);
-   path(ctx,[[-9,-5],[9,0],[-9,5],[-3,0]],skin.color);
-   path(ctx,[[-1,-2],[7,0],[-1,2],[1,0]],'#fff');
   }else{
    path(ctx,[[-16,-4],[-3,-7],[16,0],[-3,8],[-15,3]],skin.color,'#fff',1.45);
    path(ctx,[[-8,-3],[4,-3],[9,0],[2,3],[-8,2]],'#f0f7ff');

@@ -222,7 +222,8 @@ export function achievementProgress(wallet,now=Date.now()){
  const campaign=campaignStages.map((_,i)=>wallet.campaign?.[i+1]);
  const gemMines=Boolean(kingdom?.gemMines?.length||storage.some(building=>building.kind==='gem-mine'));
  const arcadeModes=new Set(remixes.filter(remix=>wallet.remixBest?.[remix.id]===100&&
-  (remix.id!==86084399||wallet.limboKeysCleared)).map(remix=>remix.mode));
+  (remix.id!==86084399||wallet.limboKeysCleared)).map(remix=>
+   remix.id===86084399?wallet.limboClearMode||'ship':remix.mode));
  return {...progress,mine:Math.max(progress.mine||0,mineRate(wallet.mine)),
   battle:progress.battle||0,army:armyClears(wallet),training:progress.training||0,
   houses:homes.length,tower:towerPlan(wallet,now).level,land:landPlan(wallet).level,

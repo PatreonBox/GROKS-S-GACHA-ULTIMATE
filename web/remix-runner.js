@@ -4,25 +4,25 @@ import {createRemixArt} from './remix-art.js';
 import {helpButton,installMinigameGuide,remixGuide} from './minigame-guide.js';
 import {starterCube} from './cube-catalog.js';
 import {remixMusic,remixMusicCredit} from './remix-media.js';
+import {bindRunnerControls} from './remix-controls.js';
 
 export {makeCourse,newAttempt,advanceRunner} from './remix-physics.js';
 
 import {runnerInput} from './game-replay.js';
 
-const controls=['Space','ArrowUp','KeyW'];
 const launchTime=.56;
 const clock=s=>Math.floor(s/60)+':'+String(Math.floor(s)%60).padStart(2,'0');
 export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,mode='normal',avatar=starterCube}){
- const endless=mode==='endless';
+ const endless=mode==='endless',limbo=!endless&&remix.mark==='KEY';
  let course=endless?createEndlessCourse(remix,remix.id):makeCourse(remix);
  const dialog=document.createElement('dialog');
  dialog.className='runner-modal';dialog.setAttribute('aria-label',remix.name);dialog.style.setProperty('--remix',remix.color);
- const instruction=course.mode==='cube'?'Tap or press Space to jump.':remix.mode==='wave'?'Hold to climb. Release to dive.':'Hold for thrust. Release to descend.';
+ const instruction=course.mode==='cube'?'Tap or press Space to jump.':course.mode==='wave'?'Hold Space, click, or touch to climb. Release to dive.':'Hold for thrust. Release to descend.';
  const orbHint=course.finale?' Tap again inside each pink orb.':'';
- dialog.innerHTML='<div class="runner-bar"><div class="runner-title"><img class="runner-avatar" src="'+avatar.icon+'" title="'+avatar.name+'" alt=""><div><span>MINI GAMES · '+mode.toUpperCase()+' · '+remix.mode.toUpperCase()+'</span><h2>'+remix.name+'</h2>'+
+ dialog.innerHTML='<div class="runner-bar"><div class="runner-title"><img class="runner-avatar" src="'+avatar.icon+'" title="'+avatar.name+'" alt=""><div><span>MINI GAMES · '+mode.toUpperCase()+' · '+course.mode.toUpperCase()+'</span><h2>'+remix.name+'</h2>'+
   remixMusicCredit(remix.music,remix.id)+'</div></div><div class="minigame-actions">'+
   (remix.music?'<button type="button" class="runner-music" data-music aria-label="Level music"></button>':'')+helpButton+'<button type="button" data-close aria-label="Close level">×</button></div></div>'+
-  '<div class="runner-frame"><canvas tabindex="0" aria-label="'+remix.mode+' course. Use Space, Up, or touch."></canvas><div class="runner-status"><span class="runner-attempt">READY</span><span class="runner-progress">'+(endless?'0:00':'0%')+'</span></div></div>'+
+  '<div class="runner-frame"><canvas tabindex="0" aria-label="'+course.mode+' course. Use Space, Up, the mouse, or touch."></canvas><div class="runner-status"><span class="runner-attempt">READY</span><span class="runner-progress">'+(endless?'0:00':'0%')+'</span></div></div>'+
   '<div class="runner-controls"><div class="runner-message" aria-live="polite"></div><button type="button" class="runner-touch game-touch" hidden>'+(course.mode==='cube'?'Tap to jump':'Hold to climb')+'</button><div class="runner-buttons"></div></div>';
  document.body.append(dialog);dialog.showModal();
  const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),message=dialog.querySelector('.runner-message'),buttons=dialog.querySelector('.runner-buttons');
@@ -31,14 +31,14 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
  const viewport=dialog.querySelector('.runner-frame');
  let viewWidth=WIDTH,viewHeight=HEIGHT,scale=1;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
- const particles=[],keys=new Set();
- let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,closed=false,lastPercent=-1,highWater=0,practice=false,pointer=null;
+ const particles=[];
+ let s=newAttempt(course),phase='ready',frame=0,last=0,carry=0,attempt=0,closed=false,lastPercent=-1,highWater=0,practice=false;
  let launch=0,ticks=0,trace=[],traceStart=0,token=null,closeFinale,finalSave;
  let interval=0,keysRemaining=0,nextCheckpoint=Infinity,keysEarned=0,xpEarned=0;
- const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running',{loop:true});
+ const music=remixMusic(remix.music,sound,dialog.querySelector('[data-music]'),()=>phase==='running'||limbo&&phase==='key',{loop:!limbo});
  const makeArt=()=>createRemixArt(ctx,remix,course,()=>{if(!closed&&phase!=='running')draw()},avatar);
  let paint=makeArt();
- const guide=installMinigameGuide(dialog,remixGuide(remix,avatar.icon,{endless}),pause);
+ const guide=installMinigameGuide(dialog,remixGuide({...remix,mode:course.mode},avatar.icon,{endless}),pause);
  function resize(){
   if(closed)return;
   const {clientWidth:width,clientHeight:height}=viewport;
@@ -124,7 +124,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   runnerInput(s,kind,value);
   if(token&&!practice)trace.push([ticks,kind,value]);
  }
- function resetInput(){keys.clear();pointer=null;control('reset');}
+ function resetInput(){input.reset();control('reset');}
  function finish(won,key=null){
   music?.pause();closeFinale?.();closeFinale=null;
   phase=won?'won':'lost';pad.hidden=true;resetInput();buttons.replaceChildren();
@@ -156,21 +156,25 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   draw();if(particles.length)frame=requestAnimationFrame(settle);
  }
  async function onClear(){
-  music?.pause();
-  if(endless||remix.mark!=='KEY'){finish(true);return;}
+  if(!limbo){finish(true);return;}
   phase='key';pad.hidden=true;resetInput();
   message.textContent='Opening the key chamber…';buttons.replaceChildren();draw();
   const attemptToken=token;
   try{
    const {seed}=await onFinale(token,{ticks,trace:trace.slice()});
    if(closed||attemptToken!==token)return;
-   closeFinale=openLimboFinale(viewport,seed,sound,(slot,won)=>finish(won,slot));
+   closeFinale=openLimboFinale(viewport,seed,(slot,won)=>finish(won,slot));
    message.textContent='Watch the green key, then choose where it lands.';
   }catch(error){
    if(closed||attemptToken!==token)return;
    message.textContent=error.message;
    action('Retry key chamber',onClear).focus({preventScroll:true});
   }
+ }
+ function noteTrail(x,y){
+  const tip=s.trace.at(-1);
+  if(tip?.[0]===x&&tip[1]===y)return;
+  s.trace.push([x,y]);if(s.trace.length>(reduced?5:23))s.trace.shift();
  }
  function tick(now){
   if(phase!=='running'||closed)return;
@@ -186,7 +190,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   }
   carry+=elapsed;
   while(carry>=STEP&&phase==='running'){
-   const passed=s.passed,status=advanceRunner(s,course,remix,STEP);
+   const {passed,vy,x,y}=s,status=advanceRunner(s,course,remix,STEP);
    ticks++;carry-=STEP;stepParticles(STEP);
    if(s.passed!==passed){
     if(course.mode!=='cube')burst(s.x-10,s.y,5,avatar.color);
@@ -197,11 +201,10 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
    }else if(s.event==='jump'){
     burst(s.x,s.y+9,6,avatar.color);sound.playGame('jump',{rate:1.17,level:.57});
    }else if(s.event==='mini'){
-    burst(s.x,s.y,21,'#d8ff7c');sound.playGame('portal',{level:.69});
+    burst(s.x,s.y,21,'#ffa0fc');sound.playGame('portal',{level:.69});
    }
-   if(Math.floor(s.time*64)!==Math.floor((s.time-STEP)*64)){
-    s.trace.push([s.x,s.y]);if(s.trace.length>(reduced?5:23))s.trace.shift();
-   }
+   if(course.mode==='wave'&&vy!==s.vy)noteTrail(x,y);
+   if(Math.floor(s.time*64)!==Math.floor((s.time-STEP)*64))noteTrail(s.x,s.y);
    if(status==='crash'){finish(false);return}
    if(status==='clear'){onClear();return}
    collectCheckpoint();
@@ -232,7 +235,7 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
    }else readout.textContent='0%';
    practice=isPractice;s=newAttempt(course,practice?course.finale:0);resetInput();
    music?.reset();
-   attempt++;launch=launchTime;attemptLabel.textContent='GET READY';
+   attempt++;launch=limbo?0:launchTime;attemptLabel.textContent=limbo?'ATTEMPT '+attempt:'GET READY';
    lastPercent=-1;sound.prepareGame();sound.prepareGame('gdDeath');sound.playGame('gdPlay',{level:.62});draw();running();
   } catch(error){
    if(closed)return;
@@ -246,36 +249,21 @@ export function openRunner(remix,{sound,onStart,onFinale,onResult,onCheckpoint,m
   buttons.replaceChildren();action('Resume',running).focus({preventScroll:true});
   if(endless)action('Finish and save',()=>finish(false));
  }
- function key(e){
-  if(controls.includes(e.code)&&phase==='running'&&(e.target===pad||!e.target.closest('button'))){
-   e.preventDefault();
-   if(!e.repeat&&!keys.has(e.code)){keys.add(e.code);sound.unlock();control('press')}
-  }else if(e.code==='KeyP'&&phase==='running'){e.preventDefault();pause()}
+ function hidden(){
+  if(limbo&&phase==='key'){
+   if(document.hidden)music?.pause();else music?.start();
+  }else if(document.hidden)pause();
  }
- function keyup(e){
-  if(controls.includes(e.code)){keys.delete(e.code);control('held',keys.size>0||pointer!==null)}
- }
- function hidden(){if(document.hidden)pause()}
- function release(e){
-  if(pointer!==e.pointerId)return;
-  pointer=null;control('held',keys.size>0);
- }
- function press(e){
-  if(phase!=='running'||pointer!==null||e.button!==0)return;
-  e.preventDefault();canvas.focus({preventScroll:true});e.currentTarget.setPointerCapture(e.pointerId);
-  pointer=e.pointerId;sound.unlock();control('press');
- }
- for(const target of [canvas,pad]){
-  target.onpointerdown=press;target.onpointerup=release;target.onpointercancel=release;target.onlostpointercapture=release;
- }
- dialog.addEventListener('keydown',key);window.addEventListener('keyup',keyup);window.addEventListener('blur',pause);document.addEventListener('visibilitychange',hidden);
+ const input=bindRunnerControls({surface:canvas,pad,dialog,isRunning:()=>phase==='running',
+  onPress:()=>{sound.unlock();control('press');},onHeld:held=>control('held',held),onPause:pause});
+ document.addEventListener('visibilitychange',hidden);
  dialog.querySelector('[data-close]').onclick=()=>dialog.close();
  const observer=new ResizeObserver(resize);observer.observe(viewport);
  dialog.addEventListener('close',()=>{
   closed=true;
   if(endless)sendEndlessResult();
-  closeFinale?.();music?.close();observer.disconnect();cancelAnimationFrame(frame);sound.stop();window.removeEventListener('keyup',keyup);
-  window.removeEventListener('blur',pause);document.removeEventListener('visibilitychange',hidden);dialog.remove();
+  closeFinale?.();music?.close();input.dispose();observer.disconnect();cancelAnimationFrame(frame);sound.stop();
+  document.removeEventListener('visibilitychange',hidden);dialog.remove();
  },{once:true});
  resize();message.textContent=(endless?'Survive as long as you can. Keys are shared across all courses and reset every six hours.':remix.hint)+' '+instruction;
  action(endless?'Start endless':'Start level',()=>start()).focus({preventScroll:true});

@@ -1,5 +1,6 @@
 import {makeDrill,stepDrill,drillStep,pressForge,releaseForge,steerDrill,directDrillLane,shiftDrillLane} from './drill-physics.js';
 import {makeCourse,createEndlessCourse,newAttempt,pressRunner,advanceRunner,STEP} from './remix-physics.js';
+import {newTidalWave,stepTidalWave,tidalLength,tidalStep} from './tidal-video-rules.js';
 
 const maxUnverifiedEndlessSeconds=300;
 
@@ -71,7 +72,8 @@ export function replayDrill(session,proof,now) {
  return {run:state,axis,ticks:proof.ticks,seed:next.state()};
 }
 export function replayRemix(remix,session,proof,now,{finale=false}={}) {
- const course=makeCourse(remix,{legacy:session.version!==2}),runner=newAttempt(course);
+ const version=session.version??1;
+ const course=makeCourse(remix,{legacy:version<2,version}),runner=newAttempt(course);
  const result=replay(proof,{
   duration:now-session.start,step:STEP,maxSeconds:180,
   apply:(kind,value)=>runnerInput(runner,kind,value),
@@ -84,6 +86,20 @@ export function replayRemix(remix,session,proof,now,{finale=false}={}) {
  }
  if (result==='clear'&&(remix.mark!=='KEY'||proof.key===session.key&&session.keyVersion!==2)) return 100;
  return Math.min(remix.finish?remix.finish-1:99,Math.floor((remix.finish||100)*runner.x/course.end));
+}
+
+export function replayTidalVideo(session,proof,now){
+ const run=newTidalWave();
+ const result=replay(proof,{
+  duration:now-session.start,step:tidalStep,maxSeconds:tidalLength+tidalStep,
+  apply(kind,value){
+   if(kind!=='held'||typeof value!=='boolean')throw Error('Invalid wave controls.');
+   run.held=value;
+  },
+  advance:()=>stepTidalWave(run)
+ });
+ if(!result)throw Error('Finish the attempt before saving it.');
+ return result==='clear'?100:Math.min(99,Math.floor(run.tick*tidalStep/tidalLength*100));
 }
 
 export function replayEndlessRemix(remix,session,proof,now){

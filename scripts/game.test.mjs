@@ -27,7 +27,7 @@ import {featureLevel,levelCue,packLevels,unlockedBetween} from '../web/level-acc
 import {buildingFootprint,buildingPlacementError,campfirePrice,collectForge,forgePlan,gemMine,gemMinePlan,housePlacementError,housePlan,insideFootprint,kingdomBounds,kingdomDaylight,kingdomStats,kingdomTrail,visitorSlots} from '../web/kingdom-rules.js';
 import {spikeDamage,spikeKind,spikePlan,spikePrice} from '../web/kingdom-defences.js';
 import {kingdomSuggestions,kingdomSuggestionStatus,recommendedKingdomUpgrade} from '../web/kingdom-suggestions.js';
-import {limboChoiceAt,limboPattern} from '../web/limbo-keys.js';
+import {limboApproachSeconds,limboChoiceAt,limboPattern,limboTrackSeconds} from '../web/limbo-keys.js';
 import {achievements,achievementById,achievementChallenge,achievementMaterial,achievementProgress,achievementXp} from '../web/progression-rules.js';
 import {ico} from '../web/icons.js';
 import {bannerOdds,bannerPity,demonCatalogue,demonPity,prepareDemonPull,rollDemonBanner} from '../web/demon-banner.js';
@@ -872,6 +872,27 @@ test('Meme Arcade rewards a verified Tidal Wave cut once, including an older cle
  assert.equal(wallet.demonKeys,before.demonKeys+5);
 });
 
+test('Normal waves keep their angle and mini speed while earlier arcade runs retain their physics',()=>{
+ const cataclysm=findRemix(3979721);
+ for(const [version,miniSpeed] of [[1,1.19],[2,1.37],[3,2]]){
+  const course=makeCourse(cataclysm,{legacy:version===1,version});
+  const wave=newAttempt(course,course.miniAt-1);
+  wave.held=true;
+  assert.equal(advanceRunner(wave,course,cataclysm,STEP),'running');
+  assert.equal(wave.mini,true);
+  assert.equal(wave.vy,-course.speed*miniSpeed);
+  wave.held=false;
+  assert.equal(advanceRunner(wave,course,cataclysm,STEP),'running');
+  assert.equal(wave.vy,course.speed*miniSpeed);
+ }
+ const limbo=findRemix(86084399),course=makeCourse(limbo),wave=newAttempt(course);
+ advanceRunner(wave,course,limbo,STEP);
+ assert.equal(wave.angle,Math.PI/4);
+ assert.equal(course.mode,'wave');
+ assert.equal(makeCourse(limbo,{version:2}).mode,'ship');
+ assert.equal(createEndlessCourse(limbo,42).mode,'ship');
+});
+
 test('Endless Mini Games verify survival and award incremental keys and XP under one six-hour limit',async t=>{
  const now=Date.now(),reset=now+6*60*60*1000;
  t.mock.timers.enable({apis:['Date'],now});
@@ -1455,10 +1476,13 @@ test('LIMBO verifies the eight-key shuffle and pays XP and first-clear Demon Key
  const f=fixture(),player=await f.open();
  f.store(player.id,w=>{w.playerXp=playerXpAt(4);});
  const remix=findRemix(86084399),course=makeCourse(remix),runner=newAttempt(course),trace=[];
+ assert.equal(course.mode,'wave');
+ assert.ok(Math.abs(course.end/course.speed-limboApproachSeconds)<STEP);
+ assert.ok(Math.abs(course.end/course.speed+limboChoiceAt/1000-limboTrackSeconds)<STEP);
  let ticks=0,outcome;
  do{
-  const {top,bottom}=tunnelAt(course,runner.x+48);
-  const held=runner.vy>2.8*((top+bottom)/2-runner.y);
+  const {top,bottom}=tunnelAt(course,runner.x+9);
+  const held=runner.y>(top+bottom)/2;
   if(held!==runner.held){runner.held=held;trace.push([ticks,'held',held]);}
   outcome=advanceRunner(runner,course,remix,STEP);ticks++;
  }while(outcome==='running');
@@ -1480,6 +1504,7 @@ test('LIMBO verifies the eight-key shuffle and pays XP and first-clear Demon Key
   assert.equal(result.cleared,true);
   assert.equal(result.demonKeys,10);
   assert.equal(wallet.remixKeyRewards[remix.id],10);
+  assert.equal(wallet.limboClearMode,'wave');
   assert.equal(nonAchievementXp(wallet),playerXpAt(4)+100);
   assert.ok(wallet.achievements.limbo);
  }
@@ -1557,6 +1582,7 @@ test('New badge tracks have distinct art and count only actual multi-mode progre
  assert.equal(progress.tripleDrill,5);
  assert.equal(progress.arcadeModes,2);
  assert.equal(achievementProgress({...wallet,limboKeysCleared:true}).arcadeModes,3);
+ assert.equal(achievementProgress({...wallet,limboKeysCleared:true,limboClearMode:'wave'}).arcadeModes,2);
  assert.equal(progress.machineVariety,3);
  assert.equal(progress.buildingVariety,2);
 });

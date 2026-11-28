@@ -1,7 +1,9 @@
 const keys=[0,1,2,3,4,5,6,7];
-export const limboKeyColors=['#a9e366','#f36676','#9d83fa','#5bd2e5','#f084cc','#f8c962','#fb9661','#6b99ff'];
-export const limboRevealMs=1800;
-export const limboShuffleMs=[1060,1000,960,920,880,840,790,750,710,670,630,600,560,520,490,450];
+export const limboTrackSeconds=18.18;
+export const limboApproachSeconds=6.4;
+export const limboShuffleMs=[950,890,835,790,740,710,665,620,585,545,510,475,445,420,410,390];
+export const limboRevealMs=Math.round((limboTrackSeconds-limboApproachSeconds)*1000)
+ -limboShuffleMs.reduce((total,ms)=>total+ms,0);
 export const limboChoiceAt=limboRevealMs+limboShuffleMs.reduce((total,ms)=>total+ms,0);
 
 export function limboPattern(seed){

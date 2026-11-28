@@ -11,7 +11,9 @@ import {limboChoiceAt,limboPattern} from './limbo-keys.js';
 import {findRemix,remixKeyReward} from './remixes.js';
 import {armyMaps,armyLimit,armyTacticsVersion} from './army-battle.js';
 import {armyTrialIds,armySignatureVersion,armyRivals,findArmySeries,chapterUnlocked,seriesUnlocked,replayArmy,grantArmyLoot} from './army-trilogy.js';
-import {replayDrill,replayRemix,replayEndlessRemix} from './game-replay.js';
+import {replayDrill,replayRemix,replayEndlessRemix,replayTidalVideo} from './game-replay.js';
+import {remixPhysicsVersion} from './remix-physics.js';
+import {tidalVideoId} from './tidal-video-rules.js';
 import {endlessKeyInterval,endlessKeyStatus,endlessMilestones,rewardEndlessRemix} from './remix-endless.js';
 import {awardPackXp,awardPlayerXp,minePlayerXp,playerProgress} from './player-progression.js';
 import {featureLevel,features,packLevels,towerPlayerLevel} from './level-access.js';
@@ -374,11 +376,14 @@ const rules={
  }},
  'remix.begin':{run:({w,args:{id,mode:requestedMode},now})=>{
   const remix=levelId(id)&&findRemix(id);
-  const mode=requestedMode??'normal';
+  const video=id===tidalVideoId&&requestedMode==='video';
+  const mode=video?'normal':requestedMode??'normal';
   requireRule(remix,'Choose a featured level.');
-  requireRule(requestedMode===undefined||requestedMode==='normal'||requestedMode==='endless','Choose Normal or Endless mode.');
+  requireRule(video||requestedMode===undefined||requestedMode==='normal'||requestedMode==='endless','Choose Normal or Endless mode.');
   const token=crypto.randomUUID();
-  w.remixRun={id,token,start:now,mode,version:requestedMode===undefined?1:2,keyVersion:id===86084399?2:0};
+  const version=requestedMode===undefined?1:mode==='endless'?2:remixPhysicsVersion;
+  w.remixRun={id,token,start:now,mode,version,keyVersion:id===86084399?2:0};
+  if(video)w.remixRun.video=true;
   if(mode==='endless'){
    const seed=randomBelow(0x100000000);
    w.remixRun.seed=seed;
@@ -419,12 +424,15 @@ const rules={
   if(finale){
    requireRule(within(proof?.key,0,7)&&now-finale.start>=limboChoiceAt-250,'Wait for the keys to finish shuffling.');
    percent=proof.key===limboPattern(finale.seed).answer?100:99;
-  }else percent=Math.min(limbo?99:100,replayRemix(remix,run,proof,now));
+  }else percent=run.video?replayTidalVideo(run,proof,now):Math.min(limbo?99:100,replayRemix(remix,run,proof,now));
   const cleared=percent===100;
   w.remixBest??={};
   const prior=w.remixBest[run.id]||0,playerXpEarned=finale&&cleared?100:Math.max(0,Math.floor((percent-prior)*.3));
   w.remixBest[run.id]=Math.max(prior,percent);
-  if(finale&&cleared)w.limboKeysCleared=true;
+  if(finale&&cleared){
+   if(!w.limboKeysCleared)w.limboClearMode=run.version>=3?'wave':'ship';
+   w.limboKeysCleared=true;
+  }
   let demonKeys=0;
   if(cleared&&!w.remixKeyRewards?.[run.id]){
    demonKeys=rewardDemonKeys(w,remixKeyReward(remix),now);

@@ -1,6 +1,10 @@
+import {waveRise} from './remix-wave.js';
+
 export const VIEW_WIDTH=900,VIEW_HEIGHT=300,CEILING=22,FLOOR=246,STEP=1/180;
 export const endlessDuration=300;
+export const remixPhysicsVersion=3;
 const GRAVITY=1480,JUMP=510,CUBE_RADIUS=9;
+const limboShip={mode:'ship',pattern:[.39,.61,.43,.65,.39,.61],duration:undefined};
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 
 function segment(nodes,x){
@@ -58,7 +62,7 @@ function tunnelCourse(r,legacy){
   }
  }
  for(const node of nodes){node.top=Math.max(CEILING,node.top);node.bottom=Math.min(FLOOR,node.bottom)}
- const end=gates.at(-1).x+222;
+ const end=r.duration?r.duration*speed:gates.at(-1).x+222;
  nodes.push({x:end,top:CEILING,bottom:FLOOR},{x:end+VIEW_WIDTH,top:CEILING,bottom:FLOOR});
  return {mode:r.mode,gates,end,speed,hazards:tunnelWalls(nodes),tunnel:nodes,orbs:[],gaps:[],miniAt:r.mark==='MINI'?gates[4].x-122:null};
 }
@@ -122,13 +126,15 @@ export function* hazardsBetween(course,left,right){
  }
 }
 
-export function makeCourse(remix,{legacy=false}={}){
- const course=remix.mark==='99%'?funkCourse():remix.mode==='cube'?cubeCourse(remix,legacy):tunnelCourse(remix,legacy);
- return indexCourse({...course,legacy});
+export function makeCourse(remix,{legacy=false,version=legacy?1:remixPhysicsVersion}={}){
+ const rules=remix.mark==='KEY'&&version<remixPhysicsVersion?{...remix,...limboShip}:remix;
+ const course=rules.mark==='99%'?funkCourse():rules.mode==='cube'?cubeCourse(rules,legacy):tunnelCourse(rules,legacy);
+ return indexCourse({...course,legacy,waveVersion:version});
 }
 
 export function createEndlessCourse(remix,seed){
- const {mode,tier,pattern}=remix,wave=mode==='wave',cube=mode==='cube';
+ const {mode,tier,pattern}=remix.mark==='KEY'?{...remix,...limboShip}:remix;
+ const wave=mode==='wave',cube=mode==='cube';
  const speed=(wave?280:mode==='ship'?240:249)+tier*(wave?4:2.6);
  const firstX=cube?430:405,spacing=cube?329:311;
  const course={mode,speed,end:Infinity,endless:true,firstGate:0,gates:[],hazards:[],orbs:[],gaps:[]};
@@ -234,7 +240,10 @@ export function advanceRunner(s,course,remix,dt){
   }else{s.ground=false;s.angle+=s.vy<0?dt*6.9:dt*5.4}
   s.radius=CUBE_RADIUS;
  }else{
-  if(course.mode==='wave')s.vy=(s.held?-1:1)*course.speed*(s.mini?(course.legacy?1.19:1.37):1);
+  if(course.mode==='wave'){
+   s.vy=s.mini&&!(course.waveVersion>=remixPhysicsVersion)?
+    waveRise(course.speed,s.held)*(course.legacy?1.19:1.37):waveRise(course.speed,s.held,s.mini);
+  }
   else s.vy=clamp(s.vy+(s.held?(course.legacy?-920:-890):730)*dt,-225,235);
   s.y+=s.vy*dt;
   const angle=Math.atan2(s.vy,course.speed);

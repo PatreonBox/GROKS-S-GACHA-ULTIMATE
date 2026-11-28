@@ -2,6 +2,7 @@ import {ico} from './icons.js';
 
 export const remixTracks={
  tidal:'Tidal Wave soundtrack excerpt',
+ limbo:'LIMBO soundtrack excerpt',
  'speed-of-light':'At the Speed of Light · Dimrain47',
  'ricochet-love':'Ricochet Love · Waterflame',
  'golden-haze':'Golden Haze (Prev) · Detious',
@@ -20,7 +21,8 @@ const originalSoundtracks={
  13519:['Polargeist · Step',newgrounds(523561)]
 };
 export const griefPoster='/assets/arcade/grief-finish.webp';
-export const remixTrackSource=track=>track==='golden-haze'?'/arcade-audio/golden-haze.mp3':'/assets/audio/remix/'+track+'.mp3';
+export const remixTrackSource=track=>track==='golden-haze'?'/arcade-audio/golden-haze.mp3':
+ track==='limbo'?'/assets/audio/limbo-finale.mp3':'/assets/audio/remix/'+track+'.mp3';
 
 export function remixMusicCredit(track,levelId){
  const original=originalSoundtracks[levelId];
@@ -32,7 +34,8 @@ export function remixMusicCredit(track,levelId){
   ?' · '+link('https://creativecommons.org/licenses/by-nc-sa/3.0/','CC BY-NC-SA 3.0'):
   ['speed-of-light','epilogue','carnivores'].includes(track)?' · '+link('https://creativecommons.org/licenses/by-nc/3.0/','CC BY-NC 3.0'):
    track==='reverie'?' · '+link('https://creativecommons.org/licenses/by/3.0/','CC BY 3.0'):'';
- return '<p class="runner-track">♫ '+(id?link(newgrounds(id),title)+' · Excerpt':title)+license+'</p>';
+ const label=id?link(newgrounds(id),title)+' · Excerpt':track==='limbo'&&original?link(original[1],title):title;
+ return '<p class="runner-track">♫ '+label+license+'</p>';
 }
 
 export function remixMusic(track,sound,button,isRunning,{loop=true}={}){

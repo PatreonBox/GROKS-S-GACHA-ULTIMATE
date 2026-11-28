@@ -32,9 +32,11 @@ async function load(){
    if(!response.ok)throw Error('Tier index unavailable');
    return response.json();
   }));
-  for(const rows of catalogues)arr.push(...rows);
-  arr.sort((a,b)=>(b[4]??-1)-(a[4]??-1)||b[0]-a[0]);
-  return arr;
+  const tierRows=new Map(catalogues.flatMap(rows=>rows.map(row=>[row[0],row])));
+  const unique=arr.filter(row=>!tierRows.has(row[0]));
+  for(const row of tierRows.values())unique.push(row);
+  unique.sort((a,b)=>(b[4]??-1)-(a[4]??-1)||b[0]-a[0]);
+  return unique;
  })().catch(e=>{loading=null;throw e});
  return loading;
 }

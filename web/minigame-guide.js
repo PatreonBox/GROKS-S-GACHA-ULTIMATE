@@ -30,7 +30,7 @@ const modes={
 const remixTips={
  SURF:['Follow the surf','Look ahead to the next narrow bend. Stay inside the channel until the cut.'],
  DRAIN:['Clear the spike pairs','Jump just before the first spike in each pair. Land safely before the next jump.'],
- KEY:['Remember the lit shape','A green symbol appears near the start. Remember its shape and choose the matching key at the exit.'],
+ KEY:['Track the green key','Fly to the key chamber. Watch which of the eight keys lights green, follow it through the shuffle, then tap its final slot or press 1–8.'],
  RINGS:['Thread all nine rings','Use the numbered rings to line up the middle of each opening. Look ahead to the next slope.'],
  '99%':['Tap the pink orbs','Tap again as you enter each of the three orbs. The last tap is at 99%. Use Practice finale to repeat the ending.',orbSprites[0]],
  HIVE:['Aim through the honeycomb','Follow the honeycomb markers into the gaps. Short holds make it easier to stay centered.'],

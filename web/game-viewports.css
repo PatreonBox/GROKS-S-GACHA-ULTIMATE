@@ -110,3 +110,7 @@
  .runner-touch,.drill-touch button,:is(.runner-buttons,.drill-actions) button{min-height:33px;font-size:12px}
  .drill-banner{top:38px}.forge-charge{bottom:6px}
 }
+.tidal-video .tidal-stage{width:min(100%,calc((100dvh - 190px) * 1.6));aspect-ratio:8/5;height:auto;justify-self:center;align-self:center;overflow:hidden}
+.tidal-stage video,.tidal-stage canvas{position:absolute;inset:0;width:100%;height:100%;border:0}
+.tidal-stage video{display:block;object-fit:fill;pointer-events:none}
+@media(max-width:680px){.tidal-video .tidal-stage{width:min(100%,calc((100dvh - 180px) * 1.6))}}

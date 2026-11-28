@@ -1,106 +1,134 @@
-import {limboKeyColors,limboPattern,limboRevealMs,limboShuffleMs} from './limbo-keys.js';
+import {limboPattern,limboRevealMs,limboShuffleMs} from './limbo-keys.js';
 
-const keyShape='<svg viewBox="0 0 80 80" aria-hidden="true"><path d="m43 40 20 23 10-8-7-9-4 3-4-4 4-3-6-7-6 5m-11 1c-7 9-20 10-28 2s-7-21 1-29c8-7 20-7 27 1 7 7 7 19 0 26Z"/><path d="M22 23a8 8 0 1 0 11 11 8 8 0 0 0-11-11Z"/></svg>';
+const keyArt='<svg viewBox="0 0 122 78" aria-hidden="true">'+
+ '<path class="limbo-key-iron" fill-rule="evenodd" d="M7 23 29 8 48 11 64 28h50l4 12-8 9H99v11H86V49H64L49 68 26 71 7 56 3 39Zm22 5-9 9 5 14 15 3 11-12-9-14Z"/>'+
+ '<path class="limbo-key-bevel" d="m11 27 19-14 16 3 14 17h50l2 5H57L43 23H28L16 34 13 45 9 39Z"/>'+
+ '<path class="limbo-key-shadow" d="m10 48 17 14 19-3 14-16h27v11h7V43h15l-4 3H97v11H89V46H63L48 65l-21 3L11 55Z"/>'+
+ '<path class="limbo-key-rune" d="m32 18 6 1 2 5-8 1-5-3ZM66 36h30v3H66Z"/></svg>';
 
-export function openLimboFinale(viewport,seed,sound,submit){
+export function openLimboFinale(viewport,seed,submit){
  const {starting,swaps,answer}=limboPattern(seed);
  const scene=document.createElement('section');
- scene.className='limbo-finale';
+ scene.className='limbo-finale';scene.dataset.phase='watch';
  scene.setAttribute('aria-label','LIMBO key challenge');
- scene.innerHTML='<div class="limbo-finale-heading"><div><p>MEMORY FINALE</p><h3>Track the green key</h3></div><b data-limbo-phase>Watch</b></div>'+
-  '<div class="limbo-key-grid" aria-label="Eight keys"></div><p class="limbo-cue" aria-live="polite">Remember where the green key goes.</p>';
+ scene.innerHTML='<div class="limbo-finale-heading"><h3>Track the green key</h3><b data-limbo-phase>Watch</b></div>'+
+  '<div class="limbo-key-grid" role="group" aria-label="Eight key slots"></div>'+
+  '<p class="limbo-cue" aria-live="polite">Remember where the green key goes.</p>';
  viewport.append(scene);
  const grid=scene.querySelector('.limbo-key-grid'),status=scene.querySelector('[data-limbo-phase]'),cue=scene.querySelector('.limbo-cue');
  const slots=starting.slice(),keys=[],buttons=[];
- let timer=0,disposed=false,chosen=false,settled=false,choosing=false,finishTimer;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+ if(reduced)scene.dataset.reducedMotion='';
  const listeners=new AbortController(),{signal}=listeners;
- const music=new Audio('/assets/audio/limbo-finale.mp3');
- music.volume=.60;
- const syncMusic=()=>{
-  if(!chosen&&!disposed&&!document.hidden&&sound.enabled)music.play().catch(()=>{});
-  else music.pause();
- };
- function arrange(){
-  slots.forEach((id,slot)=>{keys[id].style.setProperty('--slot',slot);keys[id].style.setProperty('--column',slot%4);keys[id].style.setProperty('--row',Math.floor(slot/4));});
+ let timer=0,task,deadline=0,timeLeft=0,held=null,motions=[];
+
+ function place(node,slot){
+  node.style.setProperty('--column',slot%4);
+  node.style.setProperty('--row',Math.floor(slot/4));
  }
+ function arrange(){slots.forEach((id,slot)=>place(keys[id],slot))}
  for(let i=0;i<8;i++){
-  const key=document.createElement('span');
-  key.className='limbo-key';
-  key.innerHTML=keyShape;
-  key.style.setProperty('--key-color',limboKeyColors[i]);
-  if(i===0)key.classList.add('is-green');
-  grid.append(key);keys.push(key);
-  const button=document.createElement('button');
+  const key=document.createElement('span'),button=document.createElement('button');
+  key.className='limbo-key';key.innerHTML=keyArt;
+  key.toggleAttribute('data-target-key',i===0);
   button.type='button';button.disabled=true;button.className='limbo-choice';
-  button.setAttribute('aria-label','Key '+(i+1));
+  button.setAttribute('aria-label','Key slot '+(i+1));
   button.textContent=i+1;
-  button.style.setProperty('--column',i%4);button.style.setProperty('--row',Math.floor(i/4));
+  place(button,i);
   button.onclick=()=>pick(i);
-  grid.append(button);buttons.push(button);
+  grid.append(key,button);keys.push(key);buttons.push(button);
  }
- arrange();syncMusic();
- document.addEventListener('visibilitychange',syncMusic,{signal});
- function step(index){
-  if(disposed)return;
+ arrange();
+
+ function arm(){
+  if(!task||document.hidden)return;
+  deadline=performance.now()+timeLeft;
+  timer=setTimeout(()=>{
+   timer=0;const callback=task;task=null;callback();
+  },timeLeft);
+ }
+ function schedule(callback,ms){task=callback;timeLeft=ms;arm()}
+ function visibilityChanged(){
+  if(document.hidden){
+   if(timer){clearTimeout(timer);timer=0;timeLeft=Math.max(0,deadline-performance.now())}
+   for(const motion of motions)if(motion.playState==='running')motion.pause();
+   return;
+  }
+  for(const motion of motions)if(motion.playState==='paused')motion.play();
+  arm();
+ }
+ document.addEventListener('visibilitychange',visibilityChanged,{signal});
+
+ function shuffle(index){
+  for(const motion of motions)motion.cancel();
+  motions=[];
+  for(const key of keys)delete key.dataset.moving;
   if(index===swaps.length){
-   choosing=true;status.textContent='Choose';cue.textContent='Pick a slot, or press 1–8.';
-   scene.dataset.phase='choose';
+   scene.dataset.phase='choose';status.textContent='Choose';cue.textContent='Tap the final slot or press 1–8.';
    for(const button of buttons)button.disabled=false;
-   grid.tabIndex=0;grid.focus({preventScroll:true});
+   grid.tabIndex=-1;grid.focus({preventScroll:true});
    return;
   }
   scene.dataset.phase='shuffle';status.textContent=(index+1)+' / '+swaps.length;
-  if(index===0)cue.textContent='Follow the key through the swap.';
-  const ms=limboShuffleMs[index];
-  const previous=slots.slice();
-  for(const [a,b] of swaps[index])[slots[a],slots[b]]=[slots[b],slots[a]];
-  arrange();
-  slots.forEach((id,position)=>{
-   const start=previous.indexOf(id);
-   if(position===start||reduced)return;
-   const x=(start%4-position%4)*100,y=(Math.floor(start/4)-Math.floor(position/4))*100;
-   const distance=Math.hypot(x,y);
-   const sign=(id%2?1:-1)*Math.sign(x||y);
-   const bend=Math.min(33,distance*.20)*sign;
-   keys[id].animate([{translate:x+'% '+y+'%'},{translate:(x*.5+bend)+'% '+(y*.5-bend)+'%'},{translate:'0% 0%'}],
-    {duration:ms*.91,easing:'cubic-bezier(.37,.05,.38,1)'});
+  const exchanges=swaps[index],ms=limboShuffleMs[index];
+  if(reduced){
+   exchanges.forEach(([a,b],pair)=>{keys[slots[a]].dataset.moving=keys[slots[b]].dataset.moving=pair+1});
+   cue.textContent=exchanges.map(([a,b])=>(a+1)+' ↔ '+(b+1)).join(' and ');
+   schedule(()=>{
+    for(const [a,b] of exchanges)[slots[a],slots[b]]=[slots[b],slots[a]];
+    arrange();shuffle(index+1);
+   },Math.max(950,ms));
+   return;
+  }
+  if(index===0)cue.textContent='Follow the key as the paths cross.';
+  exchanges.forEach(([a,b],pair)=>{
+   [slots[a],slots[b]]=[slots[b],slots[a]];
+   for(const [from,to] of [[b,a],[a,b]]){
+    const key=keys[slots[to]],side=from===a?1:-1;
+    key.dataset.moving=pair+1;
+    place(key,to);
+    const x=(from%4-to%4)*100,y=(Math.floor(from/4)-Math.floor(to/4))*100;
+    motions.push(key.animate([
+     {translate:x+'% '+y+'%',rotate:'0deg',scale:'1'},
+     {offset:.5,translate:(x*.5+y*.07*side)+'% '+(y*.5-x*.07*side)+'%',rotate:side*(pair?10:24)+'deg',scale:pair?'.82':'1.18'},
+     {translate:'0% 0%',rotate:'0deg',scale:'1'}
+    ],{duration:ms*.94,easing:'cubic-bezier(.3,.06,.24,1)'}));
+   }
   });
-  timer=setTimeout(()=>step(index+1),ms);
+  schedule(()=>shuffle(index+1),ms);
  }
- async function pick(slot){
-  if(!choosing||chosen||disposed)return;
-  chosen=true;scene.dataset.phase='reveal';music.pause();
+
+ function pick(slot){
+  if(scene.dataset.phase!=='choose')return;
+  scene.dataset.phase='answer';
   for(const button of buttons)button.disabled=true;
   buttons[slot].dataset.picked='true';
-  const won=slot===answer;
   buttons[answer].dataset.answer='true';
+  const won=slot===answer;
   status.textContent=won?'Correct':'Wrong key';
-  cue.textContent=won?'That was the green key.':'The green key landed in slot '+(answer+1)+'.';
-  finishTimer=setTimeout(()=>{if(!disposed&&!settled){settled=true;submit(slot,won);}},1050);
+  cue.textContent=won?'You found the green key.':'The green key landed in slot '+(answer+1)+'.';
+  schedule(()=>submit(slot,won),900);
  }
- let held=null;
  function slotAt(event){
   const box=grid.getBoundingClientRect(),x=(event.clientX-box.left)/box.width,y=(event.clientY-box.top)/box.height;
   if(x<0||x>=1||y<0||y>=1)return -1;
   return Math.floor(y*2)*4+Math.floor(x*4);
  }
- function preview(event){const slot=slotAt(event);buttons.forEach((button,index)=>button.toggleAttribute('data-hover',index===slot));}
+ function highlight(slot){buttons.forEach((button,index)=>button.toggleAttribute('data-hover',index===slot))}
  grid.addEventListener('pointerdown',event=>{
-  if(!choosing||chosen||held!==null||event.button!==0)return;
-  held=event.pointerId;grid.setPointerCapture(held);preview(event);
+  if(scene.dataset.phase!=='choose'||held!==null||event.button!==0)return;
+  held=event.pointerId;grid.setPointerCapture(held);highlight(slotAt(event));
  },{signal});
- grid.addEventListener('pointermove',event=>{if(event.pointerId===held)preview(event);},{signal});
+ grid.addEventListener('pointermove',event=>{if(event.pointerId===held)highlight(slotAt(event))},{signal});
  grid.addEventListener('pointerup',event=>{
   if(event.pointerId!==held)return;
-  held=null;const slot=slotAt(event);
-  buttons.forEach(button=>button.removeAttribute('data-hover'));
+  held=null;const slot=slotAt(event);highlight(-1);
   if(slot>=0)pick(slot);
  },{signal});
- grid.addEventListener('pointercancel',()=>{held=null;buttons.forEach(button=>button.removeAttribute('data-hover'));},{signal});
+ grid.addEventListener('lostpointercapture',()=>{held=null;highlight(-1)},{signal});
  scene.addEventListener('keydown',event=>{
-  if(choosing&&/^[1-8]$/.test(event.key)){event.preventDefault();pick(Number(event.key)-1);}
+  if(scene.dataset.phase==='choose'&&/^[1-8]$/.test(event.key)){event.preventDefault();pick(Number(event.key)-1)}
  },{signal});
- timer=setTimeout(()=>step(0),limboRevealMs);
- return ()=>{disposed=true;clearTimeout(timer);clearTimeout(finishTimer);listeners.abort();music.pause();music.removeAttribute('src');music.load();scene.remove();};
+ schedule(()=>shuffle(0),limboRevealMs);
+ return ()=>{clearTimeout(timer);listeners.abort();for(const motion of motions)motion.cancel();scene.remove()};
 }

@@ -15,6 +15,8 @@ import {consoleView,intentView,lockCommands,ordersView,techniqueView} from './ar
 import {remixes,findRemix,keyTarget,remixKeyReward} from './remixes.js';
 import {endlessKeyInterval,endlessKeyStatus,endlessKeyLimit,endlessKeyResetHours} from './remix-endless.js';
 import {openRunner} from './remix-runner.js';
+import {openTidalVideo} from './tidal-video-runner.js';
+import {tidalVideoId} from './tidal-video-rules.js';
 import {griefPoster,watchGrief} from './remix-media.js';
 import {playCardTurn} from './card-combat.js';
 
@@ -468,7 +470,8 @@ export function createBattleRoom({root,sound,rewards,coverSource,enc,applyWallet
    const settle=command=>async(token,proof)=>{
     const {wallet:next,result}=await command(token,proof);applyWallet(next);if(visible&&!playback)render();return result;
    };
-   runner=openRunner(stage,{sound,avatar:equippedCube(wallet),mode:d.runner,onStart:mode=>startRemix(stage.id,mode),onFinale:startLimboFinale,
+   const open=stage.id===tidalVideoId&&d.runner==='normal'?openTidalVideo:openRunner;
+   runner=open(stage,{sound,avatar:equippedCube(wallet),mode:d.runner,onStart:mode=>startRemix(stage.id,mode),onFinale:startLimboFinale,
     onCheckpoint:settle(checkpointRemix),onResult:settle(recordRemix)});
    runner.addEventListener('close',()=>{runner=null;if(visible&&!playback)render()},{once:true});return;
   }

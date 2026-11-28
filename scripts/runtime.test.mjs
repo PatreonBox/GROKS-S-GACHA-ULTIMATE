@@ -18,9 +18,31 @@ import {tradeBalance,tradeSearchTerm} from '../web/trade-rules.js';
 import {readRoute} from '../web/demon-tiers.js';
 import {chestDropMotion,chestKeyMotion,chestTimeline} from '../web/chest-motion.js';
 import {chestOpeningSound} from '../web/pack-sound.js';
+import {newTidalWave,stepTidalWave,tidalChannel,tidalLength,tidalPortals,tidalStep} from '../web/tidal-video-rules.js';
+import {replayTidalVideo} from '../web/game-replay.js';
 import worker from '../dist/server/index.js';
 
 const publicOrigin='https://gd-fixture.up.railway.app';
+
+test('Recorded wave flight has a reachable ending and replays its size changes',()=>{
+ const run=newTidalWave(),trace=[];
+ let result;
+ while(!result){
+  const [top,bottom]=tidalChannel(run.tick*tidalStep);
+  const held=run.held?run.y>(top+bottom)/2-38:run.y>(top+bottom)/2+38;
+  if(held!==run.held){trace.push([run.tick,'held',held]);run.held=held;}
+  result=stepTidalWave(run);
+ }
+ assert.equal(result,'clear');
+ assert.equal(run.portal,tidalPortals.length);
+ assert.equal(run.mini,false);
+ const proof={ticks:run.tick,trace};
+ assert.equal(replayTidalVideo({start:0},proof,tidalLength*1000),100);
+ assert.throws(()=>replayTidalVideo({start:0},proof,1000),/could not be verified/);
+ const fall=newTidalWave();
+ while(!stepTidalWave(fall)){}
+ assert.ok(replayTidalVideo({start:0},{ticks:fall.tick,trace:[]},tidalLength*1000)<100);
+});
 
 test('Demon chest openings select the uploaded sound at the correct rarity boundaries',async()=>{
  for(const [sound,rarities] of [
